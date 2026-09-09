@@ -78,7 +78,7 @@ it. See [Legal](#legal).
 ## Quickstart
 
 ```bash
-git clone <this repo>
+git clone https://github.com/Ekco-S64QTN6/GNN.git
 cd GNN
 
 pip install edge-tts          # optional — without it the browser voice is used
@@ -329,41 +329,58 @@ of the handful of hard-coded items earlier passes could use.
 ## The asset pipeline
 
 `tools/lbx.py` is an original implementation of the LBX container, the LBXGFX
-item header, the per-column RLE frame encoding and the embedded VGA palette
-block. **All 4,316 frames across 22 archives decode byte-exact** — every frame
-body is consumed to its last byte with exactly `width` columns.
+item header, the per-column run encoding and the embedded VGA palette block.
+**All 4,316 frames across 22 archives decode byte-exact** — every frame body is
+consumed to its last byte, and all 872,024 runs land inside their column.
 
 ```
-u8 kind (1 = keyframe, 0 = delta)
+u8 kind (1 = keyframe, 0 = delta over the previous frame)
   per column:
-    0xFF                                        column unchanged
-    u8 mode | u8 seglen | u8 pixcount | u8 y | pixcount bytes
-      mode 0x80 = RLE   (v ≥ 0xE0 → v−0xDF copies of the next byte, max run 32)
-      mode 0x00 = raw
+    0xFF                        column unchanged
+    u8 mode | u8 seglen         seglen bytes of run data follow
+
+    inside those seglen bytes, repeated until they run out:
+      u8 pixcount | u8 skip | pixcount bytes of payload
+        skip = transparent rows before this run, measured from the END of the
+               previous run in this column — a gap, not an absolute y
+        mode 0x80 = RLE  (v ≥ 0xE0 → v−0xDF copies of the next byte, max 32)
+        mode 0x00 = raw
 ```
 
-Two things earlier extractions got wrong, and this fixes:
+Three things earlier extractions got wrong, and this fixes:
 
 | | Was | Is |
 | :--- | :--- | :--- |
-| 6-bit → 8-bit colour | `c × 255 / 63` | `c << 2` — everything had been **4× too dark** |
-| Palette block header | `rgb_off, ?, numcols, firstcol` | `rgb_off, firstcol, numcols, ?` — planetary backdrops had been decoding as rainbow noise |
+| **Column structure** | one run per column | a column is a *sequence* of runs — 60% of the library has two or more, up to 12. Reading only the first smeared it down the rest of the column, which is where the vertical streaking came from. |
+| **Run offset** | absolute `y` | a **gap from the end of the previous run**. Read as absolute, every multi-run column collapses toward the top of the image. |
+| **6-bit → 8-bit colour** | inconsistent — most archives wrote the raw 6-bit value (**4× too dark**), a few used `c<<2` or `c×255/63` | `(c << 2) \| (c >> 4)`, the bit replication a VGA DAC performs, so 63 reaches a true 255 |
 
-Correctness is pinned by ground truth: the master palette reproduces the
-newsroom anchor plate with a **43/43 exact index→RGB match** against the
-previously shipped artwork.
+Both structural bugs are invisible on solid artwork: the 25-cel anchor and the
+22 story icons are one run per column, so they decoded perfectly either way,
+and a spot check against them passed while planets, consoles and cinematics
+were quietly wrong. What settles it is the studio chassis — `NEWSCAST.LBX`
+item 0 is `background_tv.png`, so it can be diffed directly. Absolute offsets
+reproduce **60.1%** of its pixels; gap offsets reproduce **100%** of them —
+every one of the 64,000 pixels resolves to a consistent palette index. The
+anchor cels, globe cels and story icons all come back at 100% shape agreement
+with the artwork the project already shipped, differing only by ≤3/255 per
+channel where the old pipeline's colour ramp disagreed with itself.
+
+Because the plates the page loads are decoded by this same pipeline
+(`extract_all.py` writes `background_tv.png`, the 25 anchor cels, the 25 globe
+cels and the 22 icons alongside the cutscene library), the whole project now
+has one colour ramp instead of three.
 
 Each item is measured and given a `role` (`fullscreen · panel · portrait ·
 sprite · chrome · strip · blank`) plus `coverage`, `lum`, `colors`, a `hero`
 frame index and a `noise` score. That metadata is the whole reason the engine
 can use the library safely.
 
-> **On the ~30 scrambled items.** A handful of items were authored against
-> screen palettes that live in the game executable, not in any archive. They
-> decode structurally correct but chromatically scrambled. They are not
-> discarded — the manifest scores them, the compositor keeps them out of
-> ordinary footage, and `glitch-engine.js` uses them deliberately as
-> transmission interference.
+> **On the scrambled items.** A handful of items were authored against screen
+> palettes that live in the game executable, not in any archive. They decode
+> structurally correct but chromatically scrambled. They are not discarded —
+> the manifest scores them, the compositor keeps them out of ordinary footage,
+> and `glitch-engine.js` uses them deliberately as transmission interference.
 
 Full format notes and the manifest schema: **[`assets/README.md`](assets/README.md)**.
 

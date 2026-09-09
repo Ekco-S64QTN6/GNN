@@ -17,10 +17,25 @@ Embedded palette block
 
 Frame body
     u8 kind (1 = keyframe, 0 = delta over the previous frame)
-    then one segment per column x in 0..w-1:
-        0xFF                                  -> column unchanged
-        u8 mode | u8 seglen | u8 pixcount | u8 ystart | pixcount bytes
-        mode 0x80 = RLE, 0x00 = raw
+    then one entry per column x in 0..w-1:
+        0xFF                     -> column unchanged, advance to the next
+        u8 mode | u8 seglen      -> seglen bytes of run data follow
+
+    A column is a *sequence* of vertical runs packed into those seglen bytes:
+        u8 pixcount | u8 skip | pixcount bytes of payload
+    repeated until seglen is exhausted. Most columns hold one run, but 60% of
+    the library holds two or more — that is how a sprite gets transparent gaps
+    down a single column.
+
+    `skip` is the number of transparent rows *before* this run, measured from
+    the end of the previous run in the same column — not an absolute y. Reading
+    it as absolute collapses every multi-run column toward the top of the image
+    and smears the first run down the rest, which is what produced the vertical
+    streaking in earlier extractions. Single-run columns decode identically
+    either way, which is why solid artwork (the anchor, the story icons) looked
+    correct while planets, consoles and cinematics did not.
+
+    mode 0x80 = RLE payload, 0x00 = raw payload.
     RLE: v >= 0xE0 emits (v - 0xDF) copies of the next byte; else v is literal.
     Palette index 0 is transparent.
 """
@@ -32,6 +47,12 @@ GFX_HEADER = 0x12
 SKIP_COLUMN = 0xFF
 TRANSPARENT = 0
 RLE_BASE = 0xDF
+
+
+def _vga8(v):
+    """6-bit VGA component -> 8-bit, by bit replication (63 -> 255)."""
+    v &= 0x3F
+    return (v << 2) | (v >> 4)
 
 
 class LbxError(Exception):
@@ -96,7 +117,24 @@ class GfxItem:
         out = {}
         for i in range(numcols):
             r, g, b = self.data[rgb_off + i * 3: rgb_off + i * 3 + 3]
-            out[firstcol + i] = ((r & 0x3f) << 2, (g & 0x3f) << 2, (b & 0x3f) << 2)
+            out[firstcol + i] = (_vga8(r), _vga8(g), _vga8(b))
+        return out
+
+    @staticmethod
+    def _expand(payload, compressed):
+        if not compressed:
+            return payload
+        out = []
+        i = 0
+        n = len(payload)
+        while i < n:
+            v = payload[i]
+            if v >= 0xE0 and i + 1 < n:
+                out.extend([payload[i + 1]] * (v - RLE_BASE))
+                i += 2
+            else:
+                out.append(v)
+                i += 1
         return out
 
     def decode_frame(self, idx, prev=None):
@@ -113,27 +151,22 @@ class GfxItem:
                 p += 1
                 continue
             seglen = body[p + 1]
-            pixcount = body[p + 2]
-            ystart = body[p + 3]
-            payload = body[p + 4:p + 2 + seglen]
-            p += 2 + seglen
-            if mode & 0x80:
-                col = []
-                i = 0
-                while i < len(payload):
-                    v = payload[i]
-                    if v >= 0xE0:
-                        col.extend([payload[i + 1]] * (v - RLE_BASE))
-                        i += 2
-                    else:
-                        col.append(v)
-                        i += 1
-            else:
-                col = payload[:pixcount]
-            for j, px in enumerate(col):
-                y = ystart + j
-                if px != TRANSPARENT and 0 <= y < h:
-                    out[y * w + x] = px
+            end = p + 2 + seglen
+            q = p + 2
+            y = 0
+            # Walk every run in this column, not just the first one, and carry
+            # the cursor down: each run's leading byte is a gap, not a y.
+            while q + 2 <= end:
+                pixcount = body[q]
+                skip = body[q + 1]
+                payload = body[q + 2:q + 2 + pixcount]
+                q += 2 + pixcount
+                y += skip
+                for px in self._expand(payload, mode & 0x80):
+                    if px != TRANSPARENT and 0 <= y < h:
+                        out[y * w + x] = px
+                    y += 1
+            p = end
         return out, p == len(body)
 
     def frames(self):

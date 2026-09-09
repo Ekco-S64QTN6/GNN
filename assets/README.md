@@ -21,26 +21,50 @@ Everything here was decoded out of `Master of Orion 1/data/*.LBX` by
 ```
 
 **Embedded palette block** — `u16 rgb_offset | u16 firstcol | u16 numcols | u16 —`
-then `numcols × 3` bytes of 6-bit VGA. Components are `<< 2`, **not** `× 255 / 63`;
-getting that wrong is what made the previous extraction four times too dark.
+then `numcols × 3` bytes of 6-bit VGA, expanded to 8 bits by bit replication —
+`(v << 2) | (v >> 4)` — the way a VGA DAC does, so 63 reaches a true 255.
+The previous extraction was inconsistent here: most archives were written with
+the raw 6-bit value (**four times too dark**), while `background_tv.png` used
+`v × 255 / 63` and the anchor cels used `v << 2`. One ramp now covers
+everything, including the newsroom plates.
 
 **Frame body** — `u8 kind` (1 = keyframe, 0 = delta over the previous frame),
-then one segment per column:
+then one entry per column:
 ```
-0xFF                                    column unchanged
-u8 mode | u8 seglen | u8 pixcount | u8 ystart | pixcount bytes
+0xFF                    column unchanged, move to the next
+u8 mode | u8 seglen     seglen bytes of run data follow
+
+  inside those seglen bytes, repeated until they run out:
+    u8 pixcount | u8 skip | pixcount bytes of payload
 ```
+A column is a **sequence of vertical runs**, not a single one — 60% of the
+library has two or more, up to twelve. `skip` is the number of transparent rows
+before the run, counted from the **end of the previous run in that column**; it
+is a gap, not an absolute `y`.
+
 `mode` 0x80 = RLE, 0x00 = raw. In an RLE payload a byte `v >= 0xE0` emits
 `v - 0xDF` copies of the byte that follows (max run 32); anything else is a
 literal palette index. Index 0 is transparent.
 
 All **4,316 frames across 22 archives decode byte-exact** — every frame body is
-consumed to the last byte with exactly `width` columns.
+consumed to its last byte, with exactly `width` columns, and all **872,024
+runs** land inside their column with no clamping.
+
+> Both structural properties are invisible on solid artwork. The 25-cel anchor
+> and the 22 story icons are one run per column, so they decode identically
+> whether or not you handle multiple runs and whether you read `skip` as a gap
+> or as an absolute `y`. Verifying against them alone passes while every
+> planet, console and cinematic in the library is quietly wrong — vertical
+> smears where the first run of a column was stretched over everything below
+> it. The asset that settles it is `NEWSCAST.LBX` item 0, which *is*
+> `background_tv.png`: absolute offsets reproduce 60.1% of its pixels, gap
+> offsets reproduce 100%.
 
 The default palette is the 256-colour table embedded in `WINLOSE.LBX` item 0.
-It reproduces the newsroom anchor plate (`NEWSCAST.LBX` item 2) with a
-**43/43 exact index→RGB match** against the previously shipped PNG, which is
-what confirms both the decoder and the palette.
+Against the artwork the project shipped before this pass, it reproduces the
+studio chassis, the anchor cels, the globe cels and the story icons at
+**100% shape agreement** — every pixel resolves to a consistent palette
+index — which is what confirms both the decoder and the palette.
 
 ---
 
@@ -95,6 +119,9 @@ rendered to OGG with FluidR3 GM.
 ---
 
 ## 🖼️ Newsroom plates
+
+`extract_all.py` writes these from `NEWSCAST.LBX` through the same decoder as
+the cutscene library, so the whole project shares one colour ramp.
 
 | asset | size | drawn at (3×) |
 | :--- | :--- | :--- |

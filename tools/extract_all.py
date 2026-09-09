@@ -124,6 +124,47 @@ def measure(img):
             delta // max(pairs, 1))
 
 
+# NEWSCAST.LBX is the studio itself. These are the plates index.html loads
+# directly, so they are written to assets/ under the names the renderer and
+# icon-manager expect, from the same decoder as everything else.
+NEWSROOM = {
+    0: ('background_tv.png', 3),      # studio chassis, stored at 3x
+    2: ('anchor_frame_%03d.png', 1),  # 25-cel talking anchor
+    3: ('globe_frame_%03d.png', 1),   # 25-cel holographic globe
+}
+ICON_ITEMS = range(4, 26)             # 22 over-the-shoulder story icons
+
+
+def export_newsroom(palette):
+    """Write the plates the page loads by name, not through the manifest."""
+    arc = LbxArchive(os.path.join(DATA, 'NEWSCAST.LBX'))
+    out_dir = os.path.join(ROOT, 'assets')
+    icon_dir = os.path.join(out_dir, 'icons')
+    os.makedirs(icon_dir, exist_ok=True)
+    written = 0
+
+    for item_idx, (pattern, scale) in NEWSROOM.items():
+        item = GfxItem(arc.item(item_idx))
+        for fi, img in enumerate(render(item, palette)):
+            if scale != 1:
+                img = img.resize((img.width * scale, img.height * scale),
+                                 Image.NEAREST)
+            name = pattern % (fi + 1) if '%' in pattern else pattern
+            img.convert('RGB' if item_idx == 0 else 'RGBA') \
+               .save(os.path.join(out_dir, name))
+            written += 1
+            if '%' not in pattern:
+                break
+
+    for i in ICON_ITEMS:
+        item = GfxItem(arc.item(i))
+        frames = list(render(item, palette))
+        if frames:
+            frames[0].save(os.path.join(icon_dir, 'chunk_%03d_frame_000.png' % i))
+            written += 1
+    return written
+
+
 def main():
     require_source()
     palette = base_palette()
@@ -189,6 +230,9 @@ def main():
             roles[e['role']] = roles.get(e['role'], 0) + 1
         print('%-10s %3d items  %4d frames  %s' % (
             name, len(entries), sum(e['frames'] for e in entries), roles))
+
+    plates = export_newsroom(palette)
+    print('\nnewsroom plates rewritten: %d' % plates)
 
     out = os.path.join(ROOT, 'assets', 'gfx-manifest.json')
     with open(out, 'w') as fh:

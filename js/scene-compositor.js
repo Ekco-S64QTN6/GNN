@@ -299,7 +299,12 @@ const GNNSceneCompositor = (() => {
                 || GNNAssets.pick(GNNAssets.find({ dirs: ['PLANETS'], minW: 30 }));
             const wash = GNNAssets.pick(GNNAssets.find({ dirs: ['NEBULA'] }));
             const probe = GNNAssets.pick(GNNAssets.find({ dirs: ['SHIPS2'], roles: ['sprite'], minW: 18 }));
-            const bar = GNNAssets.pick(GNNAssets.find({ dirs: ['SPACE', 'DESIGN'], roles: ['strip', 'chrome'] }));
+            // The sweep bar must be a genuinely wide strip; stretching a
+            // narrow plate across the frame reads as vertical banding, not a
+            // scan line.
+            const bar = GNNAssets.pick(GNNAssets.find({
+                dirs: ['SPACE', 'DESIGN'], roles: ['strip', 'chrome'],
+            }).filter((e) => e.w >= e.h * 4 && e.w >= 28));
             return {
                 label: 'ORBITAL SURVEY',
                 duration: 9000,
