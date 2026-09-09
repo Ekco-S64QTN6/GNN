@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="GNN Newsroom — an unscripted live newscast simulation built entirely from the Master of Orion 1 (1993) asset library, reading real-world RSS through a robot anchor.">
+    <title>GNN — Galactic News Network</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div id="app">
+        <h1 id="title">
+            <span class="gnn-logo">GNN</span>
+            <span class="gnn-subtitle">GALACTIC NEWS NETWORK</span>
+            <span id="segment-badge" title="Current broadcast segment">BOOT</span>
+        </h1>
+
+        <div id="canvas-wrapper">
+            <canvas id="gnnCanvas" width="960" height="600"></canvas>
+            <div id="scanlines"></div>
+            <div id="crt-glow"></div>
+        </div>
+
+        <div id="controls">
+            <button id="btn-play-pause" title="Play / Pause broadcast">
+                <span id="icon-play">▶</span>
+                <span id="icon-pause" class="hidden">⏸</span>
+            </button>
+            <button id="btn-mute" title="Toggle station audio">
+                <span id="icon-unmuted">🔊</span>
+                <span id="icon-muted" class="hidden">🔇</span>
+            </button>
+            <button id="btn-voice" title="Toggle the anchor's neural voice">
+                <span id="icon-voice-on">🗣</span>
+                <span id="icon-voice-off" class="hidden">🤐</span>
+            </button>
+            <select id="voice-select" title="Anchor voice model"></select>
+            <button id="btn-skip" title="Skip to the next item on the rundown">⏭</button>
+            <button id="btn-break" title="Go to a commercial break now">📺</button>
+            <div id="feed-status">
+                <span id="status-dot"></span>
+                <span id="status-text">Initializing…</span>
+            </div>
+            <button id="btn-settings" title="Station configuration">⚙</button>
+        </div>
+
+        <p id="asset-readout">Reading asset manifests…</p>
+        <p id="telemetry"></p>
+
+        <div id="settings-panel" class="hidden">
+            <div id="settings-content">
+                <h2>Station Configuration</h2>
+
+                <hr>
+                <label for="breaking-news-input">Inject breaking bulletin</label>
+                <div id="breaking-input-row">
+                    <input type="text" id="breaking-news-input" placeholder="e.g. Space monster sighted off the Orion arm">
+                    <button id="btn-inject-news">Inject</button>
+                </div>
+
+                <hr>
+                <label class="check-row">
+                    <input type="checkbox" id="ticker-toggle" checked>
+                    <span>Show the commodity crawl</span>
+                </label>
+
+                <hr>
+                <label for="feed-url-input">RSS feed URL</label>
+                <div id="feed-input-row">
+                    <input type="url" id="feed-url-input" placeholder="https://feeds.arstechnica.com/arstechnica/index">
+                    <button id="btn-add-feed">Add</button>
+                </div>
+                <ul id="feed-list"></ul>
+
+                <hr>
+                <label>Unlisted transmissions received</label>
+                <ul id="secret-log"></ul>
+
+                <button id="btn-close-settings">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/asset-registry.js"></script>
+    <script src="js/audio-engine.js"></script>
+    <script src="js/tts.js"></script>
+    <script src="js/icon-manager.js"></script>
+    <script src="js/script-writer.js"></script>
+    <script src="js/scene-compositor.js"></script>
+    <script src="js/cutscene-manager.js"></script>
+    <script src="js/ticker-manager.js"></script>
+    <script src="js/text-engine.js"></script>
+    <script src="js/glitch-engine.js"></script>
+    <script src="js/animator.js"></script>
+    <script src="js/feed-manager.js"></script>
+    <script src="js/broadcast-director.js"></script>
+    <script src="js/renderer.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

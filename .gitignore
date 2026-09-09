@@ -1,0 +1,19 @@
+# test-harness output
+.shot/
+
+# python
+__pycache__/
+*.pyc
+
+# the game data is NOT distributed with this project — see README > Legal
+Master of Orion 1/
+.gnn-server.pid
+gnn-server.log
+
+# local agent/workspace config
+.agents/
+
+# internal working notes — not part of the published project
+GNN_Report.md
+GNN_Project_Plan.md
+GNN_Code_Audit_Review.md
