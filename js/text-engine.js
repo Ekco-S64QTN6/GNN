@@ -97,12 +97,15 @@ const GNNTextEngine = (() => {
         if (now - lastTick < charDelay) return;
 
         // Catch up if the loop stalled, so long lines never fall behind speech.
+        // One click per tick, not one per character: a catch-up burst would
+        // otherwise fire a dozen at the same instant and sum into a spike.
         const due = Math.max(1, Math.floor((now - lastTick) / charDelay));
+        let audible = false;
         for (let i = 0; i < due && visible < fullText.length; i++) {
             visible++;
-            const ch = fullText[visible - 1];
-            if (ch !== ' ' && typeof GNNAudio !== 'undefined') GNNAudio.playTypingBlip();
+            if (fullText[visible - 1] !== ' ') audible = true;
         }
+        if (audible && typeof GNNAudio !== 'undefined') GNNAudio.playTypingBlip();
         lastTick = now;
         if (visible >= fullText.length) holding = true;
     }

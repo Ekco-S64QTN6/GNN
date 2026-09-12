@@ -27,11 +27,18 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 URL = os.environ.get('GNN_URL', 'http://localhost:8080/')
 PORT = int(os.environ.get('GNN_CDP_PORT', 9333))
 
-# Unique marker so shutdown only ever targets browsers this harness started,
+# Unique markers so shutdown only ever targets browsers this harness started,
 # never the user's own Chromium. MATCH has no leading dashes: pgrep would read
-# those as its own options.
+# those as its own options. The tag rides in the user agent so it survives in
+# argv even if the debugging port is changed.
+TAG = 'GNNHarness'
 MARKER = '--remote-debugging-port=%d' % PORT
 MATCH = 'remote-debugging-port=%d' % PORT
+
+# The harness is headless but Chromium still renders audio to the real output
+# device, so an unmuted run broadcasts the newscast out of the user's speakers
+# with no window to close. Mute unless someone explicitly wants to hear it.
+MUTE = os.environ.get('GNN_HARNESS_AUDIO', '') not in ('1', 'true', 'yes')
 
 _children = []
 
@@ -40,7 +47,11 @@ def launch():
     """Start a headless browser and make sure it dies with us."""
     flags = ['--headless=new', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
              '--window-size=1200,900', '--autoplay-policy=no-user-gesture-required',
-             MARKER, '--remote-allow-origins=*', 'about:blank']
+             '--user-agent=Mozilla/5.0 (X11; Linux x86_64) %s/1' % TAG,
+             MARKER, '--remote-allow-origins=*']
+    if MUTE:
+        flags.insert(0, '--mute-audio')
+    flags.append('about:blank')
     browser = (shutil.which('chromium') or shutil.which('chromium-browser')
                or shutil.which('google-chrome-stable') or shutil.which('google-chrome'))
     if browser:
@@ -115,9 +126,17 @@ def shutdown(cdp=None):
 
 
 def _harness_pids():
-    found = subprocess.run(['pgrep', '-f', '--', MATCH], capture_output=True, text=True)
     pids = []
-    for line in found.stdout.split():
+    seen = set()
+    for pattern in (MATCH, TAG):
+        found = subprocess.run(['pgrep', '-f', '--', pattern],
+                               capture_output=True, text=True)
+        for line in found.stdout.split():
+            if line not in seen:
+                seen.add(line)
+                pids.append(line)
+    out = []
+    for line in pids:
         try:
             pid = int(line)
         except ValueError:
@@ -127,8 +146,8 @@ def _harness_pids():
         comm = subprocess.run(['ps', '-o', 'comm=', '-p', str(pid)],
                               capture_output=True, text=True).stdout.strip()
         if comm.lower().startswith(('chrome', 'chromium')):
-            pids.append(pid)
-    return pids
+            out.append(pid)
+    return out
 
 
 atexit.register(shutdown)

@@ -35,6 +35,11 @@ const GNNFeedManager = (() => {
         'CHROMEBOOK', 'IPHONE DEAL', 'MACBOOK SALE'
     ];
 
+    // This is designed to run as a channel, for days. Both of these grow on
+    // every poll, so both need a ceiling.
+    const POOL_LIMIT = 400;
+    const SEEN_LIMIT = 2000;
+
     let feeds = [...DEFAULT_FEEDS];
     let rssPool = [];           // Array of clean RSS stories fetched
     let seenTitles = new Set();
@@ -219,7 +224,26 @@ const GNNFeedManager = (() => {
             onNewItems(newItems);
         }
 
+        prunePool();
         setStatus(`Live RSS — ${rssPool.length} stories loaded (${successCount}/${feeds.length} feeds)`, false);
+    }
+
+    /** Evict the oldest stories once the pool passes its ceiling. */
+    function prunePool() {
+        if (rssPool.length > POOL_LIMIT) {
+            rssPool.sort((a, b) => b.timestamp - a.timestamp);
+            for (const dropped of rssPool.splice(POOL_LIMIT)) {
+                seenTitles.delete(dropped.title);
+                broadcast.delete(dropped.title);
+            }
+        }
+        if (seenTitles.size > SEEN_LIMIT) {
+            const live = new Set(rssPool.map((i) => i.title));
+            for (const t of seenTitles) {
+                if (seenTitles.size <= SEEN_LIMIT) break;
+                if (!live.has(t)) seenTitles.delete(t);
+            }
+        }
     }
 
     /** Top the director's rundown back up from the deduplicated RSS pool. */

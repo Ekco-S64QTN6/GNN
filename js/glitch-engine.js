@@ -27,8 +27,8 @@ const GNNGlitch = (() => {
     const ANOMALIES = {
         carrier_drop: {
             weight: 14, ms: [700, 1500],
-            enter() {
-                GNNAudio.glitchCrush(2, 900);
+            enter(ms) {
+                GNNAudio.glitchCrush(4, ms);
                 GNNAudio.playRole('zap', { gain: 0.5, rate: 0.6 });
                 GNNTTS.nudgePlaybackRate(0.82);
             },
@@ -55,7 +55,7 @@ const GNNGlitch = (() => {
         },
         tape_stop: {
             weight: 8, ms: [1100, 1900],
-            enter() { GNNAudio.tapeStop(1000); GNNTTS.nudgePlaybackRate(0.7); },
+            enter(ms) { GNNAudio.tapeStop(ms * 0.6); GNNTTS.nudgePlaybackRate(0.7); },
             exit() { GNNTTS.nudgePlaybackRate(1); },
             video: (t) => ({ roll: t * 0.02, desat: 0.7 }),
         },
@@ -80,14 +80,14 @@ const GNNGlitch = (() => {
         },
         interference: {
             weight: 10, ms: [500, 1400],
-            enter() {
+            enter(ms) {
                 const scrambled = GNNAssets.find({ minW: 200, minCoverage: 0.4 })
                     .filter((e) => e.noise > 95);
                 ghost = scrambled.length
                     ? scrambled[(Math.random() * scrambled.length) | 0]
                     : GNNAssets.pick({ roles: ['fullscreen'] });
                 if (ghost) GNNAssets.loadImage(GNNAssets.heroPath(ghost));
-                GNNAudio.glitchCrush(4, 800);
+                GNNAudio.glitchCrush(5, ms);
                 GNNAudio.playRole('rumble', { gain: 0.4, rate: 1.7 });
             },
             exit() { ghost = null; },
@@ -112,6 +112,7 @@ const GNNGlitch = (() => {
     // ---------------------------------------------------------
 
     let active = null;
+    let activeSince = 0;
     let activeUntil = 0;
     let nextAt = 0;
     let anchorMode = null;
@@ -124,6 +125,10 @@ const GNNGlitch = (() => {
     let lastInteraction = 0;
     let idleAnnounced = false;
     let lastHourChime = -1;
+
+    // Expected ghost signals per second of airtime.
+    const GHOST_PER_SECOND = 0.0072;
+    let lastTick = 0;
 
     let globeClicks = 0;
     let globeClickAt = 0;
@@ -161,8 +166,12 @@ const GNNGlitch = (() => {
         const a = ANOMALIES[name];
         if (!a) return;
         active = name;
-        activeUntil = now + rand(a.ms);
-        try { a.enter(); } catch (_) {}
+        activeSince = now;
+        const ms = rand(a.ms);
+        activeUntil = now + ms;
+        // Hand the anomaly its own rolled duration so the audio effect ends
+        // with the picture instead of on a hardcoded timer of its own.
+        try { a.enter(ms); } catch (_) {}
     }
 
     function end(now) {
@@ -306,8 +315,15 @@ const GNNGlitch = (() => {
                 { repeatable: true });
         }
 
-        // Rare single-frame subliminal drawn from the unused library.
-        if (!active && Math.random() < 0.00012) fire('ghost_signal', now);
+        // Rare single-frame subliminal drawn from the unused library. Rolled
+        // against elapsed time, not per frame: a per-tick probability makes
+        // the fault two and a half times more frequent on a 144Hz monitor
+        // than on a 60Hz one.
+        const dt = lastTick ? Math.min(250, now - lastTick) : 0;
+        lastTick = now;
+        if (!active && dt && Math.random() < GHOST_PER_SECOND * dt / 1000) {
+            fire('ghost_signal', now);
+        }
     }
 
     function flagBreaking(now) { breakingUntil = now + 9000; }
@@ -344,7 +360,10 @@ const GNNGlitch = (() => {
     function videoState(now) {
         const out = { roll: 0, tear: 0, desat: 0, invert: 0, shift: 0, jitter: 0, eye: false };
         if (active && ANOMALIES[active].video) {
-            Object.assign(out, ANOMALIES[active].video(now - (activeUntil - 1)) || {});
+            // Elapsed since the fault began. The old expression measured time
+            // until it *ends*, so each instance's phase was randomised by its
+            // own duration.
+            Object.assign(out, ANOMALIES[active].video(now - activeSince) || {});
         }
         if (orionMode) { out.desat = Math.max(out.desat, 0.3); out.shift = Math.max(out.shift, 3); }
         return out;

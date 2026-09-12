@@ -37,9 +37,23 @@ if [ -f "$PIDFILE" ]; then
 fi
 
 # --- 2. anything else still holding the port -----------------------------
-for pid in $(pgrep -f "python3? .*server\.py" 2>/dev/null); do
+# Identified by who is actually listening on the port, not by grepping command
+# lines: a plain `pgrep -f server.py` also matches any shell whose own argv
+# happens to mention the file, up to and including the one running this script.
+port_pids() {
+    if command -v ss >/dev/null 2>&1; then
+        ss -ltnpH "sport = :$PORT" 2>/dev/null |
+            grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u
+    elif command -v lsof >/dev/null 2>&1; then
+        lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | sort -u
+    fi
+}
+
+for pid in $(port_pids); do
+    [ -n "$pid" ] || continue
+    [ "$pid" = "$$" ] && continue
     kill -0 "$pid" 2>/dev/null || continue
-    echo "stopping stray server (pid $pid)…"
+    echo "stopping stray server on port $PORT (pid $pid)…"
     kill -TERM "$pid" 2>/dev/null
     wait_gone "$pid" 5 || kill -KILL "$pid" 2>/dev/null
     stopped=$((stopped + 1))
@@ -49,15 +63,16 @@ done
 # Match on the port AND on the process actually being a browser, so a shell
 # whose command line happens to mention the port is never a target.
 marker="remote-debugging-port=$CDP_PORT"
+tag="GNNHarness"
 harness_pids() {
     local pid comm
-    for pid in $(pgrep -f "$marker" 2>/dev/null); do
+    for pid in $(pgrep -f "$marker" 2>/dev/null; pgrep -f "$tag" 2>/dev/null); do
         [ "$pid" = "$$" ] && continue
         comm="$(ps -o comm= -p "$pid" 2>/dev/null)"
         case "$comm" in
             chrome|chromium|chromium-browser|google-chrome*|Chromium*) echo "$pid" ;;
         esac
-    done
+    done | sort -u
 }
 
 pids="$(harness_pids)"

@@ -364,10 +364,12 @@ const GNNDirector = (() => {
 
             case S.BREAK:
                 if (!breakArming && !GNNCutsceneManager.isBreakActive()) {
-                    GNNTextEngine.present(GNNScript.signoff(), {
-                        kind: 'ident', cue: 'BACK LIVE', durationMs: 1800,
+                    // One line, spoken and displayed. These used to differ.
+                    const backLive = GNNScript.signoff();
+                    const est = say(backLive);
+                    GNNTextEngine.present(backLive, {
+                        kind: 'ident', cue: 'BACK LIVE', durationMs: est,
                     });
-                    say('We now return to the sector desk.');
                     beginHold(now, [1600, 2400], S.READ);
                 }
                 break;

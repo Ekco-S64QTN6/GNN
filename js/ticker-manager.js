@@ -38,10 +38,12 @@ const GNNTickerManager = (() => {
         if (!lastNow) lastNow = now;
         const dt = Math.min(120, now - lastNow);
         lastNow = now;
+        // The alert countdown runs regardless: gating it on `enabled` lets a
+        // stale flash resurface when the crawl is switched back on.
+        if (flash > 0) flash -= dt;
         if (!enabled || !blockWidth) return;
         offset += speed * dt * 0.06;
         if (offset >= blockWidth) offset -= blockWidth;
-        if (flash > 0) flash -= dt;
     }
 
     function render(ctx, view) {

@@ -44,6 +44,27 @@ except ImportError:
 
 _tts_lock = threading.Lock()
 
+# Highest request sequence the client has asked for. The browser abandons a
+# superseded <audio> request by closing the socket, but the server has already
+# taken the synthesis lock by then and will hold it for a full round trip —
+# delaying the line that is actually wanted. Comparing sequence numbers lets a
+# stale request drop out instead of queueing ahead of a live one.
+_seq_lock = threading.Lock()
+_latest_seq = [0]
+
+
+def note_sequence(seq):
+    with _seq_lock:
+        if seq > _latest_seq[0]:
+            _latest_seq[0] = seq
+
+
+def superseded(seq):
+    if not seq:
+        return False
+    with _seq_lock:
+        return seq < _latest_seq[0]
+
 
 def clean_voice(v):
     v = (v or 'en-US-GuyNeural').strip()
@@ -140,16 +161,30 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
         voice = clean_voice(q.get('voice', [''])[0])
         rate = clean_prosody(q.get('rate', [''])[0], '-5%', '%')
         pitch = clean_prosody(q.get('pitch', [''])[0], '-10Hz', 'Hz')
-
         try:
-            # edge-tts opens its own websocket per call; serialise so a rapid
-            # skip storm cannot open dozens at once.
-            with _tts_lock:
-                audio = synthesize(text, voice, rate, pitch)
+            seq = int(q.get('seq', ['0'])[0])
+        except ValueError:
+            seq = 0
+        note_sequence(seq)
+
+        # edge-tts opens its own websocket per call; serialise so a rapid skip
+        # storm cannot open dozens at once. Wait in slices so a request the
+        # client has already moved past can give up instead of blocking.
+        while not _tts_lock.acquire(timeout=0.2):
+            if superseded(seq):
+                return self.send_bytes(b'{"error":"superseded"}',
+                                       'application/json', 409)
+        try:
+            if superseded(seq):
+                return self.send_bytes(b'{"error":"superseded"}',
+                                       'application/json', 409)
+            audio = synthesize(text, voice, rate, pitch)
         except Exception as err:                      # noqa: BLE001 - report to client
             sys.stderr.write('[GNN] tts failed: %s\n' % err)
             return self.send_bytes(
                 json.dumps({'error': str(err)}).encode(), 'application/json', 502)
+        finally:
+            _tts_lock.release()
 
         if not audio:
             return self.send_bytes(b'{"error":"empty synthesis"}', 'application/json', 502)

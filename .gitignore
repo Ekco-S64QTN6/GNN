@@ -1,6 +1,9 @@
 # test-harness output
 .shot/
 
+# editor
+.vscode/
+
 # python
 __pycache__/
 *.pyc
@@ -17,3 +20,4 @@ gnn-server.log
 GNN_Report.md
 GNN_Project_Plan.md
 GNN_Code_Audit_Review.md
+Sonnet5Report.md

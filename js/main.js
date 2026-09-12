@@ -58,13 +58,13 @@
         statusText.textContent = 'Loading studio plates…';
         const bg = await GNNAssets.loadImage(`${ASSET_DIR}/background_tv.png`);
 
-        const anchors = [];
-        const globes = [];
-        for (let i = 1; i <= TOTAL_FRAMES; i++) {
-            const n = String(i).padStart(3, '0');
-            anchors.push(await GNNAssets.loadImage(`${ASSET_DIR}/anchor_frame_${n}.png`));
-            globes.push(await GNNAssets.loadImage(`${ASSET_DIR}/globe_frame_${n}.png`));
-        }
+        // In parallel: fifty sequential awaits is fifty serial round trips.
+        const nums = [];
+        for (let i = 1; i <= TOTAL_FRAMES; i++) nums.push(String(i).padStart(3, '0'));
+        const [anchors, globes] = await Promise.all([
+            Promise.all(nums.map((n) => GNNAssets.loadImage(`${ASSET_DIR}/anchor_frame_${n}.png`))),
+            Promise.all(nums.map((n) => GNNAssets.loadImage(`${ASSET_DIR}/globe_frame_${n}.png`))),
+        ]);
 
         await GNNIconManager.loadIcons(`${ASSET_DIR}/icons`);
 
@@ -85,6 +85,12 @@
     function gameLoop(timestamp) {
         requestAnimationFrame(gameLoop);
         const now = performance.now();
+
+        // One update pass per rendered frame. Running these off raw rAF ties
+        // their behaviour to the monitor's refresh rate and burns main-thread
+        // time that the audio scheduler needs.
+        if (timestamp - lastRender < FRAME_MS) return;
+        lastRender = timestamp;
         frameCount++;
 
         try {
@@ -96,11 +102,7 @@
             console.error('[GNN Loop]', err);
         }
 
-        if (timestamp - lastRender < FRAME_MS) return;
-        lastRender = timestamp;
-
         const frames = GNNAnimator.tick(now);
-        GNNAnimator.setSpeaking(GNNTTS.isSpeaking());
 
         const story = GNNDirector.getCurrent();
         const icon = story
@@ -142,7 +144,13 @@
 
     function bindClickSfx() {
         document.querySelectorAll('button, select, input[type=checkbox]').forEach((el) => {
-            el.addEventListener('click', () => GNNAudio.playUiClick());
+            el.addEventListener('click', () => {
+                // These fire in the target phase, ahead of the document-level
+                // unlock listener, so the very first click would otherwise be
+                // silently dropped for want of an AudioContext.
+                GNNAudio.ensureContext();
+                GNNAudio.playUiClick();
+            });
         });
     }
 
@@ -254,7 +262,7 @@
         const unlock = () => {
             GNNAudio.ensureContext();
             GNNTTS.unlock();
-            GNNAudio.preload(['sfx_06', 'sfx_36', 'sfx_03', 'intro_sfx_01', 'intro_sfx_02']);
+            GNNAudio.preload(GNNAudio.CORE_SFX);
         };
         document.addEventListener('click', unlock, { once: true });
         document.addEventListener('keydown', unlock, { once: true });
@@ -281,6 +289,8 @@
     // =========================================================
 
     function wireModules() {
+        // Single source of truth for the mouth: the voice's own start/end
+        // events, not a per-frame poll of the same flag.
         GNNTTS.onStart = () => GNNAnimator.setSpeaking(true);
         GNNTTS.onEnd = () => GNNAnimator.setSpeaking(false);
 
