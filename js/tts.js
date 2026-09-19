@@ -139,6 +139,23 @@ const GNNTTS = (() => {
             .trim();
     }
 
+    /**
+     * The endpoint takes a bounded string, but cutting at a fixed index lands
+     * mid-word and the anchor dutifully reads the fragment as written —
+     * "...the agency confirmed the la". Back up to the last sentence inside
+     * the budget, or failing that the last whole word.
+     */
+    function trimForSynthesis(text, maxChars = 900) {
+        if (text.length <= maxChars) return text;
+        const head = text.slice(0, maxChars);
+        const stop = Math.max(head.lastIndexOf('. '),
+                              head.lastIndexOf('! '),
+                              head.lastIndexOf('? '));
+        if (stop > maxChars * 0.4) return head.slice(0, stop + 1).trim();
+        const space = head.lastIndexOf(' ');
+        return (space > 0 ? head.slice(0, space) : head).trim() + '.';
+    }
+
     /** Rough spoken-duration estimate (ms) used when audio is unavailable. */
     function estimateMs(text) {
         const words = sanitize(text).split(/\s+/).filter(Boolean).length;
@@ -146,6 +163,8 @@ const GNNTTS = (() => {
     }
 
     const FADE = 0.035;
+    // Release margin between the end of a line and the next segment.
+    const TAIL_MS = 280;
 
     /**
      * Cut the voice without a click.
@@ -203,7 +222,7 @@ const GNNTTS = (() => {
     function finish() {
         if (!speaking) { resolveNow(); return; }
         speaking = false;
-        if (typeof GNNAudio !== 'undefined') GNNAudio.duckMusic(1, 0.9);
+        if (typeof GNNAudio !== 'undefined') GNNAudio.duckUnderVoice(false);
         if (onEnd) onEnd();
         resolveNow();
     }
@@ -249,7 +268,10 @@ const GNNTTS = (() => {
         speaking = true;
         if (typeof GNNAudio !== 'undefined') {
             GNNAudio.ensureContext();
-            GNNAudio.duckMusic(opts.duck !== undefined ? opts.duck : 0.28, 0.25);
+            // Music dips to -14dB, effects to -10dB, both for as long as the
+            // anchor is on air. Depths live in the audio engine; a caller that
+            // wants a segment closer to the bed passes its own.
+            GNNAudio.duckUnderVoice(true, { music: opts.duck, effects: opts.duckSfx });
         }
         attachAnalyser();
         if (onStart) onStart();
@@ -263,7 +285,7 @@ const GNNTTS = (() => {
             }
 
             const url = ENDPOINT
-                + '?text=' + encodeURIComponent(clean.slice(0, 900))
+                + '?text=' + encodeURIComponent(trimForSynthesis(clean))
                 + '&voice=' + encodeURIComponent(opts.voice || voice)
                 + '&pitch=' + encodeURIComponent((opts.pitch !== undefined ? opts.pitch : pitchHz) + 'Hz')
                 + '&rate=' + encodeURIComponent((opts.rate !== undefined ? opts.rate : ratePct) + '%')
@@ -285,7 +307,16 @@ const GNNTTS = (() => {
             }, estimateMs(clean) * 2.2 + 6000);
             const clearGuard = () => clearTimeout(guard);
 
-            el.onended = () => { clearGuard(); if (id === requestId) finish(); };
+            // Hand over a beat after the element reports the end rather than
+            // on the event itself. The decoder signals 'ended' as the last
+            // frame is handed to the device, not as it is heard, and the
+            // director tearing down the segment on that edge clips the final
+            // syllable of the line.
+            el.onended = () => {
+                clearGuard();
+                if (id !== requestId) return;
+                setTimeout(() => { if (id === requestId) finish(); }, TAIL_MS);
+            };
             el.onerror = () => {
                 clearGuard();
                 if (id !== requestId) return;

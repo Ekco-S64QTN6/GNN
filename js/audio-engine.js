@@ -37,8 +37,11 @@ const GNNAudio = (() => {
         }
     }
     let sfxBus = null;
+    let sfxDuck = null;          // sidechain receiver: effects under voice
     let musicBus = null;
     let voiceBus = null;
+    let voiceComp = null;        // speech-only dynamics
+    let voiceMakeup = null;
     let stationBus = null;
     let crusher = null;          // WaveShaper used for the glitch bitcrush
     let crusherWet = null;
@@ -67,11 +70,18 @@ const GNNAudio = (() => {
     let musicGain = null;
     let currentTrack = null;
     let musicDuck = 1;
+    let effectsDuck = 1;
     // The level the current bed was actually mixed at. Ducking scales this;
     // it does not replace it.
     let musicBaseGain = 1;
 
-    const VOLUME = { sfx: 0.55, music: 0.28, voice: 1.0, teletype: 0.14, ui: 0.3 };
+    // Sum trim, applied to stationBus. Backing the master compressor off its
+    // old -14dB/6:1 gives every bus its own dynamics back, but it also stops
+    // holding the sum down; without a trim the mix just runs hotter and lands
+    // on the limiter instead of under it.
+    const STATION_TRIM = 0.8;
+    // Voice is the 0dB anchor of the mix; everything else is mixed under it.
+    const VOLUME = { sfx: 0.4, music: 0.28, voice: 1.0, teletype: 0.14, ui: 0.3 };
 
     // ---------------------------------------------------------
     // Graph
@@ -110,12 +120,18 @@ const GNNAudio = (() => {
             if (!AC) return null;
             ctx = new AC();
 
+            // Master is a safety limiter and nothing else. It used to be a
+            // -14dB / 6:1 workhorse that *every* bus shared, so an SFX
+            // transient drove gain reduction across the voice as well: the
+            // effect ducked the anchor instead of the other way round, and the
+            // 220ms release held that attenuation over the following syllables.
+            // Speech dynamics live on the voice bus now; this only catches peaks.
             comp = ctx.createDynamicsCompressor();
-            comp.threshold.value = -14;
-            comp.knee.value = 20;
-            comp.ratio.value = 6;
-            comp.attack.value = 0.004;
-            comp.release.value = 0.22;
+            comp.threshold.value = -12;
+            comp.knee.value = 6;
+            comp.ratio.value = 8;
+            comp.attack.value = 0.003;
+            comp.release.value = 0.25;
 
             masterGain = ctx.createGain();
             masterGain.gain.value = 1;
@@ -129,6 +145,7 @@ const GNNAudio = (() => {
             crusherDry.gain.value = 1;
 
             stationBus = ctx.createGain();
+            stationBus.gain.value = STATION_TRIM;
             sfxBus = ctx.createGain();
             musicBus = ctx.createGain();
             voiceBus = ctx.createGain();
@@ -136,6 +153,28 @@ const GNNAudio = (() => {
             sfxBus.gain.value = VOLUME.sfx;
             musicBus.gain.value = VOLUME.music;
             voiceBus.gain.value = VOLUME.voice;
+
+            // Ducking receiver for the effects bus. Kept as its own node so
+            // the duck is a multiplier on the mix level rather than a value
+            // that overwrites it -- the same mistake duckMusic() used to make.
+            sfxDuck = ctx.createGain();
+            sfxDuck.gain.value = 1;
+
+            // Speech gets its own compressor so it can be held forward in the
+            // mix without the master clamping down on everything else with it.
+            // Fast attack catches plosives, short release lets the level back
+            // up between words instead of smearing the line into one flat,
+            // muffled block.
+            voiceComp = ctx.createDynamicsCompressor();
+            voiceComp.threshold.value = -18;
+            voiceComp.knee.value = 6;
+            voiceComp.ratio.value = 3;
+            voiceComp.attack.value = 0.005;
+            voiceComp.release.value = 0.18;
+            // Compressing at 3:1 from -18dB costs roughly 4dB on peaks; put it
+            // back so the anchor stays the loudest thing on the bus.
+            voiceMakeup = ctx.createGain();
+            voiceMakeup.gain.value = 1.25;
 
             // A tape transport loses treble as it slows; the filter is what
             // sells the effect, so the playback rate never has to go low
@@ -145,10 +184,13 @@ const GNNAudio = (() => {
             musicFilter.frequency.value = 20000;
             musicFilter.Q.value = 0.7;
 
-            sfxBus.connect(stationBus);
+            sfxBus.connect(sfxDuck);
+            sfxDuck.connect(stationBus);
             musicBus.connect(musicFilter);
             musicFilter.connect(stationBus);
-            voiceBus.connect(stationBus);
+            voiceBus.connect(voiceComp);
+            voiceComp.connect(voiceMakeup);
+            voiceMakeup.connect(stationBus);
 
             stationBus.connect(crusherDry);
             stationBus.connect(crusher);
@@ -407,6 +449,39 @@ const GNNAudio = (() => {
         ramp(musicGain.gain, musicBaseGain * amount, seconds);
     }
 
+    /**
+     * Pull the effects bus down while the anchor talks.
+     *
+     * Music was the only thing that ever ducked, so a transition sweep or a
+     * klaxon landing on a speech onset sat on top of the voice at full mix
+     * level and the master compressor resolved the collision in the effect's
+     * favour. Effects are a bed too; they duck like one.
+     */
+    function duckEffects(amount, seconds = 0.25) {
+        effectsDuck = amount;
+        if (!sfxDuck || !ctx) return;
+        ramp(sfxDuck.gain, amount, seconds);
+    }
+
+    /**
+     * One call for the whole sidechain, so the two buses can never disagree
+     * about whether the anchor is currently on air.
+     *
+     * Ducked: effects -10dB, music -14dB. Open: both back to unity. Callers
+     * override either depth for segments meant to sit closer to the bed.
+     */
+    function duckUnderVoice(on, opts = {}) {
+        if (on) {
+            duckEffects(opts.effects !== undefined ? opts.effects : 0.3, 0.12);
+            duckMusic(opts.music !== undefined ? opts.music : 0.2, 0.25);
+        } else {
+            // Slower coming back than going down: the duck has to beat the
+            // first syllable, but releasing that fast sounds like a pump.
+            duckEffects(1, 0.5);
+            duckMusic(1, 0.9);
+        }
+    }
+
     function getCurrentTrack() { return currentTrack; }
 
     // ---------------------------------------------------------
@@ -513,6 +588,7 @@ const GNNAudio = (() => {
             gain: musicGain ? musicGain.gain.value : 0,
             base: musicBaseGain,
             duck: musicDuck,
+            effectsDuck: effectsDuck,
         };
     }
 
@@ -521,7 +597,7 @@ const GNNAudio = (() => {
         getMusicLevel,
         preload, load, play, playRole, playChord, CORE_SFX,
         playTypingBlip, playUiClick, playKlaxon,
-        playMusic, stopMusic, duckMusic, getCurrentTrack,
+        playMusic, stopMusic, duckMusic, duckEffects, duckUnderVoice, getCurrentTrack,
         glitchCrush, tapeStop, setStationGain,
         toggleMute, isMuted,
         VOLUME,

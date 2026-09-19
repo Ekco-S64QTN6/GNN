@@ -63,21 +63,32 @@ const GNNIconManager = (() => {
 
     /**
      * Auto-match story text against icon keywords.
-     * Returns matching HTMLImageElement or null.
+     * Returns the matching definition's label, or null when nothing matches.
+     *
+     * Separate from matchIcon() because the label is useful on its own — the
+     * rundown uses it as a coarse subject tag — and because it answers even
+     * before the PNGs have finished loading, where matchIcon() can only
+     * return null.
      */
-    function matchIcon(title = '', description = '') {
+    function matchLabel(title = '', description = '') {
         const text = `${title} ${description}`.toLowerCase();
 
         for (const def of ICON_DEFINITIONS) {
             for (const kw of def.keywords) {
-                if (hasWholeWord(text, kw)) {
-                    return iconImages[def.label] || null;
-                }
+                if (hasWholeWord(text, kw)) return def.label;
             }
         }
+        return null;
+    }
 
-        // Default fallback icon
-        return iconImages['STATUS'] || null;
+    /**
+     * Auto-match story text against icon keywords.
+     * Returns matching HTMLImageElement or null.
+     */
+    function matchIcon(title = '', description = '') {
+        const label = matchLabel(title, description);
+        // Default fallback icon when the story matched no keyword at all.
+        return iconImages[label || 'STATUS'] || null;
     }
 
     function getIconByLabel(label) {
@@ -91,6 +102,7 @@ const GNNIconManager = (() => {
     return {
         loadIcons,
         matchIcon,
+        matchLabel,
         getIconByLabel,
         getDefinitions,
         isLoaded: () => isLoaded,

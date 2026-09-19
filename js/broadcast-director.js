@@ -122,6 +122,52 @@ const GNNDirector = (() => {
     // Queue
     // ---------------------------------------------------------
 
+    // Editorial weight halves every six hours on air. Keyword score alone is
+    // time-blind: a story with three priority keywords from yesterday
+    // outranked a plain one filed ten minutes ago and kept outranking it for
+    // as long as it sat in the queue, so stale items displaced breaking ones.
+    const RECENCY_HALFLIFE_H = 6;
+    const DECAY_LAMBDA = Math.LN2 / RECENCY_HALFLIFE_H;
+
+    function storyScore(item, nowMs) {
+        const weight = item.importance || 0;
+        const ts = item.timestamp || nowMs;
+        // Future-dated pubDates turn up in the wild; clamp the age at zero so
+        // a bad timestamp cannot score above a genuinely fresh item.
+        const ageH = Math.max(0, (nowMs - ts) / 3600000);
+        return weight * Math.exp(-DECAY_LAMBDA * ageH);
+    }
+
+    // No subject may appear twice inside a window this wide.
+    const TOPIC_SPACING = 3;
+
+    /**
+     * Space the rundown out by subject.
+     *
+     * Score order alone runs every story about one event back to back: a dozen
+     * feeds covering the same launch produce near-identical headlines that
+     * score near-identically, so they sort into a block and the anchor reads
+     * SpaceX four times running. Walk the sorted list and take the best item
+     * whose subject has not aired in the last few slots. If the whole
+     * remainder is one subject, take the best one anyway rather than stalling.
+     */
+    function interleaveByTopic(items) {
+        const pending = items.slice();
+        const out = [];
+        const recent = [];
+        while (pending.length) {
+            let pick = pending.findIndex((it) => !it.topic || recent.indexOf(it.topic) < 0);
+            if (pick < 0) pick = 0;
+            const [item] = pending.splice(pick, 1);
+            out.push(item);
+            // Untagged items still consume a slot, so the window measures
+            // distance in the rundown rather than distance between tagged items.
+            recent.push(item.topic || null);
+            if (recent.length > TOPIC_SPACING) recent.shift();
+        }
+        return out;
+    }
+
     function enqueueAll(items) {
         for (const it of items || []) {
             if (!it || !it.title) continue;
@@ -129,7 +175,11 @@ const GNNDirector = (() => {
             if (current && current.title === it.title) continue;
             queue.push(it);
         }
-        queue.sort((a, b) => (b.importance || 0) - (a.importance || 0));
+        // Re-scored on every top-up, not just at ingest, so items already
+        // waiting in the rundown decay against the ones arriving now.
+        const now = Date.now();
+        queue.sort((a, b) => storyScore(b, now) - storyScore(a, now));
+        queue = interleaveByTopic(queue);
         if (queue.length > 60) queue.length = 60;
     }
 

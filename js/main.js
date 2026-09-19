@@ -303,9 +303,13 @@
         // Commercial beats are spoken by the same anchor unit.
         GNNCutsceneManager.onBeat = (text, shot) => {
             if (!text) return;
+            // Spots keep their stings closer to the voice than a news read
+            // does — a commercial that ducks its own effects to -10dB stops
+            // sounding like a commercial.
             const opts = shot.beat.kind === 'legal'
-                ? { rate: 38, pitch: -4, duck: 0.5 }
-                : { rate: shot.beat.kind === 'tag' ? -12 : 0, pitch: -6, duck: 0.45 };
+                ? { rate: 38, pitch: -4, duck: 0.5, duckSfx: 0.55 }
+                : { rate: shot.beat.kind === 'tag' ? -12 : 0, pitch: -6,
+                    duck: 0.45, duckSfx: 0.55 };
             GNNTTS.speak(text, opts);
         };
 

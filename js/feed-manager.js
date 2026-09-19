@@ -112,6 +112,55 @@ const GNNFeedManager = (() => {
         return true;
     }
 
+    /**
+     * Primary entity a story is *about*, used to keep the rundown from running
+     * four consecutive SpaceX items when every feed covers the same launch.
+     * Ordered most specific first: a Starship story is SPACEX, not SPACE.
+     */
+    const TOPIC_ENTITIES = [
+        ['SPACEX',   ['spacex', 'starship', 'falcon 9', 'falcon heavy', 'starlink', 'raptor']],
+        ['NASA',     ['nasa', 'artemis', 'jwst', 'james webb', 'perseverance', 'voyager', 'ingenuity']],
+        ['ESA',      ['esa', 'european space agency', 'ariane', 'rosalind franklin']],
+        ['BLUEORIGIN', ['blue origin', 'new glenn', 'new shepard']],
+        ['OPENAI',   ['openai', 'chatgpt', 'gpt-4', 'gpt-5', 'sam altman']],
+        ['ANTHROPIC', ['anthropic', 'claude']],
+        ['GOOGLE',   ['google', 'alphabet', 'deepmind', 'gemini', 'android', 'pixel']],
+        ['APPLE',    ['apple', 'iphone', 'ipad', 'macos', 'vision pro']],
+        ['MICROSOFT', ['microsoft', 'windows', 'azure', 'copilot', 'xbox']],
+        ['META',     ['meta', 'facebook', 'instagram', 'whatsapp', 'zuckerberg']],
+        ['AMAZON',   ['amazon', 'aws', 'kuiper']],
+        ['NVIDIA',   ['nvidia', 'cuda', 'blackwell']],
+        ['TESLA',    ['tesla', 'cybertruck', 'robotaxi']],
+        ['AI',       ['artificial intelligence', 'machine learning', 'neural network',
+                      'large language model', ' llm ', 'chatbot']],
+        ['UKRAINE',  ['ukraine', 'ukrainian', 'kyiv', 'zelensky']],
+        ['MIDEAST',  ['gaza', 'israel', 'hamas', 'hezbollah', 'palestinian', 'west bank']],
+        ['CHINA',    ['china', 'chinese', 'beijing', 'taiwan', 'xi jinping']],
+        ['RUSSIA',   ['russia', 'russian', 'moscow', 'kremlin', 'putin']],
+        ['CLIMATE',  ['climate', 'emissions', 'global warming', 'carbon', 'wildfire', 'hurricane']],
+        ['QUANTUM',  ['quantum', 'qubit']],
+        ['FUSION',   ['fusion', 'tokamak', 'iter ', 'plasma confinement']],
+        ['CRYPTO',   ['bitcoin', 'ethereum', 'crypto', 'blockchain']],
+        ['SECURITY', ['ransomware', 'data breach', 'vulnerability', 'zero-day', 'malware']],
+        ['HEALTH',   ['vaccine', 'outbreak', 'cancer', 'alzheimer', 'clinical trial', 'fda ']],
+    ];
+
+    /**
+     * Tag a story with its primary entity. Stories that match nothing get a
+     * null tag and are exempt from the spacing rule — they are not a cluster,
+     * so lumping them under one bucket would only starve the rundown.
+     */
+    function extractTopic(title, desc) {
+        const text = ` ${title} ${desc} `.toLowerCase();
+        for (const [tag, needles] of TOPIC_ENTITIES) {
+            if (needles.some((n) => text.includes(n))) return tag;
+        }
+        // Fall back to the icon subject — coarser than a named entity, but it
+        // still separates two consecutive outbreak stories from each other.
+        const label = GNNIconManager.matchLabel(title, desc);
+        return label ? `SUBJ:${label}` : null;
+    }
+
     /** Calculate the story's agentic importance score */
     function calculateImportance(title, desc) {
         let score = 0;
@@ -160,6 +209,7 @@ const GNNFeedManager = (() => {
                     const matchedIcon = GNNIconManager.matchIcon(title, desc);
                     const importance = calculateImportance(title, desc);
                     const timestamp = Date.parse(item.pubDate || new Date().toISOString()) || Date.now();
+                    const topic = extractTopic(rawTitle, rawDesc);
                     
                     validItems.push({
                         title,
@@ -172,7 +222,8 @@ const GNNFeedManager = (() => {
                         link: item.link,
                         pubDate: item.pubDate || new Date().toISOString(),
                         timestamp: timestamp,
-                        importance: importance
+                        importance: importance,
+                        topic: topic
                     });
                 }
                 return validItems;
