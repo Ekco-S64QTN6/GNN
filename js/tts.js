@@ -18,16 +18,29 @@ const GNNTTS = (() => {
 
     const ENDPOINT = 'api/tts';
 
+    // Identifies this page load to the server's supersede check. requestId
+    // restarts at zero on every reload, so without a session to scope it to,
+    // a fresh page's first requests all look older than the previous page's
+    // last one and the server refuses every one of them.
+    const SESSION = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+
+    /**
+     * The *Multilingual* voices are a later generation than the plain
+     * Neural ones and are audibly less synthetic; they lead the list and
+     * supply the default. The older voices are kept below them for variety,
+     * not for quality. `tools/voice_audition.py` renders the whole list to
+     * disk if you want to compare them back to back.
+     */
     const VOICES = [
-        { id: 'en-US-GuyNeural', label: 'GUY — Anchor Prime' },
-        { id: 'en-US-BrianNeural', label: 'BRIAN — Deep Baritone' },
-        { id: 'en-US-EricNeural', label: 'ERIC — Resonant Sci-Fi' },
-        { id: 'en-US-SteffanNeural', label: 'STEFFAN — Broadcast Desk' },
+        { id: 'en-US-AndrewMultilingualNeural', label: 'ANDREW — Anchor Prime' },
+        { id: 'en-US-BrianMultilingualNeural', label: 'BRIAN — Deep Baritone' },
+        { id: 'en-US-AvaMultilingualNeural', label: 'AVA — Anchor (F)' },
+        { id: 'en-US-EmmaMultilingualNeural', label: 'EMMA — Sector Desk (F)' },
+        { id: 'en-AU-WilliamMultilingualNeural', label: 'WILLIAM — Outer Rim' },
         { id: 'en-GB-RyanNeural', label: 'RYAN — Interstellar BBC' },
-        { id: 'en-US-AriaNeural', label: 'ARIA — Anchor (F)' },
-        { id: 'en-US-AvaNeural', label: 'AVA — Smooth Sci-Fi (F)' },
-        { id: 'en-AU-WilliamNeural', label: 'WILLIAM — Outer Rim' },
+        { id: 'en-US-SteffanNeural', label: 'STEFFAN — Broadcast Desk' },
         { id: 'en-IE-ConnorNeural', label: 'CONNOR — Field Correspondent' },
+        { id: 'en-US-EricNeural', label: 'ERIC — Resonant Sci-Fi' },
     ];
 
     let voice = VOICES[0].id;
@@ -43,6 +56,7 @@ const GNNTTS = (() => {
 
     let requestId = 0;
     let speaking = false;
+    let lastLine = null;           // {text, opts} of the line currently on air
     let currentResolve = null;
     let pitchHz = -10;
     let ratePct = -5;
@@ -59,6 +73,15 @@ const GNNTTS = (() => {
             audioEl = new Audio();
             audioEl.preload = 'auto';
             audioEl.crossOrigin = 'anonymous';
+            // With preservesPitch left at its default, any playbackRate other
+            // than 1 puts Chromium's WSOLA time-stretcher in the path, which
+            // is mushy on short buffers. The glitch engine only ever drags the
+            // rate to simulate a failing transport, and a real transport drops
+            // pitch as it slows -- so resampling is both cleaner and more
+            // faithful than stretching.
+            audioEl.preservesPitch = false;
+            audioEl.mozPreservesPitch = false;
+            audioEl.webkitPreservesPitch = false;
         }
         return audioEl;
     }
@@ -186,6 +209,18 @@ const GNNTTS = (() => {
         return FADE * 1000 + 8;
     }
 
+    /**
+     * Stop any in-flight playback-rate glide.
+     *
+     * The glide is an interval that writes playbackRate eight times over ~96ms.
+     * Nothing used to cancel it when a new line started, so `el.playbackRate =
+     * 1` in begin() was immediately overwritten by the tail of an anomaly's
+     * glide and the next story played back stretched from its first word.
+     */
+    function cancelRateGlide() {
+        if (rateTimer) { clearInterval(rateTimer); rateTimer = null; }
+    }
+
     function cutElement() {
         if (!audioEl) return;
         try { audioEl.pause(); } catch (_) {}
@@ -266,6 +301,7 @@ const GNNTTS = (() => {
         resolveNow();
 
         speaking = true;
+        lastLine = { text: clean, opts: opts };
         if (typeof GNNAudio !== 'undefined') {
             GNNAudio.ensureContext();
             // Music dips to -14dB, effects to -10dB, both for as long as the
@@ -292,7 +328,8 @@ const GNNTTS = (() => {
                 // Lets the server drop this request if we have already asked
                 // for a newer line by the time it reaches the front of the
                 // synthesis queue.
-                + '&seq=' + id;
+                + '&seq=' + id
+                + '&sid=' + SESSION;
 
             const el = element();
             // Hard watchdog: whatever happens to the element — stall, mute
@@ -348,6 +385,7 @@ const GNNTTS = (() => {
             // first. 40ms is inaudible against a newscast's pacing.
             const begin = () => {
                 if (id !== requestId) return;
+                cancelRateGlide();
                 el.src = url;
                 el.playbackRate = opts.playbackRate || 1;
                 openVoiceGate();
@@ -371,9 +409,27 @@ const GNNTTS = (() => {
     // Voice controls (used by the glitch engine as well as the UI)
     // ---------------------------------------------------------
 
-    function setVoice(v) { voice = v; }
+    /**
+     * Switch the anchor's voice, including under the line already on air.
+     *
+     * The voice is a per-request parameter, so this used to take effect only
+     * on the *next* line: the current one kept reading in the old voice, which
+     * made the selector feel broken and is why muting and unmuting appeared to
+     * fix it -- that forced a new line. Re-issue the line in flight instead,
+     * handing the director's promise over to the replacement so the rundown
+     * clock never sees the swap.
+     */
+    function setVoice(v) {
+        if (!v || v === voice) return;
+        voice = v;
+        if (!speaking || !lastLine) return;
+        const pending = currentResolve;   // the director is still awaiting this
+        currentResolve = null;            // so speak()'s resolveNow() is a no-op
+        speak(lastLine.text, lastLine.opts);
+        currentResolve = pending;         // the new line now owns the promise
+    }
     function getVoice() { return voice; }
-    function setEnabled(v) { enabled = !!v; if (!enabled) stop(); }
+    function setEnabled(v) { enabled = !!v; if (!enabled) { cancelRateGlide(); stop(); } }
     function isEnabled() { return enabled; }
     function isSpeaking() { return speaking; }
     function setPitch(hz) { pitchHz = hz; }

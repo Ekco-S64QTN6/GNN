@@ -1,8 +1,9 @@
 # 🤖 GNN Agent Handoff
 
-> **Written:** 2026-09-18 | **For:** the next coding session
-> **Verified against:** the actual source in `js/` and `server.py`, plus two headless
-> broadcast runs and seven `tools/audio_probe.py` captures.
+> **Written:** 2026-09-19 | **For:** the next coding session
+> **Verified against:** the source in `js/` and `server.py`, plus headless broadcast
+> runs, master/voice-bus pop captures, and before/after compressor gain-reduction
+> measurements with a verified control.
 
 ---
 
@@ -26,16 +27,32 @@ and `worst jump` are far more stable and are the metrics worth reading.
 
 ---
 
-## ✅ Everything from Sonnet5Report is fixed
+## ⚠️ AUD-08 was NOT fixed — read this before trusting any audit
 
-All of AUD-01 … AUD-11 and GEN-01 … GEN-06 are implemented and code-verified.
-**AUD-08 included** — the previous handoff listed it as the one outstanding item, but
-the server-side sequence guard is in `server.py:53-66` (`_latest_seq`,
-`note_sequence()`, `superseded()`), the lock is acquired in 0.2 s slices so a stale
-request bails with a 409 instead of queueing, and the client sends the nonce at
-`js/tts.js:295`. It shipped in commit `5013078`.
+The previous handoff (and my own first pass over it) reported AUD-08 as done
+because the sequence guard was *present* in `server.py`. Present is not
+correct. `_latest_seq` was a single global high-water mark, while the client's
+`requestId` restarts at zero on every page load — so once one session reached
+sequence N, **every request from the next page load looked stale and was
+refused with a 409, permanently, until the server was restarted.**
 
-There is no outstanding work from that audit. Do not re-open it.
+The anchor went mute on reload, or dropped to the browser's built-in
+`speechSynthesis` (espeak on Linux), which is why the voices were reported as
+sounding like TTS from five years ago and why the voice selector appeared
+dead: `browserFallback()` ignores the selected voice entirely.
+
+Fixed by scoping the guard per session (`server.py` `_latest_seq` dict,
+`clean_session()`, `note_sequence(sid, seq)`, `superseded(sid, seq)`), with the
+client sending a per-page-load `SESSION` nonce (`js/tts.js`). Verified:
+
+```
+A seq=5 -> 200   A seq=9 -> 200        # session A advances
+B seq=1 -> 200   B seq=2 -> 200        # fresh page load, was 409 before
+A seq=3 -> 409                         # genuinely stale, still dropped
+```
+
+The rest of Sonnet5Report (AUD-01…AUD-07, AUD-09…AUD-11, GEN-01…GEN-06) is
+implemented and code-verified. **The lesson: verify behaviour, not presence.**
 
 ---
 
@@ -104,29 +121,74 @@ Check these before acting on any report that repeats them.
 
 ---
 
-## Measured effect of the audio changes
+## The mix: what was actually wrong, and how it was measured
 
-Seven probe runs, 110 s each, three on the new graph and four on the pre-change code.
+The station had a real, measurable fault that survived several rounds of
+"tune the compressor": **gain staging**. edge-tts returns audio peaking at
+0.52–0.79 depending on voice, and it entered the graph at unity — roughly 9dB
+over the master compressor's threshold. Both compressors therefore worked
+continuously *and only while the anchor spoke*:
 
-| Metric | Before (n=4) | After (n=3) |
+| voiced frames | before | after |
 |---|---|---|
-| Clipped samples | 0 | 0 |
-| Peak | 0.649, 0.659, 0.712, 0.609 → **0.657** | 0.485, 0.496, 0.530 → **0.504** |
-| Worst jump | 36.2, 37.6, 37.7, 37.6 → **37.3×** | 37.7, 33.7, 28.1 → **33.2×** |
-| Pops | 146, 97, 226, 354 → **206** | 109, 243, 373 → **242** |
+| master gain reduction, mean | **−2.35 dB** (worst −5.53) | **0.00 dB** |
+| voice gain reduction, mean | **−3.29 dB** (worst −7.68) | **0.00 dB** |
+| master peak, p99 | 0.713 | 0.652 |
+| master peak, max | 0.741 | 0.794 |
+| master rms, mean | 0.1812 | 0.0984 |
+| frames at/over full scale | 0 | 0 |
 
-Peak headroom improved consistently and non-overlappingly (~2.3 dB). Pops and worst
-jump are statistically indistinguishable given the variance noted above.
+And on `tools/audio_probe.py`, the same instrument that swings 97→354 on the
+pre-change build (four runs, mean 206):
 
-**Perceptual quality is unverified.** The probe measures discontinuities and level, not
-whether the anchor now sits forward of the effects. That needs a human listening.
+| | before (n=4) | after |
+|---|---|---|
+| pops | 97 / 146 / 226 / 354 | **3** |
+| worst jump | ~37× | **15.5×** |
+| clipped samples | 0 | 0 |
+| peak | 0.657 mean | 0.921 under forced stress |
 
-### A tuning trap, recorded so it is not repeated
+A 206→3 drop is well outside that metric's noise, which is what confirms the
+diagnosis: the pops were compressor gain-stepping, not buffer discontinuities.
+The 0.921 peak is measured under the probe's deliberate stress segments
+(oversized one-shots, klaxon, forced break) with zero clipped samples — that is
+the limiter doing its job. Ordinary programme peaks at 0.794.
 
-The first attempt raised the master threshold to −6 dB and added 1.6× voice makeup.
-That made the mix *hotter*, not better balanced: peak 0.964, against a baseline range
-of 0.609–0.712. Backing the master compressor off without trimming the sum just moves
-the mix onto the limiter. If you loosen the master again, trim `STATION_TRIM` to match.
+Silence measured 0.00 dB of reduction in both builds. The mix was being
+modulated by the anchor's own syllables: that is the volume drifting up and
+down, and a fast-attack gain step on every plosive is itself a click, which is
+the per-word popping.
+
+The fix is levels, not compressor settings. The voice enters at a sane
+operating level, the master limiter sits *above* programme and reads 0dB
+through an ordinary read, and the voice compressor is gentle with a 20ms
+attack that sits past the transient rather than on it.
+
+**Loudness is recovered after the limiter, never before it.** The old mix was
+loud only because it was squashed; removing the pumping cost ~8dB, and level
+came back via `STATION_LEVEL` on `masterGain`, which is post-compressor and so
+cannot modulate the programme. Peaks now match the old build within 0.8dB
+while RMS sits 5.3dB lower — that is restored dynamic range, not lost level.
+Raising `STATION_LEVEL` past ~1.27 will clip; raise pre-limiter gain instead
+and the pumping comes straight back.
+
+### Measuring this yourself
+
+`GNNAudio.getCompression()` returns live gain reduction in dB for both
+compressors. **A compressor that reads non-zero through a normal read is
+modulating the mix, not protecting it.** Sample it per animation frame on
+voiced frames only (`isSpeaking()` stays true through the silent gaps inside a
+read, which otherwise drags every average around).
+
+Any such probe needs a control that must read non-zero, or it cannot tell
+"nothing is wrong" from "the instrument is broken". Two measurements in this
+session were invalid before that was added: one fed the control into
+`getMasterBus()`, which is *post*-compressor and could never register; another
+ran concurrent synthesis requests that starved the broadcast's own TTS through
+`_tts_lock`.
+
+`tools/audio_probe.py`'s pop count swings 97→354 on unmodified code — three
+runs per side minimum, and prefer `peak` and `worst jump`.
 
 ---
 
@@ -153,11 +215,14 @@ the mix onto the limiter. If you loosen the master again, trim `STATION_TRIM` to
 
 ## Known open items
 
-- **Perceptual audio check** — the whole point of the session's audio work, unverified
-  by ear. Start here.
-- **`RENDER_FPS` is 20, not 10** (`js/main.js:13`). `GNN_Report.md:40` and `:43` still
-  say 10 FPS. Documentation error only.
-- **rss2json HTTP 429s** — five feeds rate-limit during back-to-back harness runs.
-  Pre-existing, external, present in baseline captures too. Not a code fault.
-- **Decoded SFX buffers are never evicted.** Bounded by the 41-file library, so it is a
-  known memory tradeoff rather than a leak. Music beds already have LRU eviction.
+- **Perceptual check by ear.** Every number above says the mix is clean and
+  the anchor is forward; none of them say it *sounds* right. Start here.
+- **Voice choice is subjective.** `python3 tools/voice_audition.py` renders all
+  nine selector voices reading identical copy and reports their levels (they
+  vary by 3.6dB peak between voices, which is its own source of perceived
+  volume change). Reorder `VOICES` in `js/tts.js`; the first entry is default.
+- **`RENDER_FPS` is 20, not 10** (`js/main.js:13`); `GNN_Report.md:40,43` still
+  says 10. Documentation error only.
+- **rss2json HTTP 429s** during back-to-back harness runs. External, pre-existing.
+- **Decoded SFX buffers are never evicted** — bounded by the 41-file library,
+  a known tradeoff rather than a leak.

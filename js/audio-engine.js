@@ -75,13 +75,32 @@ const GNNAudio = (() => {
     // it does not replace it.
     let musicBaseGain = 1;
 
-    // Sum trim, applied to stationBus. Backing the master compressor off its
-    // old -14dB/6:1 gives every bus its own dynamics back, but it also stops
-    // holding the sum down; without a trim the mix just runs hotter and lands
-    // on the limiter instead of under it.
-    const STATION_TRIM = 0.8;
-    // Voice is the 0dB anchor of the mix; everything else is mixed under it.
-    const VOLUME = { sfx: 0.4, music: 0.28, voice: 1.0, teletype: 0.14, ui: 0.3 };
+    const STATION_TRIM = 0.9;
+    /**
+     * Output make-up, applied *after* the limiter.
+     *
+     * Taking the anchor off the compressors cost about 8dB, because the old
+     * mix was only that loud by driving them into constant gain reduction.
+     * Level has to come back somewhere that cannot modulate the programme,
+     * and post-limiter is the only such place: the limiter bounds what
+     * reaches this stage, so raising it lifts the whole mix without letting
+     * the bed breathe against the voice.
+     */
+    const STATION_LEVEL = 1.2;
+    /**
+     * Mix levels.
+     *
+     * `voice` is a *trim*, not a fader at unity. edge-tts hands back audio
+     * peaking around 0.65-0.75, and feeding that in at 1.0 put the anchor
+     * roughly 9dB over the master compressor's threshold: both compressors
+     * then ran 2-8dB of gain reduction on every syllable and released between
+     * words, which is heard as the whole bed pumping and as a click on each
+     * word. Measured, speech drove master GR to -5.5dB and voice GR to -7.7dB
+     * while silence sat at 0.0 -- the mix was being modulated by the anchor.
+     * Bring the voice in under the thresholds instead and the compressors go
+     * back to being safety devices.
+     */
+    const VOLUME = { sfx: 0.3, music: 0.22, voice: 1.0, teletype: 0.1, ui: 0.24 };
 
     // ---------------------------------------------------------
     // Graph
@@ -120,21 +139,22 @@ const GNNAudio = (() => {
             if (!AC) return null;
             ctx = new AC();
 
-            // Master is a safety limiter and nothing else. It used to be a
-            // -14dB / 6:1 workhorse that *every* bus shared, so an SFX
-            // transient drove gain reduction across the voice as well: the
-            // effect ducked the anchor instead of the other way round, and the
-            // 220ms release held that attenuation over the following syllables.
-            // Speech dynamics live on the voice bus now; this only catches peaks.
+            // Master is a safety limiter and nothing else: it sits *above*
+            // normal programme level and should read 0dB of gain reduction
+            // through an ordinary read, engaging only when buses sum into a
+            // peak. A limiter that works continuously is not protecting the
+            // mix, it is modulating it.
             comp = ctx.createDynamicsCompressor();
-            comp.threshold.value = -12;
-            comp.knee.value = 6;
-            comp.ratio.value = 8;
+            comp.threshold.value = -3;
+            comp.knee.value = 4;
+            comp.ratio.value = 20;
+            // A limiter has to catch the transient, not follow it: 5ms let
+            // stings overshoot past full scale before it engaged.
             comp.attack.value = 0.003;
-            comp.release.value = 0.25;
+            comp.release.value = 0.15;
 
             masterGain = ctx.createGain();
-            masterGain.gain.value = 1;
+            masterGain.gain.value = STATION_LEVEL;
 
             crusher = ctx.createWaveShaper();
             crusher.curve = makeCrusherCurve(12);
@@ -160,21 +180,22 @@ const GNNAudio = (() => {
             sfxDuck = ctx.createGain();
             sfxDuck.gain.value = 1;
 
-            // Speech gets its own compressor so it can be held forward in the
-            // mix without the master clamping down on everything else with it.
-            // Fast attack catches plosives, short release lets the level back
-            // up between words instead of smearing the line into one flat,
-            // muffled block.
+            // Speech dynamics only, and gently: this evens out the loudest
+            // syllables, it does not ride the line. A 5ms attack steps the
+            // gain on every plosive, and at audio rate a fast gain step is
+            // itself a click -- which is what the per-word popping was. Slow
+            // the attack past the transient and keep the ratio low, so what
+            // is left is level control rather than an audible envelope.
             voiceComp = ctx.createDynamicsCompressor();
-            voiceComp.threshold.value = -18;
-            voiceComp.knee.value = 6;
-            voiceComp.ratio.value = 3;
-            voiceComp.attack.value = 0.005;
-            voiceComp.release.value = 0.18;
-            // Compressing at 3:1 from -18dB costs roughly 4dB on peaks; put it
-            // back so the anchor stays the loudest thing on the bus.
+            voiceComp.threshold.value = -4;
+            voiceComp.knee.value = 10;
+            voiceComp.ratio.value = 2;
+            voiceComp.attack.value = 0.02;
+            voiceComp.release.value = 0.25;
+            // Nothing to make up: the trim above already sets the operating
+            // level and the compressor is barely working by design.
             voiceMakeup = ctx.createGain();
-            voiceMakeup.gain.value = 1.25;
+            voiceMakeup.gain.value = 1.0;
 
             // A tape transport loses treble as it slows; the filter is what
             // sells the effect, so the playback rate never has to go low
@@ -472,7 +493,7 @@ const GNNAudio = (() => {
      */
     function duckUnderVoice(on, opts = {}) {
         if (on) {
-            duckEffects(opts.effects !== undefined ? opts.effects : 0.3, 0.12);
+            duckEffects(opts.effects !== undefined ? opts.effects : 0.25, 0.12);
             duckMusic(opts.music !== undefined ? opts.music : 0.2, 0.25);
         } else {
             // Slower coming back than going down: the duck has to beat the
@@ -572,7 +593,7 @@ const GNNAudio = (() => {
 
     function toggleMute() {
         muted = !muted;
-        if (ctx) setStationGain(muted ? 0.0001 : 1, 0.15);
+        if (ctx) setStationGain(muted ? 0.0001 : STATION_LEVEL, 0.15);
         return muted;
     }
 
@@ -581,6 +602,20 @@ const GNNAudio = (() => {
     function getVoiceBus() { ensureContext(); return voiceBus; }
     /** Post-compressor bus, for output analysis (tools/audio_probe.py). */
     function getMasterBus() { ensureContext(); return masterGain; }
+
+    /**
+     * Live gain reduction on both compressors, in dB (0 = not working).
+     *
+     * Sustained reduction on the master means the mix is driving the limiter
+     * rather than sitting under it, which is heard as the whole bed pumping
+     * on every syllable the anchor speaks.
+     */
+    function getCompression() {
+        return {
+            master: comp ? comp.reduction : 0,
+            voice: voiceComp ? voiceComp.reduction : 0,
+        };
+    }
 
     /** Current music bed level and the pieces it is derived from. */
     function getMusicLevel() {
@@ -594,7 +629,7 @@ const GNNAudio = (() => {
 
     return {
         ensureContext, getContext, getVoiceBus, getMasterBus, whenRunning,
-        getMusicLevel,
+        getMusicLevel, getCompression,
         preload, load, play, playRole, playChord, CORE_SFX,
         playTypingBlip, playUiClick, playKlaxon,
         playMusic, stopMusic, duckMusic, duckEffects, duckUnderVoice, getCurrentTrack,

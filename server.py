@@ -44,32 +44,55 @@ except ImportError:
 
 _tts_lock = threading.Lock()
 
-# Highest request sequence the client has asked for. The browser abandons a
-# superseded <audio> request by closing the socket, but the server has already
-# taken the synthesis lock by then and will hold it for a full round trip —
-# delaying the line that is actually wanted. Comparing sequence numbers lets a
-# stale request drop out instead of queueing ahead of a live one.
+# Highest request sequence each client session has asked for. The browser
+# abandons a superseded <audio> request by closing the socket, but the server
+# has already taken the synthesis lock by then and will hold it for a full
+# round trip — delaying the line that is actually wanted. Comparing sequence
+# numbers lets a stale request drop out instead of queueing ahead of a live one.
+#
+# This MUST be scoped per session. The client's counter restarts at zero on
+# every page load, so a single global high-water mark meant that after one
+# session had reached N, every request from the next page load looked stale
+# and was refused with a 409 — permanently, until the server was restarted.
+# The anchor simply went mute on reload.
 _seq_lock = threading.Lock()
-_latest_seq = [0]
+_latest_seq = {}
+_SEQ_SESSIONS = 64
 
 
-def note_sequence(seq):
+def clean_session(sid):
+    sid = ''.join(c for c in (sid or '') if c.isalnum())
+    return sid[:32]
+
+
+def note_sequence(sid, seq):
+    if not sid or not seq:
+        return
     with _seq_lock:
-        if seq > _latest_seq[0]:
-            _latest_seq[0] = seq
+        if seq > _latest_seq.get(sid, 0):
+            _latest_seq[sid] = seq
+        # A long-lived station accumulates one entry per page load; keep the
+        # newest handful and let the rest go.
+        while len(_latest_seq) > _SEQ_SESSIONS:
+            _latest_seq.pop(next(iter(_latest_seq)))
 
 
-def superseded(seq):
-    if not seq:
+def superseded(sid, seq):
+    if not sid or not seq:
         return False
     with _seq_lock:
-        return seq < _latest_seq[0]
+        return seq < _latest_seq.get(sid, 0)
+
+
+# Matches the client's default (js/tts.js VOICES[0]): a later generation than
+# the plain *Neural voices and audibly less synthetic.
+DEFAULT_VOICE = 'en-US-AndrewMultilingualNeural'
 
 
 def clean_voice(v):
-    v = (v or 'en-US-GuyNeural').strip()
+    v = (v or DEFAULT_VOICE).strip()
     if not v or any(c not in ALLOWED_VOICE for c in v):
-        return 'en-US-GuyNeural'
+        return DEFAULT_VOICE
     return v
 
 
@@ -165,17 +188,18 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             seq = int(q.get('seq', ['0'])[0])
         except ValueError:
             seq = 0
-        note_sequence(seq)
+        sid = clean_session(q.get('sid', [''])[0])
+        note_sequence(sid, seq)
 
         # edge-tts opens its own websocket per call; serialise so a rapid skip
         # storm cannot open dozens at once. Wait in slices so a request the
         # client has already moved past can give up instead of blocking.
         while not _tts_lock.acquire(timeout=0.2):
-            if superseded(seq):
+            if superseded(sid, seq):
                 return self.send_bytes(b'{"error":"superseded"}',
                                        'application/json', 409)
         try:
-            if superseded(seq):
+            if superseded(sid, seq):
                 return self.send_bytes(b'{"error":"superseded"}',
                                        'application/json', 409)
             audio = synthesize(text, voice, rate, pitch)
