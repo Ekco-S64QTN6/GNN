@@ -225,6 +225,7 @@ const GNNTTS = (() => {
         if (!audioEl) return;
         try { audioEl.pause(); } catch (_) {}
         try { audioEl.removeAttribute('src'); audioEl.load(); } catch (_) {}
+        if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
     }
 
     function stop() {
@@ -286,6 +287,77 @@ const GNNTTS = (() => {
      * Speak a line. Always resolves — the broadcast clock never blocks on it.
      * @returns {Promise<void>}
      */
+    // ---------------------------------------------------------
+    // Clip fetching
+    // ---------------------------------------------------------
+    //
+    // The element used to be pointed straight at /api/tts, which meant the
+    // voice did not start until synthesis finished — one to four seconds
+    // after the segment it belongs to. The director's timers ran anyway, so
+    // lines were still playing when the next segment cut them off. Fetching
+    // the clip first makes playback start immediately, lets a line be warmed
+    // up before it is needed, and lets a failure be read from a status code
+    // instead of guessed at from an element error.
+
+    const clipCache = new Map();      // key -> Promise<Blob|null>
+    const CLIP_CACHE = 16;
+    let objectUrl = null;
+
+    function clipKey(clean, opts) {
+        return [trimForSynthesis(clean), opts.voice || voice,
+                (opts.pitch !== undefined ? opts.pitch : pitchHz),
+                (opts.rate !== undefined ? opts.rate : ratePct)].join('|');
+    }
+
+    function buildUrl(clean, opts, seq) {
+        return ENDPOINT
+            + '?text=' + encodeURIComponent(trimForSynthesis(clean))
+            + '&voice=' + encodeURIComponent(opts.voice || voice)
+            + '&pitch=' + encodeURIComponent((opts.pitch !== undefined ? opts.pitch : pitchHz) + 'Hz')
+            + '&rate=' + encodeURIComponent((opts.rate !== undefined ? opts.rate : ratePct) + '%')
+            // Lets the server drop this request if we have already asked for a
+            // newer line by the time it reaches the synthesis queue. A warm-up
+            // sends 0, which neither supersedes nor can be superseded.
+            + '&seq=' + seq
+            + '&sid=' + SESSION;
+    }
+
+    function fetchClip(clean, opts, seq) {
+        const key = clipKey(clean, opts);
+        const hit = clipCache.get(key);
+        if (hit) return hit;
+        const pending = fetch(buildUrl(clean, opts, seq))
+            .then((r) => {
+                if (r.status === 503) { available = false; return null; }
+                if (!r.ok) { clipCache.delete(key); return null; }
+                available = true;
+                return r.blob();
+            })
+            .catch(() => {
+                clipCache.delete(key);
+                if (available === null) available = false;
+                return null;
+            });
+        clipCache.set(key, pending);
+        while (clipCache.size > CLIP_CACHE) {
+            clipCache.delete(clipCache.keys().next().value);
+        }
+        return pending;
+    }
+
+    /** Warm a line so it plays the instant it is called for. */
+    function prefetch(text, opts = {}) {
+        const clean = sanitize(text);
+        if (!enabled || !clean || available === false) return;
+        fetchClip(clean, opts, 0);
+    }
+
+    function setSource(url) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        objectUrl = url;
+        element().src = url;
+    }
+
     function speak(text, opts = {}) {
         const clean = sanitize(text);
         if (!enabled || !clean) {
@@ -320,25 +392,12 @@ const GNNTTS = (() => {
                 return;
             }
 
-            const url = ENDPOINT
-                + '?text=' + encodeURIComponent(trimForSynthesis(clean))
-                + '&voice=' + encodeURIComponent(opts.voice || voice)
-                + '&pitch=' + encodeURIComponent((opts.pitch !== undefined ? opts.pitch : pitchHz) + 'Hz')
-                + '&rate=' + encodeURIComponent((opts.rate !== undefined ? opts.rate : ratePct) + '%')
-                // Lets the server drop this request if we have already asked
-                // for a newer line by the time it reaches the front of the
-                // synthesis queue.
-                + '&seq=' + id
-                + '&sid=' + SESSION;
-
             const el = element();
-            // Hard watchdog: whatever happens to the element — stall, mute
-            // policy, decode failure — the director gets its callback.
+            // Hard watchdog: whatever happens to the clip — a stalled fetch,
+            // a decode failure, an autoplay refusal — the director gets its
+            // callback.
             const guard = setTimeout(() => {
                 if (id !== requestId) return;
-                // Give up on the line *and* silence it. Resolving alone leaves
-                // a slow synthesis free to start playing later, on top of
-                // whatever segment the director has moved on to.
                 cutElement();
                 finish();
             }, estimateMs(clean) * 2.2 + 6000);
@@ -356,52 +415,41 @@ const GNNTTS = (() => {
             };
             el.onerror = () => {
                 clearGuard();
-                if (id !== requestId) return;
-                if (available !== null) { finish(); return; }
-                // The element cannot see the status code, and a superseded or
-                // transiently failed request must not condemn the whole
-                // endpoint to the browser-voice fallback. Ask the server
-                // directly before deciding.
-                fetch('api/status')
-                    .then((r) => (r.ok ? r.json() : null))
-                    .then((st) => {
-                        if (st && st.tts) { available = true; finish(); return; }
-                        available = false;
-                        browserFallback(clean, id).then(() => {
-                            if (id === requestId) finish();
-                        });
-                    })
-                    .catch(() => {
-                        available = false;
-                        browserFallback(clean, id).then(() => {
-                            if (id === requestId) finish();
-                        });
-                    });
+                if (id === requestId) finish();
             };
-            el.oncanplay = () => { if (id === requestId) available = true; };
-            el.onstalled = () => { clearGuard(); if (id === requestId) finish(); };
-            // Replacing .src on a playing element halts it wherever the
-            // waveform happened to be, so let the outgoing line reach silence
-            // first. 40ms is inaudible against a newscast's pacing.
-            const begin = () => {
-                if (id !== requestId) return;
-                cancelRateGlide();
-                el.src = url;
-                el.playbackRate = opts.playbackRate || 1;
-                openVoiceGate();
-                const p = el.play();
-                if (p && p.catch) {
-                    p.catch(() => {
-                        clearGuard();
-                        if (id !== requestId) return;
-                        // Autoplay still locked — keep the clock honest by
-                        // running the segment on the estimated read length.
-                        setTimeout(() => { if (id === requestId) finish(); },
-                                   estimateMs(clean));
-                    });
+
+            fetchClip(clean, opts, id).then((blob) => {
+                if (id !== requestId) { clearGuard(); return; }
+                if (!blob) {
+                    clearGuard();
+                    if (available === false) {
+                        browserFallback(clean, id).then(() => {
+                            if (id === requestId) finish();
+                        });
+                    } else {
+                        finish();
+                    }
+                    return;
                 }
-            };
-            if (handoverMs > 0) setTimeout(begin, handoverMs); else begin();
+                const begin = () => {
+                    if (id !== requestId) { clearGuard(); return; }
+                    setSource(URL.createObjectURL(blob));
+                    el.playbackRate = opts.playbackRate || 1;
+                    openVoiceGate();
+                    const p = el.play();
+                    if (p && p.catch) {
+                        p.catch(() => {
+                            clearGuard();
+                            if (id !== requestId) return;
+                            // Autoplay still locked — keep the clock honest by
+                            // running the segment on the estimated read length.
+                            setTimeout(() => { if (id === requestId) finish(); },
+                                       estimateMs(clean));
+                        });
+                    }
+                };
+                if (handoverMs > 0) setTimeout(begin, handoverMs); else begin();
+            });
         });
     }
 
@@ -451,7 +499,7 @@ const GNNTTS = (() => {
     }
 
     return {
-        VOICES, speak, stop, unlock, getLevel, estimateMs,
+        VOICES, speak, prefetch, stop, unlock, getLevel, estimateMs,
         setVoice, getVoice, setEnabled, isEnabled, isSpeaking,
         setPitch, setRate, nudgePlaybackRate,
         set onStart(fn) { onStart = fn; },

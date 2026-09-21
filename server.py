@@ -22,8 +22,10 @@ import atexit
 import http.server
 import json
 import os
+import shutil
 import signal
 import socketserver
+import subprocess
 import sys
 import threading
 import urllib.parse
@@ -41,6 +43,68 @@ try:
 except ImportError:
     edge_tts = None
     HAVE_TTS = False
+
+# --- synthesis quality -------------------------------------------------
+#
+# edge-tts hardcodes audio-24khz-48kbitrate-mono-mp3 into the websocket
+# speech.config frame. 48 kbps mono is genuinely poor and is audible as coder
+# crunch on sibilants no matter what the mixer does downstream. The service
+# hands out 96 kbps for the asking; 48 kHz and PCM formats are refused.
+# Rewrite the frame on its way out, and no-op safely if upstream ever changes
+# the literal.
+EDGE_DEFAULT_FORMAT = 'audio-24khz-48kbitrate-mono-mp3'
+EDGE_FORMAT = os.environ.get('GNN_TTS_FORMAT', 'audio-24khz-96kbitrate-mono-mp3')
+
+# Voices arrive at different levels: Guy lands near -19.6 LUFS with 0.6 dB of
+# headroom, Ryan at -21.7 with 3.8 dB. Through a compressor the hot ones get
+# squashed and the quiet ones do not, which is why one voice sounds clean and
+# the next sounds harsh. Normalise to one broadcast target before the browser
+# ever sees it.
+TARGET_LUFS = float(os.environ.get('GNN_TTS_LUFS', -19.0))
+TARGET_PEAK_DB = float(os.environ.get('GNN_TTS_PEAK', -3.0))
+
+
+def _install_format_override():
+    if not HAVE_TTS or EDGE_FORMAT == EDGE_DEFAULT_FORMAT:
+        return
+    try:
+        import aiohttp
+    except ImportError:
+        return
+    original = aiohttp.ClientSession.ws_connect
+
+    class _Proxy:
+        def __init__(self, ws):
+            self._ws = ws
+
+        def __getattr__(self, name):
+            return getattr(self._ws, name)
+
+        def __aiter__(self):
+            return self._ws.__aiter__()
+
+        async def send_str(self, data, *a, **k):
+            if EDGE_DEFAULT_FORMAT in data:
+                data = data.replace(EDGE_DEFAULT_FORMAT, EDGE_FORMAT)
+            return await self._ws.send_str(data, *a, **k)
+
+    class _Ctx:
+        def __init__(self, cm):
+            self._cm = cm
+
+        async def __aenter__(self):
+            return _Proxy(await self._cm.__aenter__())
+
+        async def __aexit__(self, *a):
+            return await self._cm.__aexit__(*a)
+
+    def ws_connect(self, *a, **k):
+        return _Ctx(original(self, *a, **k))
+
+    aiohttp.ClientSession.ws_connect = ws_connect
+
+
+_install_format_override()
 
 _tts_lock = threading.Lock()
 
@@ -127,6 +191,63 @@ def synthesize(text, voice, rate, pitch):
         loop.close()
 
 
+def _ffmpeg(args, payload):
+    return subprocess.run(['ffmpeg', '-hide_banner', '-nostats'] + args,
+                          input=payload, capture_output=True)
+
+
+def measure_loudness(mp3):
+    """Integrated loudness and true peak in dB, or (None, None)."""
+    r = _ffmpeg(['-i', 'pipe:0', '-filter_complex', 'ebur128=peak=true',
+                 '-f', 'null', '-'], mp3)
+    lufs = peak = None
+    for line in r.stderr.decode('utf-8', 'replace').splitlines():
+        line = line.strip()
+        if line.startswith('I:') and 'LUFS' in line:
+            try:
+                lufs = float(line.split()[1])
+            except (IndexError, ValueError):
+                pass
+        elif line.startswith('Peak:') and 'dBFS' in line:
+            try:
+                peak = float(line.split()[1])
+            except (IndexError, ValueError):
+                pass
+    return lufs, peak
+
+
+def normalize(mp3):
+    """
+    Level-match a clip and hand it back as lossless PCM.
+
+    A single linear gain, not a compressor: the voice keeps its own dynamics
+    and simply arrives where the mixer expects it. Decoding once and serving
+    WAV also avoids a second lossy generation, and on localhost the extra
+    bytes cost nothing.
+
+    Returns (payload, content_type), falling back to the original MP3 if
+    ffmpeg cannot be used.
+    """
+    if not shutil.which('ffmpeg'):
+        return mp3, 'audio/mpeg'
+    try:
+        lufs, peak = measure_loudness(mp3)
+        gain = 0.0
+        if lufs is not None and lufs > -70:
+            gain = TARGET_LUFS - lufs
+        if peak is not None:
+            gain = min(gain, TARGET_PEAK_DB - peak)
+        gain = max(-24.0, min(24.0, gain))
+        r = _ffmpeg(['-i', 'pipe:0', '-af', 'volume=%.2fdB' % gain,
+                     '-ar', '24000', '-ac', '1', '-c:a', 'pcm_s16le',
+                     '-f', 'wav', 'pipe:1'], mp3)
+        if r.returncode == 0 and r.stdout:
+            return r.stdout, 'audio/wav'
+    except Exception as err:                              # noqa: BLE001
+        sys.stderr.write('[GNN] normalise failed, serving raw: %s\n' % err)
+    return mp3, 'audio/mpeg'
+
+
 class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
@@ -166,6 +287,8 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
                 name: os.path.exists(os.path.join(assets, name))
                 for name in ('gfx-manifest.json', 'audio-manifest.json', 'moo-strings.json')
             },
+            'format': EDGE_FORMAT,
+            'normalise': bool(shutil.which('ffmpeg')),
             'music': len([f for f in os.listdir(os.path.join(assets, 'audio', 'music'))
                           if f.endswith('.ogg')]) if os.path.isdir(
                               os.path.join(assets, 'audio', 'music')) else 0,
@@ -212,7 +335,8 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         if not audio:
             return self.send_bytes(b'{"error":"empty synthesis"}', 'application/json', 502)
-        self.send_bytes(audio, 'audio/mpeg')
+        payload, ctype = normalize(audio)
+        self.send_bytes(payload, ctype)
 
 
 class ThreadedServer(socketserver.ThreadingMixIn, socketserver.TCPServer):

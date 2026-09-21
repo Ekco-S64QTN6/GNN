@@ -372,7 +372,11 @@ const GNNDirector = (() => {
                         GNNCutsceneManager.triggerCutaway(current, now);
                     }
                 }
-                const overrun = now - stateSince > readEstimate + 9000;
+                // Generous: the clip has to be synthesised before a word of
+                // it is heard, and cutting a story short is worse than letting
+                // a stuck one run long. The speech watchdog is the real
+                // backstop.
+                const overrun = now - stateSince > readEstimate * 1.8 + 20000;
                 if ((!speaking && !GNNTextEngine.isTyping()) || overrun) {
                     if (overrun) GNNTextEngine.finishTyping();
                     decideAfterRead(now);
@@ -381,7 +385,12 @@ const GNNDirector = (() => {
             }
 
             case S.HOLD:
-                if (now >= holdUntil) {
+                // A hold is dead air *after* a line, never a guillotine on
+                // one. Every other transition waits for the anchor to finish;
+                // this one used to run a bare timer, so anything spoken
+                // immediately before a hold — the sign-off coming out of a
+                // commercial break especially — was cut mid-sentence.
+                if (now >= holdUntil && !speaking) {
                     const next = holdNext;
                     holdNext = null;
                     if (next === S.BREAK) beginBreak(now);

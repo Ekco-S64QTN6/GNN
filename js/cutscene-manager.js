@@ -163,8 +163,20 @@ const GNNCutsceneManager = (() => {
             beat, scene,
             card: cardFor(beat, script),
             duration: beat.kind === 'legal' ? 2600 : 4200,
+            maxHold: beat.kind === 'legal' ? 9000 : 14000,
             transition: Math.random() < 0.45 ? 'dissolve' : 'cut',
         };
+    }
+
+    /** Prosody per beat kind, shared by the warm-up and the actual read. */
+    function voiceOptsFor(beat) {
+        // Spots keep their stings closer to the voice than a news read does —
+        // a commercial that ducks its own effects hard stops sounding like a
+        // commercial.
+        return beat.kind === 'legal'
+            ? { rate: 38, pitch: -4, duck: 0.5, duckSfx: 0.55 }
+            : { rate: beat.kind === 'tag' ? -12 : 0, pitch: -6,
+                duck: 0.45, duckSfx: 0.55 };
     }
 
     function cardFor(beat, script) {
@@ -195,6 +207,16 @@ const GNNCutsceneManager = (() => {
             if (shot) shots.push(shot);
         }
         if (!shots.length) return 0;
+
+        // The whole break is known up front, so synthesise it now: by the
+        // time each shot lands its line is already in hand.
+        if (typeof GNNTTS !== 'undefined' && GNNTTS.prefetch) {
+            shots.forEach((s, i) => {
+                if (s.beat.text) {
+                    setTimeout(() => GNNTTS.prefetch(s.beat.text, voiceOptsFor(s.beat)), i * 120);
+                }
+            });
+        }
 
         breakState = {
             script, shots, index: -1, startedAt: now,
@@ -228,7 +250,20 @@ const GNNCutsceneManager = (() => {
             GNNAudio.playChord(SCENE_AUDIO[shot.scene.kind] || SCENE_AUDIO.single);
             if (shot.beat.kind === 'ident') GNNAudio.play('intro_sfx_02', { gain: 0.5 });
         }
-        if (onBeat) onBeat(shot.beat.text, shot);
+        // A shot holds until its own voice-over has finished. The visual
+        // used to advance on a fixed timer while the line was still being
+        // synthesised, so most ad copy was cut off a second or two in.
+        shot.voiceDone = !shot.beat.text;
+        if (onBeat) {
+            const spoken = onBeat(shot.beat.text, shot);
+            if (spoken && typeof spoken.then === 'function') {
+                spoken.then(() => { shot.voiceDone = true; });
+            } else {
+                shot.voiceDone = true;
+            }
+        } else {
+            shot.voiceDone = true;
+        }
     }
 
     function isBreakActive() { return !!breakState; }
@@ -246,7 +281,14 @@ const GNNCutsceneManager = (() => {
     function update(now) {
         if (breakState) {
             const shot = breakState.shots[breakState.index];
-            if (shot && now - breakState.shotStart >= shot.duration) advanceShot(now);
+            if (shot) {
+                const held = now - breakState.shotStart;
+                // Minimum on screen, then wait for the line; the cap stops a
+                // failed synthesis from stalling the whole break.
+                if (held >= shot.duration && (shot.voiceDone || held >= shot.maxHold)) {
+                    advanceShot(now);
+                }
+            }
             return;
         }
         if (cutaway && now - cutaway.startedAt >= cutaway.duration) {
@@ -300,8 +342,10 @@ const GNNCutsceneManager = (() => {
             let alpha = 1;
             if (shot.transition === 'dissolve') {
                 alpha = Math.min(1, elapsed / 420);
-                if (elapsed > shot.duration - 320) {
-                    alpha = Math.max(0.15, (shot.duration - elapsed) / 320);
+                // Only start fading once the line is actually done, or the
+                // picture dips while the voice is still talking over it.
+                if (shot.voiceDone && elapsed > shot.duration - 320) {
+                    alpha = Math.max(0.15, Math.min(1, (shot.duration - elapsed) / 320));
                 }
             }
             ctx.save();
@@ -383,7 +427,7 @@ const GNNCutsceneManager = (() => {
 
     return {
         PIP,
-        prefetch, triggerCutaway, endCutaway, isCutawayActive,
+        prefetch, triggerCutaway, endCutaway, isCutawayActive, voiceOptsFor,
         startCommercialBreak, abortBreak, isBreakActive,
         update, render,
         routeFor,
