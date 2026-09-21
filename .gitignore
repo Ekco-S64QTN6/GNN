@@ -21,3 +21,6 @@ GNN_Report.md
 GNN_Project_Plan.md
 GNN_Code_Audit_Review.md
 Sonnet5Report.md
+
+# voice audition renders (regenerate with tools/voice_audition.py)
+audition/
