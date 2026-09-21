@@ -335,6 +335,14 @@
                 console.warn('[GNN] font load warning:', fontErr);
             }
 
+            // Ask the server which engine and voices it has before the
+            // selector is built, so the two can never disagree.
+            const catalogue = await GNNTTS.loadCatalogue();
+            if (catalogue && catalogue.engine) {
+                console.log('[GNN] voice engine: %s (%s)', catalogue.engine,
+                    catalogue.cloud ? 'cloud' : 'local');
+            }
+
             const assets = await loadAllAssets();
             GNNRenderer.init(canvas, assets);
 

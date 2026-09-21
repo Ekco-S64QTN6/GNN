@@ -271,7 +271,7 @@ const GNNDirector = (() => {
         const line = wire ? GNNScript.sectorWire(current) : GNNScript.banter(current);
         if (!line) { beginHold(now, PACE.holdAfterBanter, S.READ); return; }
         banterStreak++;
-        const est = say(line, { pitch: wire ? -14 : -10 });
+        const est = say(line, { pitch: wire ? -6 : -3 });
         GNNTextEngine.present(line, {
             kind: wire ? 'wire' : 'banter',
             cue: wire ? 'SECTOR WIRE' : 'ANCHOR COMMENT',

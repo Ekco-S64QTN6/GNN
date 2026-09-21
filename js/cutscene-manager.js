@@ -175,7 +175,7 @@ const GNNCutsceneManager = (() => {
         // commercial.
         return beat.kind === 'legal'
             ? { rate: 38, pitch: -4, duck: 0.5, duckSfx: 0.55 }
-            : { rate: beat.kind === 'tag' ? -12 : 0, pitch: -6,
+            : { rate: 0, pitch: beat.kind === 'tag' ? -4 : -2,
                 duck: 0.45, duckSfx: 0.55 };
     }
 

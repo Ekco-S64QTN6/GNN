@@ -16,6 +16,7 @@ Writes <outdir>/audition.wav plus one file per voice, and prints a level
 table so a voice that is merely quieter is not mistaken for a worse one.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -30,33 +31,34 @@ COPY = ("Good evening. This is the Galactic News Network, live across the "
         "sector. Six starships were seized at Antares this morning, and the "
         "High Council has called an emergency session.")
 
-# Both generations, so the newer voices can be judged against the ones they
-# replaced rather than in isolation.
-CANDIDATES = [
-    ('Andrew multilingual', 'en-US-AndrewMultilingualNeural'),
-    ('Brian multilingual', 'en-US-BrianMultilingualNeural'),
-    ('William multilingual', 'en-AU-WilliamMultilingualNeural'),
-    ('Ava multilingual', 'en-US-AvaMultilingualNeural'),
-    ('Emma multilingual', 'en-US-EmmaMultilingualNeural'),
-    ('Ryan, British', 'en-GB-RyanNeural'),
-    ('Thomas, British', 'en-GB-ThomasNeural'),
-    ('Connor, Irish', 'en-IE-ConnorNeural'),
-    ('William, Australian', 'en-AU-WilliamNeural'),
-    ('Guy', 'en-US-GuyNeural'),
-    ('Eric', 'en-US-EricNeural'),
-    ('Steffan', 'en-US-SteffanNeural'),
-    ('Brian', 'en-US-BrianNeural'),
-    ('Aria', 'en-US-AriaNeural'),
-    ('Ava', 'en-US-AvaNeural'),
-]
+def catalogue():
+    """Whatever the running server offers, so this follows the engine."""
+    try:
+        with urllib.request.urlopen(
+                'http://localhost:%s/api/voices' % PORT, timeout=10) as r:
+            cat = json.load(r)
+        if cat.get('voices'):
+            return cat['engine'], [(v['label'].split(' —')[0].title(), v['id'])
+                                   for v in cat['voices']]
+    except Exception:                                  # noqa: BLE001
+        pass
+    # edge-tts exposes no catalogue endpoint, so fall back to the picks that
+    # survived the last listen.
+    return 'edge-tts', [
+        ('Ryan, British', 'en-GB-RyanNeural'),
+        ('William, Australian', 'en-AU-WilliamNeural'),
+        ('Thomas, British', 'en-GB-ThomasNeural'),
+        ('Connor, Irish', 'en-IE-ConnorNeural'),
+        ('Eric', 'en-US-EricNeural'),
+        ('Steffan', 'en-US-SteffanNeural'),
+        ('Brian', 'en-US-BrianNeural'),
+        ('Guy', 'en-US-GuyNeural'),
+        ('Aria', 'en-US-AriaNeural'),
+        ('Ava', 'en-US-AvaNeural'),
+    ]
 
-# The broadcast's own prosody, plus a flat pass on the leading candidates so
-# the pitch shift can be judged separately from the voice.
-PROSODY = [('broadcast', -10, -5), ('flat', 0, 0)]
-FLAT_ALSO = {'en-GB-RyanNeural', 'en-US-AndrewMultilingualNeural',
-             'en-US-BrianMultilingualNeural'}
 
-LABEL_VOICE = 'en-US-AndrewMultilingualNeural'
+
 
 
 def fetch(text, voice, pitch, rate, seq=0):
@@ -103,19 +105,18 @@ def main():
     outdir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'audition')
     os.makedirs(outdir, exist_ok=True)
 
-    jobs = []
-    for label, voice in CANDIDATES:
-        jobs.append((label, voice, -10, -5, 'broadcast'))
-        if voice in FLAT_ALSO:
-            jobs.append((label + ', no pitch shift', voice, 0, 0, 'flat'))
+    engine, candidates = catalogue()
+    print('engine: %s\n' % engine)
+    jobs = [(label, voice, 0, 0, 'flat') for label, voice in candidates]
 
+    label_voice = candidates[0][1]
     parts = []
     gap = silence(os.path.join(outdir, '_gap.wav'))
     print('%-34s %-10s %9s %9s' % ('voice', 'prosody', 'LUFS', 'peak'))
     for i, (label, voice, pitch, rate, tag) in enumerate(jobs):
         stem = os.path.join(outdir, '%02d_%s_%s' % (i, voice, tag))
         try:
-            say, ct = fetch('%s.' % label, LABEL_VOICE, 0, 0)
+            say, ct = fetch('%s.' % label, label_voice, 0, 0)
             lab = to_wav(stem + '_label.wav', say, ct)
             body, ct = fetch(COPY, voice, pitch, rate)
             clip = to_wav(stem + '.wav', body, ct)

@@ -11,7 +11,7 @@ on a channel built entirely out of that game's 1993 asset library.
 [![Canvas](https://img.shields.io/badge/render-HTML5_canvas_960×600-6fc3df?style=flat-square)](#)
 [![Assets](https://img.shields.io/badge/assets-873_items_·_4316_frames-9c6bff?style=flat-square)](#)
 [![Audio](https://img.shields.io/badge/audio-41_SFX_·_40_tracks-54e08a?style=flat-square)](#)
-[![Voice](https://img.shields.io/badge/voice-edge--tts_(local)-ff9de2?style=flat-square)](#)
+[![Voice](https://img.shields.io/badge/voice-kokoro--82M_local-ff9de2?style=flat-square)](#)
 
 <img src="docs/hero.png" alt="The GNN newsroom: the robot anchor reading a live RSS headline, holographic globe over one shoulder, story icon over the other, commodity crawl along the bottom" width="820">
 
@@ -81,9 +81,17 @@ it. See [Legal](#legal).
 git clone https://github.com/Ekco-S64QTN6/GNN.git
 cd GNN
 
-pip install edge-tts          # optional — without it the browser voice is used
+# Local voice engine. Arch and other PEP 668 distros refuse system-wide pip,
+# and Kokoro's phonemiser has no wheels for Python 3.14, so use 3.12 here.
+python3.12 -m venv .venv
+.venv/bin/pip install kokoro soundfile edge-tts
+
 ./start.sh                    # http://localhost:8080   (Ctrl-C stops it)
 ```
+
+`start.sh` uses `.venv/bin/python` when it exists. Without the venv the app
+still runs — it falls back to `edge-tts` if installed, and to the browser's own
+Web Speech API if not.
 
 Open <http://localhost:8080> and **click once anywhere** — browsers require a
 gesture before any page may make sound.
@@ -184,22 +192,26 @@ longer. During dead air he blinks.
 <details open>
 <summary><b>Zero-cloud neural voice</b></summary>
 
-A local `/api/tts` endpoint drives Microsoft neural voices through `edge-tts`.
-Nine voice models, switchable live, with pitch and rate shaped for a broadcast
-robot. No account, no API key. If the endpoint is missing the client silently
-falls back to the Web Speech API, and a watchdog guarantees the rundown keeps
-moving even if audio stalls entirely.
+The voice runs **on this machine**. `/api/tts` drives
+[Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0) in
+process — 17 English voices, 24 kHz, about 7x faster than real time on CPU
+alone, no GPU required and nothing leaving the machine. The selector is built
+from `/api/voices` at boot, so it always matches the engine that is actually
+running.
 
-**96 kbps, level-matched, delivered lossless.** `edge-tts` hardcodes a 48 kbps
-mono stream into its websocket handshake, which is audible coder crunch on
-sibilants no matter what the mixer does downstream; the server asks the service
-for 96 kbps instead (48 kHz and PCM are refused). Voices also arrive at very
-different levels — Guy lands near −19.6 LUFS with 0.6 dB of headroom, Ryan at
-−21.7 with 3.8 dB — so through a compressor the hot ones get squashed and the
-quiet ones don't. Every clip is now matched to −19 LUFS / −3 dBTP by a single
-linear gain (no dynamics, so no pumping) and served as PCM rather than
-re-encoded. `python3 tools/voice_audition.py` renders all 18 candidates back to
-back through the live server if you want to re-pick the selector by ear.
+> **Correction.** Earlier versions of this README claimed "zero-cloud" while
+> the app used `edge-tts`, which calls Microsoft's servers on every line. That
+> was wrong. `edge-tts` is now only a fallback, used when the virtualenv is
+> missing, and both `/api/status` and the startup banner say plainly which
+> engine is live and whether it is a cloud call.
+
+Every clip is **level-matched and delivered lossless**. Voices arrive at very
+different levels — through a compressor the hot ones get squashed and the quiet
+ones do not, which is what made one voice sound clean and the next harsh. Each
+clip is matched to -19 LUFS / -3 dBTP by a single linear gain (no dynamics, so
+no pumping) and served as PCM rather than re-encoded.
+`python3 tools/voice_audition.py` renders every voice the running engine offers
+back to back, so the selector can be chosen by ear.
 
 Clips are **fetched before they play**, not streamed from a live URL. That
 removes the one-to-four second synthesis lag between a segment starting and its
@@ -453,7 +465,9 @@ screenshots in `docs/`.
 
 - ***Master of Orion*** (1993) — SimTex / MicroProse. All artwork, sound effects
   and music originate there.
-- **Speech** — Microsoft neural voices via [`edge-tts`](https://github.com/rany2/edge-tts).
+- **Speech** — [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0),
+  run locally. Microsoft neural voices via [`edge-tts`](https://github.com/rany2/edge-tts)
+  remain as a fallback.
 - **Music rendering** — FluidSynth with the FluidR3 GM soundfont.
 - **Type** — *Press Start 2P* and *Outfit* via Google Fonts.
 - **RSS** — Ars Technica, NASA, ESA, Spaceflight Now, Space.com, BBC,

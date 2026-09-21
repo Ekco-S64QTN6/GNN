@@ -31,16 +31,21 @@ const GNNTTS = (() => {
      * not for quality. `tools/voice_audition.py` renders the whole list to
      * disk if you want to compare them back to back.
      */
+    // Fallback only: replaced at boot by whatever /api/voices reports, so the
+    // selector always matches the engine that is actually running. These are
+    // the edge-tts picks, chosen by ear from tools/voice_audition.py — the
+    // newer "Multilingual" models read too slowly for a news anchor.
     const VOICES = [
-        { id: 'en-US-AndrewMultilingualNeural', label: 'ANDREW — Anchor Prime' },
-        { id: 'en-US-BrianMultilingualNeural', label: 'BRIAN — Deep Baritone' },
-        { id: 'en-US-AvaMultilingualNeural', label: 'AVA — Anchor (F)' },
-        { id: 'en-US-EmmaMultilingualNeural', label: 'EMMA — Sector Desk (F)' },
-        { id: 'en-AU-WilliamMultilingualNeural', label: 'WILLIAM — Outer Rim' },
         { id: 'en-GB-RyanNeural', label: 'RYAN — Interstellar BBC' },
-        { id: 'en-US-SteffanNeural', label: 'STEFFAN — Broadcast Desk' },
+        { id: 'en-AU-WilliamNeural', label: 'WILLIAM — Outer Rim' },
+        { id: 'en-GB-ThomasNeural', label: 'THOMAS — Sector Desk' },
         { id: 'en-IE-ConnorNeural', label: 'CONNOR — Field Correspondent' },
         { id: 'en-US-EricNeural', label: 'ERIC — Resonant Sci-Fi' },
+        { id: 'en-US-SteffanNeural', label: 'STEFFAN — Broadcast Desk' },
+        { id: 'en-US-BrianNeural', label: 'BRIAN — Deep Baritone' },
+        { id: 'en-US-GuyNeural', label: 'GUY — Anchor Prime' },
+        { id: 'en-US-AriaNeural', label: 'ARIA — Anchor (F)' },
+        { id: 'en-US-AvaNeural', label: 'AVA — Smooth Sci-Fi (F)' },
     ];
 
     let voice = VOICES[0].id;
@@ -58,8 +63,13 @@ const GNNTTS = (() => {
     let speaking = false;
     let lastLine = null;           // {text, opts} of the line currently on air
     let currentResolve = null;
-    let pitchHz = -10;
-    let ratePct = -5;
+    // Flat by default. The -5% rate was a large part of what read as the
+    // anchor dragging: every line, including the ones that already had a
+    // slow delivery, was being slowed further.
+    let pitchHz = 0;
+    let ratePct = 0;
+    let engine = null;
+    let cloud = false;
 
     let onStart = null;
     let onEnd = null;
@@ -345,6 +355,31 @@ const GNNTTS = (() => {
         return pending;
     }
 
+    /**
+     * Replace the built-in list with whatever the server is actually running.
+     *
+     * The engine owns its own voice ids — Kokoro's look nothing like
+     * edge-tts's — so the selector is built from the server rather than
+     * hardcoded, and cannot drift out of sync with the backend.
+     */
+    async function loadCatalogue() {
+        try {
+            const r = await fetch('api/voices');
+            if (!r.ok) return null;
+            const cat = await r.json();
+            if (cat && cat.voices && cat.voices.length) {
+                VOICES.length = 0;
+                cat.voices.forEach((v) => VOICES.push(v));
+                voice = VOICES[0].id;
+            }
+            engine = cat && cat.engine;
+            cloud = !!(cat && cat.cloud);
+            return cat;
+        } catch (err) {
+            return null;
+        }
+    }
+
     /** Warm a line so it plays the instant it is called for. */
     function prefetch(text, opts = {}) {
         const clean = sanitize(text);
@@ -500,6 +535,7 @@ const GNNTTS = (() => {
 
     return {
         VOICES, speak, prefetch, stop, unlock, getLevel, estimateMs,
+        loadCatalogue, getEngine: () => engine, isCloud: () => cloud,
         setVoice, getVoice, setEnabled, isEnabled, isSpeaking,
         setPitch, setRate, nudgePlaybackRate,
         set onStart(fn) { onStart = fn; },

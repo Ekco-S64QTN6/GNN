@@ -24,3 +24,6 @@ Sonnet5Report.md
 
 # voice audition renders (regenerate with tools/voice_audition.py)
 audition/
+
+# local TTS virtualenv (see README > Local voice)
+.venv/

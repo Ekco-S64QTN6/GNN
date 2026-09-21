@@ -17,16 +17,24 @@ if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; the
     exit 0
 fi
 
-python3 - <<'PY' || exit 1
+# Prefer the project virtualenv when it exists: the local voice engine lives
+# there, because Arch refuses system-wide pip installs and Kokoro's phonemiser
+# has no wheels for the system Python.
+PY=python3
+[ -x ".venv/bin/python" ] && PY=.venv/bin/python
+
+"$PY" - <<'PYCHECK' || exit 1
 import sys
 sys.exit(0 if sys.version_info >= (3, 8) else 1)
-PY
+PYCHECK
 
-python3 -c "import edge_tts" 2>/dev/null \
-    || echo "note: edge-tts not installed — the browser voice will be used instead."
+if ! "$PY" -c "import kokoro" 2>/dev/null; then
+    "$PY" -c "import edge_tts" 2>/dev/null \
+        || echo "note: no local voice engine and no edge-tts — the browser voice will be used."
+fi
 
 if [ "${1:-}" = "--bg" ]; then
-    nohup python3 server.py >"$LOG" 2>&1 &
+    nohup "$PY" server.py >"$LOG" 2>&1 &
     for _ in $(seq 1 40); do
         if curl -fsS "http://localhost:$PORT/api/status" >/dev/null 2>&1; then
             echo "GNN on air  ->  http://localhost:$PORT   (log: $LOG)"
@@ -39,4 +47,4 @@ if [ "${1:-}" = "--bg" ]; then
     exit 1
 fi
 
-exec python3 server.py
+exec "$PY" server.py

@@ -34,7 +34,7 @@ PORT = int(os.environ.get('GNN_PORT', 8080))
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 PIDFILE = os.path.join(DIRECTORY, '.gnn-server.pid')
 
-ALLOWED_VOICE = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-')
+ALLOWED_VOICE = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_')
 MAX_TEXT = 1200
 
 try:
@@ -62,6 +62,95 @@ EDGE_FORMAT = os.environ.get('GNN_TTS_FORMAT', 'audio-24khz-96kbitrate-mono-mp3'
 # ever sees it.
 TARGET_LUFS = float(os.environ.get('GNN_TTS_LUFS', -19.0))
 TARGET_PEAK_DB = float(os.environ.get('GNN_TTS_PEAK', -3.0))
+
+
+# --- local voice engine ------------------------------------------------
+#
+# Kokoro-82M, Apache-2.0, run in-process. This is what makes the project's
+# "zero-cloud" claim actually true: edge-tts is a Microsoft cloud call on
+# every line, and its models are an older generation that reads slowly
+# enough to sit in the uncanny valley. Kokoro runs about 7x faster than
+# real time on CPU alone, so the RTX in this machine is not even needed.
+#
+# edge-tts stays wired up as a fallback for anyone without the venv.
+try:
+    from kokoro import KPipeline
+    HAVE_LOCAL = True
+except Exception:                                     # noqa: BLE001
+    KPipeline = None
+    HAVE_LOCAL = False
+
+LOCAL_SR = 24000
+
+# One pipeline per language code, built on first use. Loading costs ~11s,
+# so it is warmed in the background at startup rather than on the first
+# line of the broadcast.
+_pipelines = {}
+_pipe_lock = threading.Lock()
+
+# The catalogue the selector is built from. Kokoro's ids encode accent and
+# gender: a/b = American/British, m/f = male/female.
+LOCAL_VOICES = [
+    ('am_michael', 'MICHAEL — Anchor Prime'),
+    ('am_fenrir', 'FENRIR — Deep Baritone'),
+    ('am_onyx', 'ONYX — Resonant Sci-Fi'),
+    ('am_puck', 'PUCK — Sector Desk'),
+    ('am_adam', 'ADAM — Night Rotation'),
+    ('am_echo', 'ECHO — Relay Operator'),
+    ('am_eric', 'ERIC — Field Correspondent'),
+    ('am_liam', 'LIAM — Outer Rim'),
+    ('bm_george', 'GEORGE — Interstellar BBC'),
+    ('bm_daniel', 'DANIEL — Council Desk'),
+    ('bm_fable', 'FABLE — Archive Reader'),
+    ('bm_lewis', 'LEWIS — Colonial Service'),
+    ('af_heart', 'HEART — Anchor (F)'),
+    ('af_bella', 'BELLA — Smooth Sci-Fi (F)'),
+    ('af_nicole', 'NICOLE — Night Rotation (F)'),
+    ('bf_emma', 'EMMA — Interstellar BBC (F)'),
+    ('bf_isabella', 'ISABELLA — Council Desk (F)'),
+]
+LOCAL_VOICE_IDS = {v for v, _ in LOCAL_VOICES}
+
+
+def local_pipeline(lang):
+    with _pipe_lock:
+        pipe = _pipelines.get(lang)
+        if pipe is None:
+            pipe = _pipelines[lang] = KPipeline(lang_code=lang)
+        return pipe
+
+
+def warm_local():
+    """Load the model off the request path so the first line is not slow."""
+    if not HAVE_LOCAL:
+        return
+    try:
+        local_pipeline('a')
+        sys.stderr.write('[GNN] local voice ready (kokoro)\n')
+    except Exception as err:                          # noqa: BLE001
+        sys.stderr.write('[GNN] local voice unavailable: %s\n' % err)
+
+
+def synthesize_local(text, voice, rate):
+    """Render locally and return WAV bytes. `rate` is a percentage string."""
+    import io
+    import numpy as np
+    import soundfile as sf
+
+    try:
+        speed = 1.0 + int(float(rate.rstrip('%'))) / 100.0
+    except (AttributeError, ValueError):
+        speed = 1.0
+    speed = max(0.5, min(2.0, speed))
+
+    pipe = local_pipeline('b' if voice.startswith('b') else 'a')
+    parts = [chunk.audio.numpy() for chunk in pipe(text, voice=voice, speed=speed)]
+    if not parts:
+        return b''
+    audio = np.concatenate(parts)
+    buf = io.BytesIO()
+    sf.write(buf, audio, LOCAL_SR, format='WAV', subtype='PCM_16')
+    return buf.getvalue()
 
 
 def _install_format_override():
@@ -153,10 +242,17 @@ def superseded(sid, seq):
 DEFAULT_VOICE = 'en-US-AndrewMultilingualNeural'
 
 
+def default_voice():
+    """Whichever engine is actually running owns the default."""
+    if HAVE_LOCAL:
+        return LOCAL_VOICES[0][0]
+    return DEFAULT_VOICE
+
+
 def clean_voice(v):
-    v = (v or DEFAULT_VOICE).strip()
+    v = (v or '').strip()
     if not v or any(c not in ALLOWED_VOICE for c in v):
-        return DEFAULT_VOICE
+        return default_voice()
     return v
 
 
@@ -266,6 +362,8 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self.handle_tts(urllib.parse.parse_qs(parsed.query))
         if parsed.path.rstrip('/') == '/api/status':
             return self.handle_status()
+        if parsed.path.rstrip('/') == '/api/voices':
+            return self.handle_voices()
         return super().do_GET()
 
     def send_bytes(self, payload, ctype, code=200):
@@ -279,10 +377,22 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+    def handle_voices(self):
+        """The selector is built from this, so it always matches the engine."""
+        if HAVE_LOCAL:
+            payload = {'engine': 'kokoro', 'cloud': False,
+                       'voices': [{'id': v, 'label': l} for v, l in LOCAL_VOICES]}
+        else:
+            payload = {'engine': 'edge-tts' if HAVE_TTS else None,
+                       'cloud': bool(HAVE_TTS), 'voices': []}
+        self.send_bytes(json.dumps(payload).encode(), 'application/json')
+
     def handle_status(self):
         assets = os.path.join(DIRECTORY, 'assets')
         info = {
-            'tts': HAVE_TTS,
+            'tts': HAVE_TTS or HAVE_LOCAL,
+            'engine': 'kokoro' if HAVE_LOCAL else ('edge-tts' if HAVE_TTS else None),
+            'cloud': bool(not HAVE_LOCAL and HAVE_TTS),
             'manifests': {
                 name: os.path.exists(os.path.join(assets, name))
                 for name in ('gfx-manifest.json', 'audio-manifest.json', 'moo-strings.json')
@@ -299,12 +409,13 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
         text = (q.get('text', [''])[0] or '').strip()[:MAX_TEXT]
         if not text:
             return self.send_bytes(b'{"error":"no text"}', 'application/json', 400)
-        if not HAVE_TTS:
+        if not HAVE_TTS and not HAVE_LOCAL:
             return self.send_bytes(
-                b'{"error":"edge-tts not installed; run: pip install edge-tts"}',
+                b'{"error":"no voice engine; run ./start.sh so the venv is used"}',
                 'application/json', 503)
 
         voice = clean_voice(q.get('voice', [''])[0])
+        use_local = HAVE_LOCAL and (voice in LOCAL_VOICE_IDS or not HAVE_TTS)
         rate = clean_prosody(q.get('rate', [''])[0], '-5%', '%')
         pitch = clean_prosody(q.get('pitch', [''])[0], '-10Hz', 'Hz')
         try:
@@ -325,7 +436,8 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             if superseded(sid, seq):
                 return self.send_bytes(b'{"error":"superseded"}',
                                        'application/json', 409)
-            audio = synthesize(text, voice, rate, pitch)
+            audio = (synthesize_local(text, voice, rate) if use_local
+                     else synthesize(text, voice, rate, pitch))
         except Exception as err:                      # noqa: BLE001 - report to client
             sys.stderr.write('[GNN] tts failed: %s\n' % err)
             return self.send_bytes(
@@ -366,6 +478,8 @@ def clear_pidfile():
 
 def run_server():
     write_pidfile()
+    if HAVE_LOCAL:
+        threading.Thread(target=warm_local, daemon=True).start()
     with ThreadedServer(('', PORT), GNNRequestHandler) as httpd:
         def go_off_air(*_args):
             # Shut the listener from another thread; serve_forever then returns.
@@ -378,8 +492,13 @@ def run_server():
                 pass
 
         print('[GNN Server] http://localhost:%d  (pid %d)' % (PORT, os.getpid()))
-        print('[GNN Server] neural voice: %s'
-              % ('edge-tts ready' if HAVE_TTS else 'UNAVAILABLE (pip install edge-tts)'))
+        if HAVE_LOCAL:
+            engine = 'kokoro (local, nothing leaves this machine)'
+        elif HAVE_TTS:
+            engine = 'edge-tts (calls Microsoft)'
+        else:
+            engine = 'UNAVAILABLE - start with ./start.sh so the venv is used'
+        print('[GNN Server] voice engine: %s' % engine)
         print('[GNN Server] stop with Ctrl-C, or ./stop.sh')
         try:
             httpd.serve_forever()
