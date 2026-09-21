@@ -190,6 +190,23 @@ robot. No account, no API key. If the endpoint is missing the client silently
 falls back to the Web Speech API, and a watchdog guarantees the rundown keeps
 moving even if audio stalls entirely.
 
+**96 kbps, level-matched, delivered lossless.** `edge-tts` hardcodes a 48 kbps
+mono stream into its websocket handshake, which is audible coder crunch on
+sibilants no matter what the mixer does downstream; the server asks the service
+for 96 kbps instead (48 kHz and PCM are refused). Voices also arrive at very
+different levels — Guy lands near −19.6 LUFS with 0.6 dB of headroom, Ryan at
+−21.7 with 3.8 dB — so through a compressor the hot ones get squashed and the
+quiet ones don't. Every clip is now matched to −19 LUFS / −3 dBTP by a single
+linear gain (no dynamics, so no pumping) and served as PCM rather than
+re-encoded. `python3 tools/voice_audition.py` renders all 18 candidates back to
+back through the live server if you want to re-pick the selector by ear.
+
+Clips are **fetched before they play**, not streamed from a live URL. That
+removes the one-to-four second synthesis lag between a segment starting and its
+voice arriving — which used to leave lines still playing when the next segment
+cut them off — and lets the whole commercial break be synthesised the moment it
+is assembled.
+
 </details>
 
 <details open>
