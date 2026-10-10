@@ -27,3 +27,6 @@ audition/
 
 # local TTS virtualenv (see README > Local voice)
 .venv/
+
+# generated art drops (prompts.md itself is tracked)
+assets/generated/*/

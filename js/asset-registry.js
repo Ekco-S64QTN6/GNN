@@ -124,14 +124,21 @@ const GNNAssets = (() => {
 
     /**
      * Filter the library.
-     * @param {Object} q - { dir, dirs, role, roles, minW, minH, maxW, maxH,
-     *                       animated, minFrames, maxNoise, minCoverage, exclude }
+     * @param {Object} q - { pool, dir, dirs, role, roles, minW, minH, maxW,
+     *                       maxH, animated, minFrames, maxNoise, minCoverage,
+     *                       exclude }
+     *
+     * `pool` is the admission gate from the extraction pipeline: an item only
+     * carries a pool if it passed that pool's size, palette-richness and
+     * interface checks. Querying by pool is what keeps a 7x3 tactical chip or
+     * an empty menu frame out of a cutaway window.
      */
     function find(q = {}) {
         const dirs = q.dirs || (q.dir ? [q.dir] : null);
         const roles = q.roles || (q.role ? [q.role] : null);
         const exclude = q.exclude ? new Set(q.exclude) : null;
         return flat.filter((e) => {
+            if (q.pool && (e.pools || []).indexOf(q.pool) < 0) return false;
             if (dirs && dirs.indexOf(e.dir) < 0) return false;
             if (roles && roles.indexOf(e.role) < 0) return false;
             if (exclude && exclude.has(e.id)) return false;

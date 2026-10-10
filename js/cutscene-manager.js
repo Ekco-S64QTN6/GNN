@@ -114,33 +114,26 @@ const GNNCutsceneManager = (() => {
 
     /** Pick a visual for a beat, biased toward assets that fit its purpose. */
     function heroPoolFor(kind) {
+        // Every one of these draws from an admitted pool, so a shot can never
+        // land on an interface screen or a stretched tactical chip.
         switch (kind) {
             case 'ident':
-                return GNNAssets.find({ dirs: ['INTRO', 'INTRO2'], roles: ['fullscreen'], maxNoise: 95 });
+                return GNNAssets.find({ pool: 'broll', dirs: ['INTRO', 'INTRO2'] });
             case 'hook':
-                return GNNAssets.find({
-                    dirs: ['LANDING', 'STARVIEW', 'VORTEX'], roles: ['fullscreen'],
-                    minCoverage: 0.45, minLum: 24, maxNoise: 95,
-                });
+                return GNNAssets.find({ pool: 'broll',
+                    dirs: ['LANDING', 'STARVIEW', 'VORTEX'], minLum: 24 });
             case 'body':
-                return GNNAssets.find({ dirs: ['SHIPS', 'SHIPS2'], roles: ['sprite'], minW: 30, maxNoise: 140 });
+                return GNNAssets.find({ pool: 'sprite',
+                    dirs: ['SHIPS', 'SHIPS2'], minW: 30 });
             case 'claim':
-                return GNNAssets.find({
-                    dirs: ['TECHNO', 'SCREENS', 'DESIGN'], roles: ['panel', 'fullscreen'],
-                    minW: 60, maxNoise: 95,
-                });
+                return GNNAssets.find({ pool: 'broll', dirs: ['TECHNO', 'BACKGRND'] });
             case 'tag':
-                return GNNAssets.find({
-                    dirs: ['SPIES', 'EMBASSY', 'COUNCIL'], roles: ['fullscreen'],
-                    minCoverage: 0.15, maxNoise: 150,
-                });
+                return GNNAssets.find({ pool: 'broll',
+                    dirs: ['SPIES', 'EMBASSY', 'COUNCIL'] });
             case 'legal':
-                return GNNAssets.find({
-                    dirs: ['BACKGRND', 'STARMAP'], roles: ['panel', 'fullscreen'],
-                    minW: 60, maxNoise: 95,
-                });
+                return GNNAssets.find({ pool: 'broll', dirs: ['BACKGRND', 'INTRO'] });
             default:
-                return GNNAssets.find({ roles: ['fullscreen'], maxNoise: 95 });
+                return GNNAssets.find({ pool: 'broll' });
         }
     }
 

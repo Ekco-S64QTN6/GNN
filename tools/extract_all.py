@@ -16,6 +16,7 @@ import os
 import struct
 import sys
 
+import numpy as np
 from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -52,6 +53,89 @@ def base_palette():
     """WINLOSE item 0 carries the game's full 256-colour VGA table."""
     arc = LbxArchive(os.path.join(DATA, 'WINLOSE.LBX'))
     return GfxItem(arc.item(0)).palette()
+
+
+def ui_score(img):
+    """
+    How much of the artwork is long flat horizontal runs.
+
+    In-game UI holds a colour across a panel; painted art dithers. Runs of
+    the backdrop colour and of transparency are ignored, otherwise a figure
+    on a black field scores like a menu. Measured against knowns, chrome
+    lands at 0.38-0.43 and art at or below 0.22, so 0.30 separates them.
+    """
+    a = np.asarray(img)
+    h, w, _ = a.shape
+    if w < 16 or h < 16:
+        return 0.0
+    rgb, alpha = a[..., :3], a[..., 3]
+    visible = rgb.reshape(-1, 3)[alpha.reshape(-1) > 0]
+    if not len(visible):
+        return 0.0
+    cols, counts = np.unique(visible, axis=0, return_counts=True)
+    bg = cols[counts.argmax()]
+    ok = (np.all(rgb[:, 1:] == rgb[:, :-1], axis=2)
+          & (alpha[:, 1:] > 0) & (alpha[:, :-1] > 0)
+          & ~np.all(rgb[:, 1:] == bg, axis=2))
+    pad = np.zeros((ok.shape[0], 1), dtype=bool)
+    v = np.concatenate([pad, ok, pad], axis=1).ravel().astype(np.int8)
+    d = np.diff(v)
+    lengths = np.flatnonzero(d == -1) - np.flatnonzero(d == 1)
+    return round(float(lengths[lengths >= 20].sum()) / max(int((alpha > 0).sum()), 1), 3)
+
+
+# Admission gates. Nothing reaches a pool without passing the one for it, so a
+# 7x3 tactical chip can never be stretched across a cutaway window and a tech
+# tree can never stand in for B-roll.
+UI_LIMIT = 0.30
+
+# Archives that are in-game interface, not footage. Their contents can still
+# dress a diegetic screen, but nothing in them is a cutaway.
+UI_ARCHIVES = {'SCREENS', 'STARMAP', 'DESIGN', 'MISSILE', 'NEWSCAST'}
+
+# An empty menu frame scores low on ui_score because almost all of it is the
+# backdrop colour, which that measure deliberately ignores. What gives it away
+# instead is palette poverty: real footage dithers across dozens of colours,
+# an empty bordered panel uses a handful.
+BROLL_MIN_COLORS = 24
+
+POOL_RULES = {
+    # pool:      (min_w, min_h, max_w, max_h, min_cov, max_noise)
+    'broll':     (120, 80, 9999, 9999, 0.15, 70),
+    'portrait':  (100, 100, 9999, 9999, 0.15, 150),
+    'sprite':    (16, 16, 160, 160, 0.05, 140),
+}
+
+
+# A bordered frame with nothing in it is not screen dressing either; it reads
+# as a placeholder box wherever it lands.
+CHROME_MIN_COLORS = 12
+
+
+def pools_for(w, h, coverage, noise, ui, role, colors=64, archive=''):
+    """Which pools this item is allowed to join."""
+    def chrome_ok():
+        return (w >= 24 and h >= 16 and role != 'blank'
+                and colors >= CHROME_MIN_COLORS and coverage >= 0.2)
+
+    out = []
+    if ui >= UI_LIMIT or role == 'blank':
+        # Chrome is still useful as diegetic screen dressing, just never as
+        # footage or as a face.
+        if chrome_ok():
+            out.append('chrome')
+        return out
+    for pool, (mw, mh, xw, xh, mc, mn) in POOL_RULES.items():
+        if not (mw <= w <= xw and mh <= h <= xh
+                and coverage >= mc and noise <= mn):
+            continue
+        if pool == 'broll' and (archive in UI_ARCHIVES
+                                or colors < BROLL_MIN_COLORS):
+            continue
+        out.append(pool)
+    if not out and chrome_ok():
+        out.append('chrome')
+    return out
 
 
 def classify(w, h, nframes, coverage, mean_lum, distinct, noise):
@@ -205,6 +289,7 @@ def main():
             probes = sorted({0, len(frames) // 2, len(frames) - 1})
             stats = [(measure(frames[k]), k) for k in probes]
             (cov, lum, distinct, noise), hero = max(stats, key=lambda t: t[0][0])
+            ui = ui_score(frames[hero])
             entries.append({
                 'id': '%s/%s' % (name, stem),
                 'dir': name,
@@ -220,7 +305,28 @@ def main():
                 'noise': noise,
                 'role': classify(item.w, item.h, len(frames), cov, lum,
                                  distinct, noise),
+                'ui': ui,
             })
+            entries[-1]['pools'] = pools_for(item.w, item.h, cov, noise, ui,
+                                             entries[-1]['role'], distinct, name)
+            # Per-asset sidecar (source archive, palette origin, frames,
+            # native size, animation, admission) so the catalogue can be
+            # audited without re-running the decoder.
+            with open(os.path.join(folder, '%s.json' % stem), 'w') as fh:
+                json.dump({
+                    'id': entries[-1]['id'],
+                    'archive': name,
+                    'item': i,
+                    'palette': 'embedded' if item.palette() else 'WINLOSE[0] base',
+                    'frames': len(frames),
+                    'native': [item.w, item.h],
+                    'animated': len(frames) > 1,
+                    'role': entries[-1]['role'],
+                    'pools': entries[-1]['pools'],
+                    'ui': ui,
+                    'noise': noise,
+                    'coverage': round(cov, 3),
+                }, fh, separators=(',', ':'))
             totals['items'] += 1
             totals['frames'] += len(frames)
 

@@ -206,23 +206,20 @@ const GNNSceneCompositor = (() => {
 
     function backdrops(extra) {
         return GNNAssets.find(Object.assign({
-            dirs: BACKDROP_DIRS, roles: ['fullscreen', 'panel'],
-            minW: 140, minH: 90, minCoverage: 0.2, minLum: 12,
-            maxNoise: CLEAN_BACKDROP,
+            pool: 'broll', minLum: 12,
         }, extra || {}));
     }
 
     function sprites(extra) {
         return GNNAssets.find(Object.assign({
-            dirs: SPRITE_DIRS, roles: ['sprite', 'panel'],
-            minW: 16, maxW: 160, minCoverage: 0.05, maxNoise: 140,
+            pool: 'sprite', dirs: SPRITE_DIRS,
         }, extra || {}));
     }
 
     function chrome(extra) {
         return GNNAssets.find(Object.assign({
-            dirs: CHROME_DIRS, roles: ['chrome', 'panel', 'strip'],
-            minW: PLATE_MIN_W, minH: PLATE_MIN_H, maxNoise: CLEAN_PLATE,
+            pool: 'chrome', dirs: CHROME_DIRS,
+            minW: PLATE_MIN_W, minH: PLATE_MIN_H,
         }, extra || {}));
     }
 
