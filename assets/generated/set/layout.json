@@ -1,0 +1,36 @@
+{
+  "view": {
+    "w": 320,
+    "h": 180
+  },
+  "anchors": {
+    "y": 0.06,
+    "h": 0.46
+  },
+  "plates": {
+    "studio_wide_empty.png": {
+      "w": 292,
+      "h": 105,
+      "role": "room",
+      "x": 0,
+      "y": 0
+    },
+    "desk_oval_front.png": {
+      "w": 193,
+      "h": 70,
+      "role": "desk",
+      "x": 63,
+      "y": 110
+    },
+    "console_left.png": {
+      "w": 64,
+      "h": 43,
+      "role": "prop"
+    },
+    "console_right.png": {
+      "w": 64,
+      "h": 43,
+      "role": "prop"
+    }
+  }
+}

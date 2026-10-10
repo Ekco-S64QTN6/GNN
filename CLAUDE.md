@@ -46,6 +46,7 @@ the metric is the thing to doubt.
 | Per-line loudness | −19.3 to −20.3 LUFS, 1.0 LU spread, true peak −3.0 dBFS |
 | Spoken lines | 22 consecutive, 0 truncated |
 | Broadcast | runs the full rundown with zero exceptions over 90 s+ |
+| Frame | 320×180 base, 1280×720 canvas, 16:9, full-bleed — no CRT frame |
 
 Verify all of it:
 
@@ -65,11 +66,19 @@ Load-bearing. Each one is here because breaking it caused a bug that took a
 session to find.
 
 1. **Canvas compositing order** in `renderer.js` `renderFrame()`:
-   background → viewport → post-process blit → alert border → ghost → Orion
-   badge → text.
+   clear → viewport → post-process blit → alert border → ghost → Orion
+   badge → caption. The viewport *is* the canvas: the picture fills the
+   window and there is no set drawn around it. The MOO1 TV chrome
+   (`background_tv.png`) is deliberately not drawn any more.
 2. **All production assets stay in `assets/`.** Generated art goes in
    `assets/generated/` under the same discipline.
-3. **Ticker bar stays inside the CRT bounds** (`barY` inside `view.y + view.h`).
+3. **The bottom of the frame is a stack and `GNNRenderer.bottomStack()` owns
+   it** — ticker, then the name/LIVE row, then the chyron. Two modules draw
+   into that region; working the offsets out separately in each is how the
+   name card and the chyron came to be printed over one another. Ask, do not
+   re-derive. Same rule for any label placed after another: measure it
+   (`ctx.measureText`), never assume a fixed offset, which is what printed the
+   PIP label over its own LIVE tag.
 4. **Server runs via `python3 server.py` on port 8080**, started through
    `./start.sh` so the `.venv` interpreter is used.
 5. **Never `substring(0, N)` / `slice(0, N)` on read copy** without
@@ -256,6 +265,14 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
 
 ## 7. Known open items
 
+- **The set plate and the cast are not generated yet.** `renderer.js` takes
+  `assets.set`, `assets.desk` and `assets.cast` and builds the room in layers;
+  with none of them it falls back to the MOO1 newscast frame, which is a
+  finished picture rather than a set. The existing `set/studio_wide_empty.png`
+  is 2.77:1 from before the frame went 16:9, so it is cover-fitted and loses
+  its top and bottom — it wants regenerating at the new shape.
+- **`docs/hero.png` and the other README screenshots still show the old CRT
+  layout.** Re-shoot with `tools/capture_docs.py` once the set lands.
 - **Listen by ear before declaring audio done.** Every metric here has at some
   point said "clean" while the owner could hear a problem.
 - **Voice choice is subjective.** Owner's standing judgement: the edge-tts

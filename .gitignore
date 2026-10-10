@@ -25,8 +25,10 @@ audition/
 # local TTS virtualenv (see README > Local voice)
 .venv/
 
-# generated art drops (prompts.md itself is tracked)
-assets/generated/*/
+# Raw art drops are large and are kept out; the *conditioned* plates under
+# assets/generated/ are what the engine loads and are a few kilobytes each,
+# so they are tracked — the app is meant to run from a clone alone.
+assets/generated/_inbox/
 
 # one-off bug capture, large; the fix and its measurements are in CLAUDE.md
 docs/*.webm
