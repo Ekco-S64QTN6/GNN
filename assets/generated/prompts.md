@@ -496,10 +496,6 @@ Create a 1024x1024 image with a fully transparent background.
 Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
-## News Desk Plates — superseded
-
-`set/desk_oval_front.png` above is the desk. The earlier three-up and two-up prompts drew a desk *and* the studio behind it as one picture, which cannot work now that the anchors composite between them. **Do not generate these.** Listed only so the filenames are not reused.
-
 ## PIP Cutaways
 
 The footage behind the anchor's shoulder. One plate per story category; the keywords are what routes a story to it.

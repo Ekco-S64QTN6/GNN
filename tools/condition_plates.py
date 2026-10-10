@@ -55,10 +55,22 @@ SRC_ROOTS = [
 ]
 
 
-def find_source(name):
-    """Newest file called `name` directly in a source root, or None."""
-    hits = [os.path.join(r, name) for r in SRC_ROOTS
+def find_source(name, out_dir=None):
+    """Newest file called `name` in a source root, or dropped into `out_dir`.
+
+    The output directory counts as a source. It is the path the document
+    tells people to save to, so it is where files turn up; a tool that only
+    looks in directories of its own choosing reports nothing and looks
+    broken. A file already there is a source if it is plainly not output —
+    too big, or too many colours to have been through the quantiser.
+    """
+    roots = list(SRC_ROOTS)
+    hits = [os.path.join(r, name) for r in roots
             if os.path.isfile(os.path.join(r, name))]
+    if out_dir:
+        cand = os.path.join(out_dir, name)
+        if os.path.isfile(cand) and not conditioned_already(Image.open(cand)):
+            hits.append(cand)
     if not hits:
         return None
     return max(hits, key=os.path.getmtime)
@@ -93,12 +105,15 @@ VIEW_W, VIEW_H = _frame()
 # different perspective, kept for cutaways. They are conditioned the same way
 # but given no place in the set, which is why their role is 'prop'.
 #
+# Source and installed name are the same: the document tells you to save
+# straight to the installed path, so that is where the raw drop appears.
+#
 # source file -> (installed name, width fraction or None for full bleed, role)
 PLATES = [
     ('studio_wide_empty.png', 'studio_wide_empty.png', None, 'room'),
     ('desk_oval_front.png',   'desk_oval_front.png',   0.66, 'desk'),
     ('console_left.png',      'console_left.png',      0.22, 'prop'),
-    ('console_right_02.png',  'console_right.png',     0.22, 'prop'),
+    ('console_right.png',     'console_right.png',     0.22, 'prop'),
 ]
 
 # Anchors composite into this band, behind the desk: centred, with their heads
@@ -279,24 +294,12 @@ def graft_body(hero, variant, feather=14):
 
 def conditioned_already(im):
     """Whether this is output rather than something freshly dropped in."""
-    return im.height <= CAST_H * 1.5 and len(im.convert('RGB')
-                                             .getcolors(1 << 16) or []) <= 256
+    return (im.width <= VIEW_W * 2 and im.height <= VIEW_H * 2
+            and len(im.convert('RGB').getcolors(1 << 16) or []) <= 256)
 
 
 def anchor_sources(sid, state):
-    """Where a given anchor plate might have been put.
-
-    The output directory is included on purpose. It is the path the document
-    tells people to save to, so it is where the files turn up, and a tool
-    that ignores them there and reports nothing is a tool that looks broken.
-    """
-    name = '%s_%s.png' % (sid, state)
-    direct = os.path.join(ANCHOR_OUT, name)
-    if os.path.isfile(direct):
-        im = Image.open(direct)
-        if not conditioned_already(im):
-            return direct
-    return find_source(name)
+    return find_source('%s_%s.png' % (sid, state), out_dir=ANCHOR_OUT)
 
 
 def do_anchors():
@@ -375,8 +378,13 @@ def main():
     layout = {'view': {'w': VIEW_W, 'h': VIEW_H}, 'anchors': ANCHOR_BAND,
               'plates': {}}
     for src_name, out_name, frac, role in PLATES:
-        src = find_source(src_name)
         dest = os.path.join(OUT, out_name)
+        src = find_source(src_name, out_dir=OUT)
+        if src and os.path.abspath(src) == os.path.abspath(dest):
+            # Dropped straight into the output directory; keep the raw before
+            # the conditioned version lands on top of it.
+            os.makedirs(RAW_KEEP, exist_ok=True)
+            shutil.copy2(src, os.path.join(RAW_KEEP, src_name))
         if not src:
             # A missing source is not a reason to forget a plate that has
             # already been conditioned: re-read it so its entry survives, and

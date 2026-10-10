@@ -200,18 +200,6 @@ SET = [
      'transparent background, cleanly cut out'),
 ]
 
-DESK = [
-    ('desk_three_up_empty', 'an empty three-seat television news desk in a '
-     'science-fiction studio, angled front panel with an inset station emblem '
-     'plate, seen straight on', 'station',
-     'wide backdrop plate, desk occupying the lower third, space above for '
-     'three seated figures to be composited in'),
-    ('desk_two_up_empty', 'an empty two-seat television news desk in a '
-     'science-fiction studio, angled front panel, seen straight on', 'station',
-     'wide backdrop plate, desk occupying the lower third'),
-]
-
-
 def viewport():
     """The broadcast frame, read from the renderer's own constants.
 
@@ -372,12 +360,6 @@ def main():
               prompt(subject, framing, palette, background,
                      size=LANDSCAPE if wide else SQUARE,
                      transparent=sid != 'studio_wide_empty'))
-
-    w('## News Desk Plates — superseded\n')
-    w('`set/desk_oval_front.png` above is the desk. The earlier three-up and '
-      'two-up prompts drew a desk *and* the studio behind it as one picture, '
-      'which cannot work now that the anchors composite between them. **Do '
-      'not generate these.** Listed only so the filenames are not reused.\n')
 
     w('## PIP Cutaways\n')
     w('The footage behind the anchor\'s shoulder. One plate per story '
