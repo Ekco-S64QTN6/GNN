@@ -153,6 +153,7 @@ body {
 }
 
 body.ui-idle #controls,
+body.ui-idle #telemetry,
 body.ui-idle #asset-readout {
     opacity: 0;
     pointer-events: none;
@@ -464,15 +465,24 @@ body.ui-idle #asset-readout {
     pointer-events: none;
 }
 
+/* A dev readout, not part of the broadcast. It rides over the top edge and
+   fades with the controls, so watching the channel means seeing the channel.
+   The harness still reads it out of the DOM either way. */
 #telemetry {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 6px;
+    z-index: 5;
     font-family: 'Press Start 2P', monospace;
     font-size: 0.42rem;
     line-height: 1.9;
     color: var(--accent-cyan);
     opacity: 0.55;
     text-align: center;
-    margin-top: 4px;
     letter-spacing: 0.04em;
+    transition: opacity 0.45s ease;
+    pointer-events: none;
 }
 
 #btn-break {

@@ -512,6 +512,15 @@ const GNNTTS = (() => {
         currentResolve = pending;         // the new line now owns the promise
     }
     function getVoice() { return voice; }
+    /**
+     * The anchor's on-air name, for the name card. The catalogue labels read
+     * "MICHAEL — Anchor Prime"; the card wants the name, not the billing.
+     */
+    function getVoiceName() {
+        const v = VOICES.find((x) => x.id === voice);
+        if (!v) return '';
+        return String(v.label).split('—')[0].trim();
+    }
     function setEnabled(v) { enabled = !!v; if (!enabled) { cancelRateGlide(); stop(); } }
     function isEnabled() { return enabled; }
     function isSpeaking() { return speaking; }
@@ -536,7 +545,7 @@ const GNNTTS = (() => {
     return {
         VOICES, speak, prefetch, stop, unlock, getLevel, estimateMs,
         loadCatalogue, getEngine: () => engine, isCloud: () => cloud,
-        setVoice, getVoice, setEnabled, isEnabled, isSpeaking,
+        setVoice, getVoice, getVoiceName, setEnabled, isEnabled, isSpeaking,
         setPitch, setRate, nudgePlaybackRate,
         set onStart(fn) { onStart = fn; },
         set onEnd(fn) { onEnd = fn; },

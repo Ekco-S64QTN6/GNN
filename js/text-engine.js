@@ -131,7 +131,7 @@ const GNNTextEngine = (() => {
         BOX = {
             x: Math.round(PANEL.x * w), y: Math.round(PANEL.y * h),
             w: Math.round(PANEL.w * w), h: Math.round(PANEL.h * h),
-        };
+        };   // h is replaced per frame by render(), which fits it to the text
         const k = h / 720;
         PADDING = Math.max(8, Math.round(14 * k));
         LINE_HEIGHT = Math.max(14, Math.round(26 * k));
@@ -147,6 +147,27 @@ const GNNTextEngine = (() => {
         // the set reads through, with a station-coloured spine down the left
         // so it still reads as broadcast furniture.
         if (!fullText && !cue) { ctx.restore(); return; }
+
+        // Size the panel to what is actually in it. A fixed box is a large
+        // empty slab over the set for most of every line, because the text
+        // arrives a character at a time and only fills it at the very end.
+        const lead = Math.round(LINE_HEIGHT * 0.92);
+        const maxLines = Math.max(1, Math.floor(
+            (PANEL.h * ctx.canvas.height - (cue ? lead + PADDING : PADDING * 2))
+            / LINE_HEIGHT));
+        let shownLines = [];
+        if (fullText && visible > 0) {
+            ctx.font = `${FONT_SIZE}px "Press Start 2P", monospace`;
+            shownLines = wrap(ctx, fullText.substring(0, visible),
+                              BOX.w - PADDING * 2);
+            if (shownLines.length > maxLines) {
+                shownLines = shownLines.slice(shownLines.length - maxLines);
+            }
+        }
+        const bodyH = Math.max(1, shownLines.length) * LINE_HEIGHT;
+        BOX.h = (cue ? lead : PADDING) + bodyH + PADDING;
+        // Grows downward from a fixed top so the text does not walk up the
+        // screen as the line arrives.
         ctx.fillStyle = 'rgba(4,12,20,0.82)';
         ctx.fillRect(BOX.x, BOX.y, BOX.w, BOX.h);
         ctx.fillStyle = kind === 'breaking' ? '#ff3b3b' : '#1f7fa8';
@@ -164,21 +185,15 @@ const GNNTextEngine = (() => {
             ctx.fillStyle = PALETTE[kind] || PALETTE.headline;
             ctx.textBaseline = 'top';
 
-            const shown = fullText.substring(0, visible);
-            const wrapped = wrap(ctx, shown, BOX.w - PADDING * 2);
-            const lead = Math.round(LINE_HEIGHT * 0.92);
             const top = BOX.y + (cue ? lead : PADDING);
-            const maxLines = Math.floor(
-                (BOX.h - (cue ? lead + PADDING : PADDING * 2)) / LINE_HEIGHT);
-            const start = Math.max(0, wrapped.length - maxLines);
-            for (let i = start; i < wrapped.length; i++) {
-                ctx.fillText(wrapped[i], BOX.x + PADDING, top + (i - start) * LINE_HEIGHT);
+            for (let i = 0; i < shownLines.length; i++) {
+                ctx.fillText(shownLines[i], BOX.x + PADDING, top + i * LINE_HEIGHT);
             }
             // Prompter caret while text is still arriving.
             if (visible < fullText.length && Math.floor(now / 260) % 2 === 0) {
-                const last = wrapped[wrapped.length - 1] || '';
+                const last = shownLines[shownLines.length - 1] || '';
                 const cx = BOX.x + PADDING + ctx.measureText(last).width + 3;
-                const cy = top + (wrapped.length - 1 - start) * LINE_HEIGHT;
+                const cy = top + Math.max(0, shownLines.length - 1) * LINE_HEIGHT;
                 ctx.fillRect(cx, cy, 10, FONT_SIZE);
             }
         } else if (holding || !fullText) {
@@ -198,15 +213,21 @@ const GNNTextEngine = (() => {
         if (!chyron) return;
         ctx.save();
         ctx.imageSmoothingEnabled = false;
-        const h = 26;
-        const tickerH = (typeof GNNTickerManager !== 'undefined'
-            && GNNTickerManager.isEnabled()) ? GNNTickerManager.BAR_H + 4 : 0;
-        const y = view.y + view.h - h - 6 - tickerH;
+        // The renderer owns the bottom stack; asking it is what keeps this
+        // off the name card.
+        const st = (typeof GNNRenderer !== 'undefined' && GNNRenderer.bottomStack)
+            ? GNNRenderer.bottomStack() : null;
+        const h = st ? st.chyronH : 26;
+        const y = st ? view.y + st.chyronY
+            : view.y + view.h - h - 6
+              - ((typeof GNNTickerManager !== 'undefined'
+                  && GNNTickerManager.isEnabled())
+                  ? GNNTickerManager.BAR_H + 4 : 0);
         ctx.fillStyle = 'rgba(6,14,24,0.86)';
         ctx.fillRect(view.x + 8, y, Math.min(view.w - 16, 560), h);
         ctx.fillStyle = kind === 'breaking' ? '#ff3b3b' : '#124a63';
         ctx.fillRect(view.x + 8, y, 8, h);
-        ctx.font = '11px "Press Start 2P", monospace';
+        ctx.font = Math.max(8, Math.round(h * 0.38)) + 'px "Press Start 2P", monospace';
         ctx.fillStyle = '#cfeaff';
         ctx.textBaseline = 'middle';
         ctx.fillText(String(chyron).slice(0, 48), view.x + 26, y + h / 2, 520);

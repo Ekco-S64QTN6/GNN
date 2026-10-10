@@ -57,6 +57,8 @@ const GNNRenderer = (() => {
 
     let bgImage = null;
     let setPlate = null;
+    let deskPlate = null;
+    let castFrames = [];
     let anchorFrames = [];
     let globeFrames = [];
 
@@ -75,6 +77,8 @@ const GNNRenderer = (() => {
         // MOO1 newscast scene stands in: it is a complete picture rather
         // than a set, so it is cover-fitted and the anchors ride on it.
         setPlate = assets.set || null;
+        deskPlate = assets.desk || null;
+        castFrames = assets.cast || [];
         bgImage = assets.bg;
         anchorFrames = assets.anchors || [];
         globeFrames = assets.globes || [];
@@ -104,8 +108,17 @@ const GNNRenderer = (() => {
         const breakActive = GNNCutsceneManager.isBreakActive();
 
         if (!breakActive) {
-            if (setPlate) drawCover(c, setPlate, VIEW.w, VIEW.h);
-            if (anchorFrames[frames.anchor]) {
+            // Two ways to put an anchor on screen, and only one of them at a
+            // time. With cut-out cast art the room is built up in layers —
+            // set, anchor, desk in front. Without it the MOO1 newscast frame
+            // is a finished picture of its own, so drawing a set behind it
+            // would only be painting something nothing can see.
+            const cast = castFrames[frames.anchor];
+            if (cast && setPlate) {
+                drawCover(c, setPlate, VIEW.w, VIEW.h);
+                drawCast(c, cast);
+                if (deskPlate) drawDesk(c, deskPlate);
+            } else if (anchorFrames[frames.anchor]) {
                 drawCover(c, anchorFrames[frames.anchor], ANCHOR.w, ANCHOR.h);
             }
             if (globeFrames[frames.globe]) {
@@ -124,7 +137,91 @@ const GNNRenderer = (() => {
         if (!breakActive) {
             GNNTextEngine.renderChyron(c, { x: 0, y: 0, w: VIEW.w, h: VIEW.h });
         }
+        if (!breakActive) drawFurniture(c, now);
         GNNTickerManager.render(c, { x: 0, y: 0, w: VIEW.w, h: VIEW.h });
+    }
+
+    /**
+     * The bottom of the frame is a stack — ticker, then the name/live row,
+     * then the chyron above it — and two modules draw into it. Working the
+     * offsets out separately in each is how the name card and the chyron
+     * ended up printed over one another, so they are worked out once here
+     * and everything else asks.
+     */
+    function bottomStack() {
+        const tickerH = (typeof GNNTickerManager !== 'undefined'
+            && GNNTickerManager.isEnabled()) ? GNNTickerManager.BAR_H + 2 : 0;
+        const rowH = Math.round(VIEW.h * 0.047);
+        const rowY = VIEW.h - tickerH - rowH - 4;
+        return { tickerH, rowH, rowY, chyronH: rowH, chyronY: rowY - rowH - 4 };
+    }
+
+    /**
+     * The bits of a channel that are always on screen: who is talking, and
+     * the fact that this is live and what time it is.
+     */
+    function drawFurniture(c, now) {
+        const st = bottomStack();
+        const h = st.rowH;
+        const y = st.rowY;
+        const pad = Math.round(VIEW.w * 0.012);
+        const font = Math.max(8, Math.round(h * 0.42));
+
+        c.save();
+        c.imageSmoothingEnabled = false;
+        c.font = font + 'px "Press Start 2P", monospace';
+        c.textBaseline = 'middle';
+
+        // Who is at the desk, bottom left.
+        const who = (typeof GNNTTS !== 'undefined' && GNNTTS.getVoiceName)
+            ? GNNTTS.getVoiceName() : '';
+        if (who) {
+            const label = String(who).toUpperCase().slice(0, 22);
+            const wTag = c.measureText(label).width + pad * 2;
+            c.fillStyle = '#0d2b3a';
+            c.fillRect(pad, y, wTag, h);
+            c.fillStyle = '#1f7fa8';
+            c.fillRect(pad, y, Math.max(3, Math.round(VIEW.w * 0.004)), h);
+            c.fillStyle = '#dff1ff';
+            c.fillText(label, pad * 2, y + h / 2);
+        }
+
+        // LIVE and the clock, bottom right, the way every channel ends a bar.
+        const d = new Date();
+        const clock = String(d.getHours()).padStart(2, '0') + ':'
+            + String(d.getMinutes()).padStart(2, '0');
+        const wClock = c.measureText(clock).width + pad * 2;
+        const wLive = c.measureText('LIVE').width + pad * 2;
+        const x0 = VIEW.w - pad - wClock - wLive;
+        // The dot breathes so a still frame still reads as a live feed.
+        const pulse = 0.55 + 0.45 * ((Math.sin(now / 420) + 1) / 2);
+        c.fillStyle = 'rgba(176,24,32,' + pulse.toFixed(2) + ')';
+        c.fillRect(x0, y, wLive, h);
+        c.fillStyle = '#ffe8e8';
+        c.fillText('LIVE', x0 + pad, y + h / 2);
+        c.fillStyle = '#12202c';
+        c.fillRect(x0 + wLive, y, wClock, h);
+        c.fillStyle = '#9fd6ef';
+        c.fillText(clock, x0 + wLive + pad, y + h / 2);
+        c.restore();
+    }
+
+    // Where the cast and the desk sit, as fractions of the frame. Kept here
+    // rather than in the plate files so a replacement plate does not have to
+    // reproduce someone else's margins.
+    const CAST = { cy: 0.055, h: 0.70 };
+    const DESK = { w: 0.66, bottom: 1.0 };
+
+    function drawCast(c, img) {
+        const h = CAST.h * VIEW.h;
+        const w = img.width * (h / img.height);
+        c.drawImage(img, (VIEW.w - w) / 2, CAST.cy * VIEW.h, w, h);
+    }
+
+    function drawDesk(c, img) {
+        const w = DESK.w * VIEW.w;
+        const h = img.height * (w / img.width);
+        c.drawImage(img, (VIEW.w - w) / 2, DESK.bottom * VIEW.h - h, w, h);
     }
 
     function drawIconPlate(c, icon) {
@@ -282,6 +379,6 @@ const GNNRenderer = (() => {
 
     return {
         init, renderFrame, getContext,
-        VIEW, CANVAS_W, CANVAS_H, SCALE, BASE_W, BASE_H,
+        VIEW, CANVAS_W, CANVAS_H, SCALE, BASE_W, BASE_H, bottomStack,
     };
 })();

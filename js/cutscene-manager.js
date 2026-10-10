@@ -310,9 +310,14 @@ const GNNCutsceneManager = (() => {
         ctx.font = '9px "Press Start 2P", monospace';
         ctx.fillStyle = '#ff4d4d';
         ctx.textBaseline = 'middle';
-        ctx.fillText('● LIVE', dest.x + 8, dest.y + 12);
+        const tag = '● LIVE';
+        ctx.fillText(tag, dest.x + 8, dest.y + 12);
+        // Measured, not assumed: a fixed offset here printed the label on top
+        // of the tag once the panel grew.
+        const labelX = dest.x + 8 + ctx.measureText(tag).width + 10;
         ctx.fillStyle = '#9fe6ff';
-        ctx.fillText(String(label || '').slice(0, 22), dest.x + 58, dest.y + 12, dest.w - 66);
+        ctx.fillText(String(label || '').slice(0, 22), labelX, dest.y + 12,
+                     dest.x + dest.w - 8 - labelX);
         if (sub) {
             ctx.fillStyle = 'rgba(0,0,0,0.72)';
             ctx.fillRect(dest.x + 2, dest.y + dest.h - 20, dest.w - 4, 18);
