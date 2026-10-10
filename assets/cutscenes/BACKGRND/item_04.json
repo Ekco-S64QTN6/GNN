@@ -1,1 +1,1 @@
-{"id":"BACKGRND/item_04","archive":"BACKGRND","item":4,"palette":"WINLOSE[0] base","frames":1,"native":[320,200],"animated":false,"role":"fullscreen","pools":["chrome"],"ui":0.426,"noise":37,"coverage":0.328}
+{"id":"BACKGRND/item_04","archive":"BACKGRND","item":4,"palette":"WINLOSE[0] base","frames":1,"native":[320,200],"animated":false,"role":"fullscreen","pools":[],"ui":0.426,"noise":37,"coverage":0.328}

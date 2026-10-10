@@ -59,32 +59,42 @@
         statusText.textContent = 'Loading studio plates…';
         const bg = await GNNAssets.loadImage(`${ASSET_DIR}/background_tv.png`);
 
-        // The generated newsroom, if it has been made. Optional on purpose:
-        // the station still goes to air on the MOO1 scene alone, so a missing
-        // plate is a look, not a failure.
         // The generated newsroom, if it has been made. All optional: the
         // station still goes to air on the MOO1 scene alone, so a missing
         // plate is a look rather than a failure.
         const GEN = `${ASSET_DIR}/generated`;
-        const [set, desk, castHero, castSpeak, castListen] = await Promise.all([
+        const [set, desk] = await Promise.all([
             GNNAssets.loadImage(`${GEN}/set/studio_wide_empty.png`),
             GNNAssets.loadImage(`${GEN}/set/desk_oval_front.png`),
-            GNNAssets.loadImage(`${GEN}/anchors/bulrathi_desk_hero.png`),
-            GNNAssets.loadImage(`${GEN}/anchors/bulrathi_speaking.png`),
-            GNNAssets.loadImage(`${GEN}/anchors/bulrathi_listening.png`),
         ]);
-        // The animator drives a 25-frame lip matrix where frame 0 is a shut
-        // mouth and the rest are degrees of open, paced by its own hold timer.
-        // Cut-out art has two mouth states, so it maps onto that rather than
-        // replacing it: shut is the hero, anything else is `speaking`. Mapping
-        // it any other way — alternating per frame, say — flutters at the
-        // frame rate instead of moving at the speed of a jaw.
-        const cast = castHero
-            ? Array.from({ length: TOTAL_FRAMES }, (_, i) =>
-                (i === 0 ? castHero : (castSpeak || castHero)))
-            : null;
 
-        // In parallel: fifty sequential awaits is fifty serial round trips.
+        // Three at the desk, because one alien alone in a newsroom reads as
+        // a portrait rather than a broadcast. The first seat is the anchor
+        // who reads; the others are there to be listened to and cut to.
+        //
+        // The line-up turns over through the day, so the station has a
+        // morning desk and a night desk rather than the same three faces
+        // forever. Rotating by the hour rather than at random means the
+        // same block shows the same team, the way a schedule does.
+        const ROSTER = ['bulrathi', 'mrrshan_f', 'psilon', 'alkari', 'sakkra',
+                        'meklar', 'darlok', 'mrrshan', 'silicoid', 'klackon',
+                        'human'];
+        const block = Math.floor(new Date().getHours() / 4);   // six a day
+        const DESK_SEATS = [0, 1, 2].map(
+            (i) => ROSTER[(block * 3 + i) % ROSTER.length]);
+        const seated = (await Promise.all(DESK_SEATS.map(async (sid) => {
+            const [hero, speaking, listening] = await Promise.all([
+                GNNAssets.loadImage(`${GEN}/anchors/${sid}_desk_hero.png`),
+                GNNAssets.loadImage(`${GEN}/anchors/${sid}_speaking.png`),
+                GNNAssets.loadImage(`${GEN}/anchors/${sid}_listening.png`),
+            ]);
+            return hero ? { sid, hero, speaking: speaking || hero,
+                            listening: listening || hero } : null;
+        }))).filter(Boolean);
+
+        // The MOO1 newscast cels. Still loaded: they are the fallback when
+        // the generated set is absent, and the globe plays on the studio
+        // monitor either way.
         const nums = [];
         for (let i = 1; i <= TOTAL_FRAMES; i++) nums.push(String(i).padStart(3, '0'));
         const [anchors, globes] = await Promise.all([
@@ -102,8 +112,7 @@
         }
         statusText.textContent = 'Studio ready';
         return {
-            bg, set, desk, cast,
-            castStates: { hero: castHero, speaking: castSpeak, listening: castListen },
+            bg, set, desk, seated,
             anchors: anchors.filter(Boolean),
             globes: globes.filter(Boolean),
         };

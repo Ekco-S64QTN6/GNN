@@ -17,19 +17,19 @@
     },
     "desk_oval_front.png": {
       "w": 211,
-      "h": 121,
+      "h": 70,
       "role": "desk",
       "x": 54,
-      "y": 59
+      "y": 110
     },
     "console_left.png": {
       "w": 70,
-      "h": 70,
+      "h": 66,
       "role": "prop"
     },
     "console_right.png": {
       "w": 70,
-      "h": 70,
+      "h": 65,
       "role": "prop"
     }
   }

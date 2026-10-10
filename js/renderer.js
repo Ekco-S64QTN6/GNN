@@ -19,7 +19,7 @@
      4  over-the-shoulder icon plate
      5  cutaway / commercial break
      6  prompter / chyron lower third
-     7  name card, LIVE clock, ON AIR
+     7  LIVE clock
      8  commodity ticker
      9  alert border + glitch artefacts
 
@@ -47,8 +47,15 @@ const GNNRenderer = (() => {
     // Everything below is in viewport-local space, as a fraction of the
     // frame, so the layout survives a change of resolution.
     const ANCHOR = { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H };
+    // The holographic globe is not drawn on the generated set. Its cels
+    // carry an opaque starfield backdrop that was painted to sit inside the
+    // MOO1 newscast frame, and on a studio wall it reads as a square of
+    // someone else's picture pasted on. It stays in the MOO1 fallback,
+    // where it belongs.
     const GLOBE = { x: 0.07, y: 0.12, w: 0.17, h: 0.26 };
-    const ICON = { x: 0.68, y: 0.11, w: 0.24, h: 0.30 };
+    // Small and high, clear of the heads: the anchors' faces start around
+    // 0.33 of the frame and this used to run to 0.41 across the third seat.
+    const ICON = { x: 0.755, y: 0.075, w: 0.175, h: 0.215 };
 
     let canvas = null;
     let ctx = null;
@@ -58,7 +65,7 @@ const GNNRenderer = (() => {
     let bgImage = null;
     let setPlate = null;
     let deskPlate = null;
-    let castFrames = [];
+    let seated = [];
     let anchorFrames = [];
     let globeFrames = [];
 
@@ -78,7 +85,7 @@ const GNNRenderer = (() => {
         // than a set, so it is cover-fitted and the anchors ride on it.
         setPlate = assets.set || null;
         deskPlate = assets.desk || null;
-        castFrames = assets.cast || [];
+        seated = assets.seated || [];
         bgImage = assets.bg;
         anchorFrames = assets.anchors || [];
         globeFrames = assets.globes || [];
@@ -113,18 +120,20 @@ const GNNRenderer = (() => {
             // set, anchor, desk in front. Without it the MOO1 newscast frame
             // is a finished picture of its own, so drawing a set behind it
             // would only be painting something nothing can see.
-            const cast = castFrames[frames.anchor];
-            if (cast && setPlate) {
+            const onSet = seated.length && setPlate;
+            if (onSet) {
                 drawCover(c, setPlate, VIEW.w, VIEW.h);
-                drawCast(c, cast);
+                drawCast(c, frames.anchor);
                 if (deskPlate) drawDesk(c, deskPlate);
             } else if (anchorFrames[frames.anchor]) {
                 drawCover(c, anchorFrames[frames.anchor], ANCHOR.w, ANCHOR.h);
             }
-            if (globeFrames[frames.globe]) {
-                c.drawImage(globeFrames[frames.globe],
-                    GLOBE.x * VIEW.w, GLOBE.y * VIEW.h,
-                    GLOBE.w * VIEW.w, GLOBE.h * VIEW.h);
+            if (!onSet && globeFrames[frames.globe]) {
+                // The globe cels carry their own opaque backdrop, so without
+                // a frame around them they read as a square pasted on the
+                // set. Given the same plate as the story icon they read as
+                // the other monitor in the studio.
+                drawPlate(c, globeFrames[frames.globe], GLOBE);
             }
             if (icon && !GNNCutsceneManager.isCutawayActive()) {
                 drawIconPlate(c, icon);
@@ -172,19 +181,9 @@ const GNNRenderer = (() => {
         c.font = font + 'px "Press Start 2P", monospace';
         c.textBaseline = 'middle';
 
-        // Who is at the desk, bottom left.
-        const who = (typeof GNNTTS !== 'undefined' && GNNTTS.getVoiceName)
-            ? GNNTTS.getVoiceName() : '';
-        if (who) {
-            const label = String(who).toUpperCase().slice(0, 22);
-            const wTag = c.measureText(label).width + pad * 2;
-            c.fillStyle = '#0d2b3a';
-            c.fillRect(pad, y, wTag, h);
-            c.fillStyle = '#1f7fa8';
-            c.fillRect(pad, y, Math.max(3, Math.round(VIEW.w * 0.004)), h);
-            c.fillStyle = '#dff1ff';
-            c.fillText(label, pad * 2, y + h / 2);
-        }
+        // No name card. It printed the id of the speech model, which is not
+        // the anchor's name and not something a viewer should ever see. It
+        // comes back when the characters have names of their own.
 
         // LIVE and the clock, bottom right, the way every channel ends a bar.
         const d = new Date();
@@ -209,35 +208,70 @@ const GNNRenderer = (() => {
     // Where the cast and the desk sit, as fractions of the frame. Kept here
     // rather than in the plate files so a replacement plate does not have to
     // reproduce someone else's margins.
-    const CAST = { cy: 0.055, h: 0.70 };
-    const DESK = { w: 0.66, bottom: 1.0 };
+    // Measured off a minute of Pixel News Network rather than guessed at
+    // twice. There, the head and shoulders showing above the desk come to
+    // about a sixth of the frame, the desk runs off the bottom edge instead
+    // of sitting inside the picture, and three anchors share the width with
+    // room between them. At 0.46 and a desk 0.75 of the frame tall, one
+    // anchor filled the window and there was nowhere to put a second.
+    //
+    // CAST.h is the whole plate; most of its lower half is behind the desk.
+    const CAST = { h: 0.34, seat: 0.655 };
+    const SEATS = {
+        1: [0.50],
+        2: [0.38, 0.62],
+        3: [0.30, 0.50, 0.70],
+    };
+    // Full width, top edge at the desk line, the rest off the bottom of the
+    // frame the way a desk in front of a camera actually sits.
+    const DESK = { w: 1.0, top: 0.635 };
 
-    function drawCast(c, img) {
+    /**
+     * The desk. The anchor whose turn it is takes the lip frame the animator
+     * worked out; everyone else holds `listening`, which is what makes a
+     * desk read as a desk rather than as three portraits in a row.
+     */
+    function drawCast(c, lipFrame) {
+        const list = seated.slice(0, 3);
+        if (!list.length) return;
+        const seats = SEATS[list.length] || SEATS[1];
         const h = CAST.h * VIEW.h;
-        const w = img.width * (h / img.height);
-        c.drawImage(img, (VIEW.w - w) / 2, CAST.cy * VIEW.h, w, h);
+        list.forEach((person, i) => {
+            const active = i === 0;
+            const img = active
+                ? (lipFrame === 0 ? person.hero : person.speaking)
+                : person.listening;
+            if (!img) return;
+            const w = img.width * (h / img.height);
+            c.drawImage(img, seats[i] * VIEW.w - w / 2,
+                        CAST.seat * VIEW.h - h, w, h);
+        });
     }
 
     function drawDesk(c, img) {
         const w = DESK.w * VIEW.w;
         const h = img.height * (w / img.width);
-        c.drawImage(img, (VIEW.w - w) / 2, DESK.bottom * VIEW.h - h, w, h);
+        c.drawImage(img, (VIEW.w - w) / 2, DESK.top * VIEW.h, w, h);
     }
 
-    function drawIconPlate(c, icon) {
-        const x = ICON.x * VIEW.w;
-        const y = ICON.y * VIEW.h;
-        const iw = ICON.w * VIEW.w;
-        const ih = ICON.h * VIEW.h;
+    /** A studio monitor: the art, inset in a lit bezel. */
+    function drawPlate(c, img, rect) {
+        const x = rect.x * VIEW.w;
+        const y = rect.y * VIEW.h;
+        const w = rect.w * VIEW.w;
+        const h = rect.h * VIEW.h;
+        const pad = Math.max(3, Math.round(VIEW.w * 0.004));
         c.save();
-        c.fillStyle = 'rgba(2,8,14,0.55)';
-        c.fillRect(x - 5, y - 5, iw + 10, ih + 10);
+        c.fillStyle = 'rgba(2,8,14,0.72)';
+        c.fillRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
         c.strokeStyle = '#2f7f9c';
-        c.lineWidth = 2;
-        c.strokeRect(x - 5, y - 5, iw + 10, ih + 10);
-        c.drawImage(icon, x, y, iw, ih);
+        c.lineWidth = Math.max(2, Math.round(VIEW.w * 0.0025));
+        c.strokeRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
+        c.drawImage(img, x, y, w, h);
         c.restore();
     }
+
+    function drawIconPlate(c, icon) { drawPlate(c, icon, ICON); }
 
     // ---------------------------------------------------------
     // Post-processing

@@ -112,7 +112,51 @@ POOL_RULES = {
 CHROME_MIN_COLORS = 12
 
 
-def pools_for(w, h, coverage, noise, ui, role, colors=64, archive=''):
+# Judged by eye, item by item, because no measure separates these from real
+# footage: an empty interface panel and a photograph of a horizon can carry
+# the same colour count, coverage and noise. The gates below catch the bulk;
+# this catches what the gates cannot see.
+#
+# DENY is (archive, item) -> pools it may not join, or '*' for all of them.
+DENY = {
+    # An orange interface box reading "identify this class of ship". It is
+    # the single most visible wrong asset in the broadcast: the `claim` and
+    # `legal` beats both draw from BACKGRND, where it is the only b-roll.
+    ('BACKGRND', 32): '*',
+    # Empty bordered panels and window frames. They pass every gate because
+    # a border is high-contrast and a backdrop is uniform, and they read as
+    # a placeholder box wherever they land.
+    ('BACKGRND', 0): '*', ('BACKGRND', 2): '*', ('BACKGRND', 3): '*',
+    ('BACKGRND', 4): '*', ('BACKGRND', 5): '*', ('BACKGRND', 13): '*',
+    ('BACKGRND', 15): '*', ('BACKGRND', 17): '*', ('BACKGRND', 21): '*',
+    ('BACKGRND', 25): '*', ('BACKGRND', 34): '*', ('BACKGRND', 35): '*',
+    ('BACKGRND', 37): '*', ('BACKGRND', 46): '*', ('BACKGRND', 50): '*',
+    ('BACKGRND', 52): '*',
+    # The ship design screen, buttons and all.
+    ('DESIGN', 0): '*',
+    # Council chamber interface frames. One of them decodes with its palette
+    # inverted, which is how it was noticed.
+    ('COUNCIL', 0): '*', ('COUNCIL', 23): '*',
+    ('SCREENS', 6): '*',
+}
+
+# Frames to keep, for items whose animation runs into something unusable.
+# (archive, item) -> (first, last) inclusive.
+KEEP_FRAMES = {
+    # 115 frames: a moonlit ridge for four of them, then "MICRO PROSE
+    # presents" fades up and the Simtex and Orion titles follow. The `ident`
+    # and `legal` beats both pull from INTRO, so the publisher's logo was
+    # playing as news footage.
+    ('INTRO', 0): (0, 3),
+}
+
+
+def denied(archive, item, pool):
+    rule = DENY.get((archive, item))
+    return rule is not None and (rule == '*' or pool in rule)
+
+
+def pools_for(w, h, coverage, noise, ui, role, colors=64, archive='', item=-1):
     """Which pools this item is allowed to join."""
     def chrome_ok():
         return (w >= 24 and h >= 16 and role != 'blank'
@@ -122,7 +166,7 @@ def pools_for(w, h, coverage, noise, ui, role, colors=64, archive=''):
     if ui >= UI_LIMIT or role == 'blank':
         # Chrome is still useful as diegetic screen dressing, just never as
         # footage or as a face.
-        if chrome_ok():
+        if chrome_ok() and not denied(archive, item, 'chrome'):
             out.append('chrome')
         return out
     for pool, (mw, mh, xw, xh, mc, mn) in POOL_RULES.items():
@@ -132,8 +176,10 @@ def pools_for(w, h, coverage, noise, ui, role, colors=64, archive=''):
         if pool == 'broll' and (archive in UI_ARCHIVES
                                 or colors < BROLL_MIN_COLORS):
             continue
+        if denied(archive, item, pool):
+            continue
         out.append(pool)
-    if not out and chrome_ok():
+    if not out and chrome_ok() and not denied(archive, item, 'chrome'):
         out.append('chrome')
     return out
 
@@ -262,6 +308,15 @@ def main():
         arc = LbxArchive(path)
         folder = os.path.join(OUT, name)
         os.makedirs(folder, exist_ok=True)
+        # Clear the archive's own output first. Writing over it leaves the
+        # frames of any item that has since been trimmed or dropped sitting
+        # on disk — 111 frames of publisher logo outlived the trim that
+        # removed them from the manifest, invisible to the engine but shipped
+        # in the repository and liable to be picked up by the next tool that
+        # globs a directory rather than reading the catalogue.
+        for stale in os.listdir(folder):
+            if stale.startswith('item_'):
+                os.remove(os.path.join(folder, stale))
         entries = []
 
         for i in range(len(arc)):
@@ -271,6 +326,14 @@ def main():
             frames = list(render(item, palette))
             if not frames:
                 continue
+            keep = KEEP_FRAMES.get((name, i))
+            if keep:
+                # Trimmed before anything else looks at them, so the frame
+                # count, the GIF and the measurements all describe the item
+                # as it will actually be used.
+                frames = frames[keep[0]:keep[1] + 1]
+                if not frames:
+                    continue
             stem = 'item_%02d' % i
             for fi, img in enumerate(frames):
                 img.save(os.path.join(folder, '%s_frame_%03d.png' % (stem, fi)))
@@ -308,7 +371,8 @@ def main():
                 'ui': ui,
             })
             entries[-1]['pools'] = pools_for(item.w, item.h, cov, noise, ui,
-                                             entries[-1]['role'], distinct, name)
+                                             entries[-1]['role'], distinct,
+                                             name, i)
             # Per-asset sidecar (source archive, palette origin, frames,
             # native size, animation, admission) so the catalogue can be
             # audited without re-running the decoder.

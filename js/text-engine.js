@@ -22,7 +22,11 @@ const GNNTextEngine = (() => {
     // The story caption, as a fraction of the frame so it survives a change
     // of resolution. Sits over the lower left of the set, clear of the name
     // card, chyron and ticker stacked beneath it.
-    const PANEL = { x: 0.030, y: 0.515, w: 0.455, h: 0.215 };
+    // The lower third. It sits on the bottom of the frame with the ticker
+    // and the live clock, rather than floating in the middle of the set:
+    // three separate boxes stacked up the left-hand side is not a lower
+    // third, it is clutter. `y` is resolved against the bottom stack.
+    const PANEL = { x: 0.016, w: 0.62, maxH: 0.17 };
     let BOX = { x: 0, y: 0, w: 0, h: 0 };
 
     // Type sizes scale with the frame too; at 1280x720 these land close to
@@ -129,9 +133,9 @@ const GNNTextEngine = (() => {
         const w = ctx.canvas.width;
         const h = ctx.canvas.height;
         BOX = {
-            x: Math.round(PANEL.x * w), y: Math.round(PANEL.y * h),
-            w: Math.round(PANEL.w * w), h: Math.round(PANEL.h * h),
-        };   // h is replaced per frame by render(), which fits it to the text
+            x: Math.round(PANEL.x * w), y: 0,
+            w: Math.round(PANEL.w * w), h: 0,
+        };   // y and h are set per frame by render(), which fits them
         const k = h / 720;
         PADDING = Math.max(8, Math.round(14 * k));
         LINE_HEIGHT = Math.max(14, Math.round(26 * k));
@@ -153,8 +157,8 @@ const GNNTextEngine = (() => {
         // arrives a character at a time and only fills it at the very end.
         const lead = Math.round(LINE_HEIGHT * 0.92);
         const maxLines = Math.max(1, Math.floor(
-            (PANEL.h * ctx.canvas.height - (cue ? lead + PADDING : PADDING * 2))
-            / LINE_HEIGHT));
+            (PANEL.maxH * ctx.canvas.height
+             - (cue ? lead + PADDING : PADDING * 2)) / LINE_HEIGHT));
         let shownLines = [];
         if (fullText && visible > 0) {
             ctx.font = `${FONT_SIZE}px "Press Start 2P", monospace`;
@@ -166,8 +170,12 @@ const GNNTextEngine = (() => {
         }
         const bodyH = Math.max(1, shownLines.length) * LINE_HEIGHT;
         BOX.h = (cue ? lead : PADDING) + bodyH + PADDING;
-        // Grows downward from a fixed top so the text does not walk up the
-        // screen as the line arrives.
+        // Anchored to the bottom stack and grown upward, so the bar keeps
+        // its place on the frame while the text fills it.
+        const st = (typeof GNNRenderer !== 'undefined' && GNNRenderer.bottomStack)
+            ? GNNRenderer.bottomStack() : null;
+        BOX.y = st ? st.rowY - BOX.h - 4
+            : ctx.canvas.height - BOX.h - 40;
         ctx.fillStyle = 'rgba(4,12,20,0.82)';
         ctx.fillRect(BOX.x, BOX.y, BOX.w, BOX.h);
         ctx.fillStyle = kind === 'breaking' ? '#ff3b3b' : '#1f7fa8';
@@ -208,8 +216,15 @@ const GNNTextEngine = (() => {
         ctx.restore();
     }
 
-    /** Lower third, drawn inside the CRT viewport by the renderer. */
+    /**
+     * Was a second bar of its own, stacked under the caption and over the
+     * name card. The caption is the lower third now and carries the same
+     * headline, so this draws nothing; it stays as a hook for the multi
+     * anchor work, which wants a station strap that is not the read copy.
+     */
     function renderChyron(ctx, view) {
+        return;
+        // eslint-disable-next-line no-unreachable
         if (!chyron) return;
         ctx.save();
         ctx.imageSmoothingEnabled = false;

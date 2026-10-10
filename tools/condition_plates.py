@@ -194,9 +194,25 @@ def quantise(im, colours=256):
     return Image.composite(out, flat, a)
 
 
+def crop_to_content(im):
+    """Drop fully transparent margin.
+
+    An image model centres its subject in the canvas and pads the rest, so a
+    cut-out arrives with dead space baked into its height — the desk came
+    back with 48 of its 121 rows empty. The engine then places the plate by
+    its edges and inherits the padding, which is how the desk ended up with
+    its front panel below the bottom of the frame while its invisible top
+    margin sat in shot.
+    """
+    box = im.convert('RGBA').split()[3].point(lambda v: 255 if v > 8 else 0) \
+            .getbbox()
+    return im.crop(box) if box else im
+
+
 def condition(src, frac=None):
     im = Image.open(src).convert('RGBA')
     if im.split()[3].getextrema()[0] < 255:          # has real transparency
+        im = crop_to_content(im)
         im = defringe(im)
     if frac is None:
         size = (VIEW_W, VIEW_H)
@@ -336,7 +352,9 @@ def do_anchors():
             if hero_im is not None and st != 'desk_hero':
                 im = graft_body(hero_im, im)
                 grafted += 1
-            im = defringe(im)
+            # Cropped after the graft, so all three states are cut from the
+            # same geometry and stay registered with one another.
+            im = defringe(crop_to_content(im))
             h = CAST_H
             w = max(1, round(im.width * h / im.height))
             im = quantise(resize_premultiplied(im, (w, h)))
