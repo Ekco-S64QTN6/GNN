@@ -33,6 +33,10 @@ on a channel built entirely out of that game's 1993 asset library.
 - [Credits](#credits)
 - [Legal](#legal)
 
+> Working on this? **[`CLAUDE.md`](CLAUDE.md)** is the source of truth for
+> current state, fixed bugs and load-bearing constraints.
+> **[`docs/ROADMAP.md`](docs/ROADMAP.md)** is what is still to build.
+
 ---
 
 ## What this is
@@ -198,12 +202,6 @@ process — 17 English voices, 24 kHz, about 7x faster than real time on CPU
 alone, no GPU required and nothing leaving the machine. The selector is built
 from `/api/voices` at boot, so it always matches the engine that is actually
 running.
-
-> **Correction.** Earlier versions of this README claimed "zero-cloud" while
-> the app used `edge-tts`, which calls Microsoft's servers on every line. That
-> was wrong. `edge-tts` is now only a fallback, used when the virtualenv is
-> missing, and both `/api/status` and the startup banner say plainly which
-> engine is live and whether it is a cloud call.
 
 Every clip is **level-matched and delivered lossless**. Voices arrive at very
 different levels — through a compressor the hot ones get squashed and the quiet
@@ -417,47 +415,35 @@ Full format notes and the manifest schema: **[`assets/README.md`](assets/README.
 
 ## Verifying and rebuilding
 
-The app ships with `assets/` fully populated and needs nothing else:
+The app ships with `assets/` populated and needs nothing else:
 
 ```bash
 python3 tools/verify_assets.py
 # graphics : 873 items, 1382 spot-checked frames, 418 gifs
 # audio    : 41 effects, 5 stings, 40 music beds
-# text     : 75 bulletins, 60 leaders, 6 vocab groups
-# checked  : 2048 paths
 # OK — every runtime asset resolves inside the project.
 ```
 
-To regenerate `assets/` you need your own copy of the game placed at
+To regenerate `assets/` you need your own copy of the game at
 `Master of Orion 1/data/` (see [Legal](#legal)):
 
 ```bash
-python3 tools/extract_all.py     # 22 archives → RGBA frames, GIFs, gfx-manifest   (~19s)
-python3 tools/build_audio.py     # SFX profiling + MIDI→OGG, audio-manifest        (~30s)
-python3 tools/extract_text.py    # EVENTMSG / NAMES / HELP / ORION.EXE → moo-strings
+python3 tools/extract_all.py     # 22 archives → RGBA frames, manifest, sidecars
+python3 tools/build_audio.py     # SFX profiling + MIDI→OGG
+python3 tools/extract_text.py    # EVENTMSG / NAMES / HELP → moo-strings
+python3 tools/prompt_bridge.py   # prompts for art MOO1 cannot supply
 ```
 
-`build_audio.py` needs `fluidsynth`, `ffmpeg` and a General MIDI soundfont.
-
-There is also a headless test harness that drives the newscast over the Chrome
-DevTools Protocol, samples the director's telemetry and screenshots each
-segment as it happens:
+There is also a headless harness that drives the newscast over the Chrome
+DevTools Protocol, samples the director and screenshots each segment:
 
 ```bash
 python3 tools/drive.py 120 .shot
-#   3s COLD_OPEN  q=59  read=0
-#  27s READ       q=58  read=1  prompt= 34%/271
-#  49s HOLD       q=58  read=1
-#  51s BANTER     q=58  read=1
-#  ...
-# states seen: {'READ': 161, 'HOLD': 33, 'BANTER': 30, 'WIRE': 24, 'TOSS': 12, 'BREAK': 23}
+# states seen: {'READ': 161, 'HOLD': 33, 'BANTER': 30, 'WIRE': 24, 'BREAK': 23}
 # console errors: 0, exceptions: 0
 ```
 
-The harness closes its browser over CDP and waits for every helper process to
-be reaped before returning, so repeated runs cannot pile up orphaned Chromium
-instances. `tools/capture_docs.py` uses the same harness to regenerate the
-screenshots in `docs/`.
+Full tool list and testing discipline: [`CLAUDE.md`](CLAUDE.md).
 
 ---
 

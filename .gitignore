@@ -16,11 +16,8 @@ gnn-server.log
 # local agent/workspace config
 .agents/
 
-# internal working notes — not part of the published project
-GNN_Report.md
-GNN_Project_Plan.md
-GNN_Code_Audit_Review.md
-Sonnet5Report.md
+# superseded notes — see docs/archive/README.md. Current truth is CLAUDE.md.
+docs/archive/
 
 # voice audition renders (regenerate with tools/voice_audition.py)
 audition/
@@ -30,3 +27,6 @@ audition/
 
 # generated art drops (prompts.md itself is tracked)
 assets/generated/*/
+
+# one-off bug capture, large; the fix and its measurements are in CLAUDE.md
+docs/*.webm
