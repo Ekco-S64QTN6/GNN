@@ -37,6 +37,7 @@ finding it after ten costs thirty generations.
 import json
 import os
 import re
+import shutil
 import sys
 
 from PIL import Image, ImageDraw
@@ -162,13 +163,19 @@ def resize_premultiplied(im, size):
 
 
 def quantise(im, colours=256):
-    """Hard alpha and a 256-colour palette."""
+    """Hard alpha and a 256-colour palette.
+
+    Fully transparent pixels are flattened to a single value. They keep
+    whatever colour the de-fringe bled into them otherwise, which is
+    invisible but counts against the palette and bloats the file.
+    """
     im = im.convert('RGBA')
     a = im.split()[3].point(lambda v: 255 if v >= 128 else 0)
     rgb = im.convert('RGB').quantize(colors=colours, method=Image.MEDIANCUT)
     out = rgb.convert('RGBA')
     out.putalpha(a)
-    return out
+    flat = Image.new('RGBA', out.size, (0, 0, 0, 0))
+    return Image.composite(out, flat, a)
 
 
 def condition(src, frac=None):
@@ -184,6 +191,7 @@ def condition(src, frac=None):
 
 
 ANCHOR_OUT = os.path.join(ROOT, 'assets', 'generated', 'anchors')
+RAW_KEEP = os.path.join(ROOT, 'assets', 'generated', '_inbox')
 STATES = ('desk_hero', 'speaking', 'listening')
 
 # The cast is drawn at 70% of frame height (renderer.js CAST.h), so a plate
@@ -192,10 +200,14 @@ CAST_H = 126          # 0.70 of the 180-line base grid
 
 
 def subject_metrics(im):
-    """Head top, shoulder span and whether a desk got baked in.
+    """Head top and shoulder span, read off the alpha channel.
 
-    All three are read off the alpha channel, which is the only thing that
-    says where the figure actually is.
+    These are the two numbers that say whether three states are the same
+    drawing. There is deliberately no automatic check for a desk baked into
+    the plate: the brief asks for the chest cropped at the bottom edge, so a
+    correct cut-out is opaque along its bottom row, and every cheap test for
+    a desk flagged correct art. A detector that rejects good work is worse
+    than no detector, so that one is left to the eye.
     """
     im = im.convert('RGBA')
     a = im.split()[3]
@@ -208,66 +220,92 @@ def subject_metrics(im):
     y40 = int(h * 0.40)
     run = [x for x in range(0, w, 4) if a.getpixel((x, y40)) > 200]
     span = (max(run) - min(run)) if run else 0
-    # A cut-out tapers at the bottom. A baked-in desk is opaque right across.
-    last = h - 3
-    across = sum(1 for x in range(0, w, 8) if a.getpixel((x, last)) > 200)
-    desk = across / float(len(range(0, w, 8))) > 0.9
-    return {'top': top if top is not None else 0, 'span': span, 'desk': desk}
+    return {'top': top if top is not None else 0, 'span': span}
+
+
+def conditioned_already(im):
+    """Whether this is output rather than something freshly dropped in."""
+    return im.height <= CAST_H * 1.5 and len(im.convert('RGB')
+                                             .getcolors(1 << 16) or []) <= 256
+
+
+def anchor_sources(sid, state):
+    """Where a given anchor plate might have been put.
+
+    The output directory is included on purpose. It is the path the document
+    tells people to save to, so it is where the files turn up, and a tool
+    that ignores them there and reports nothing is a tool that looks broken.
+    """
+    name = '%s_%s.png' % (sid, state)
+    direct = os.path.join(ANCHOR_OUT, name)
+    if os.path.isfile(direct):
+        im = Image.open(direct)
+        if not conditioned_already(im):
+            return direct
+    return find_source(name)
 
 
 def do_anchors():
-    """Condition and check every complete anchor set found in docs/."""
-    species = set()
-    for root in SRC_ROOTS:
+    """Condition every complete anchor set, and check the states line up."""
+    names = set()
+    roots = SRC_ROOTS + [ANCHOR_OUT]
+    for root in roots:
         if not os.path.isdir(root):
             continue
         for f in os.listdir(root):
             if f.endswith('_desk_hero.png'):
-                species.add(f[:-len('_desk_hero.png')])
-    species = sorted(species)
-    if not species:
+                names.add(f[:-len('_desk_hero.png')])
+    if not names:
         return
     os.makedirs(ANCHOR_OUT, exist_ok=True)
+    os.makedirs(RAW_KEEP, exist_ok=True)
     print('\n--- anchors ---')
-    for sid in species:
+    for sid in sorted(names):
         found = {}
         for st in STATES:
-            cand = find_source('%s_%s.png' % (sid, st))
-            if cand:
-                found[st] = cand
+            src = anchor_sources(sid, st)
+            if src:
+                found[st] = src
         if not found:
+            print('%s: already conditioned' % sid)
             continue
+
         metrics = {st: subject_metrics(Image.open(p)) for st, p in found.items()}
-        for st, pth in found.items():
-            im = condition(pth, CAST_H / 180.0 * (16 / 9.0))
+        for st, src in found.items():
+            im = Image.open(src).convert('RGBA')
+            im = defringe(im)
+            h = CAST_H
+            w = max(1, round(im.width * h / im.height))
+            im = quantise(resize_premultiplied(im, (w, h)))
             dest = os.path.join(ANCHOR_OUT, '%s_%s.png' % (sid, st))
+            # Keep the raw drop; conditioning is lossy and not worth redoing
+            # from a regeneration.
+            if os.path.abspath(src) == os.path.abspath(dest):
+                shutil.copy2(src, os.path.join(RAW_KEEP, os.path.basename(src)))
             im.save(dest)
 
         tops = [m['top'] for m in metrics.values()]
         spans = [m['span'] for m in metrics.values() if m['span']]
         drift = max(tops) - min(tops)
         scale = (max(spans) / float(min(spans)) - 1) * 100 if spans else 0
-        print('%s: %d of 3 states' % (sid, len(found)))
+        print('%s: %d of 3 states conditioned to %dpx tall'
+              % (sid, len(found), CAST_H))
         for st in STATES:
             m = metrics.get(st)
             if m:
-                print('   %-10s head top %4d  shoulder span %4d%s'
-                      % (st, m['top'], m['span'], '   DESK BAKED IN' if m['desk'] else ''))
-        bad = []
-        if len(found) == 3 and drift > 12:
-            bad.append('head top drifts %d px' % drift)
-        if len(found) == 3 and scale > 4:
-            bad.append('scale varies %.0f%%' % scale)
-        if any(m['desk'] for m in metrics.values()):
-            bad.append('a desk is baked into the plate')
+                print('   %-10s head top %4d   shoulder span %4d'
+                      % (st, m['top'], m['span']))
         if len(found) < 3:
-            bad.append('only %d of 3 states present' % len(found))
-        if bad:
-            print('   REJECT: %s' % '; '.join(bad))
-            print('   The two variants must be *edits* of the hero, and the '
-                  'figure must be cut out with nothing beneath it.')
+            print('   INCOMPLETE: %d of 3 states' % len(found))
+        elif drift > 12 or scale > 4:
+            print('   REJECT: head top drifts %d px, scale varies %.0f%% — '
+                  'the states are not the same drawing' % (drift, scale))
+            print('   Make the two variants as edits of the hero, not as '
+                  'fresh generations.')
         else:
-            print('   OK: states align, clean cut-out')
+            print('   OK: states align (drift %d px, scale %.1f%%)'
+                  % (drift, scale))
+        print('   Check by eye that no desk is drawn into the plate.')
 
 
 def main():

@@ -62,8 +62,27 @@
         // The generated newsroom, if it has been made. Optional on purpose:
         // the station still goes to air on the MOO1 scene alone, so a missing
         // plate is a look, not a failure.
-        const set = await GNNAssets.loadImage(
-            `${ASSET_DIR}/generated/set/studio_wide_empty.png`);
+        // The generated newsroom, if it has been made. All optional: the
+        // station still goes to air on the MOO1 scene alone, so a missing
+        // plate is a look rather than a failure.
+        const GEN = `${ASSET_DIR}/generated`;
+        const [set, desk, castHero, castSpeak, castListen] = await Promise.all([
+            GNNAssets.loadImage(`${GEN}/set/studio_wide_empty.png`),
+            GNNAssets.loadImage(`${GEN}/set/desk_oval_front.png`),
+            GNNAssets.loadImage(`${GEN}/anchors/bulrathi_desk_hero.png`),
+            GNNAssets.loadImage(`${GEN}/anchors/bulrathi_speaking.png`),
+            GNNAssets.loadImage(`${GEN}/anchors/bulrathi_listening.png`),
+        ]);
+        // The animator drives a 25-frame lip matrix where frame 0 is a shut
+        // mouth and the rest are degrees of open, paced by its own hold timer.
+        // Cut-out art has two mouth states, so it maps onto that rather than
+        // replacing it: shut is the hero, anything else is `speaking`. Mapping
+        // it any other way — alternating per frame, say — flutters at the
+        // frame rate instead of moving at the speed of a jaw.
+        const cast = castHero
+            ? Array.from({ length: TOTAL_FRAMES }, (_, i) =>
+                (i === 0 ? castHero : (castSpeak || castHero)))
+            : null;
 
         // In parallel: fifty sequential awaits is fifty serial round trips.
         const nums = [];
@@ -82,7 +101,12 @@
                 `${s.sfx} effects · ${s.music} music beds · ${s.bulletins} archive bulletins`;
         }
         statusText.textContent = 'Studio ready';
-        return { bg, set, anchors: anchors.filter(Boolean), globes: globes.filter(Boolean) };
+        return {
+            bg, set, desk, cast,
+            castStates: { hero: castHero, speaking: castSpeak, listening: castListen },
+            anchors: anchors.filter(Boolean),
+            globes: globes.filter(Boolean),
+        };
     }
 
     // =========================================================
