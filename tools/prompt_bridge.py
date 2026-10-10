@@ -77,6 +77,9 @@ SPECIES = [
      'indistinct darkness with two faint red points', 'anomaly'),
     ('silicoid', 'Silicoid', 'a crystalline rock-bodied being with faceted '
      'mineral plates and glowing seams', 'industry'),
+    ('mrrshan_f', 'Mrrshan Matriarch', 'a tawny feline alien with slit '
+     'pupils, tufted ears and a short muzzle, finer-boned and longer-maned '
+     'than the male, jewelled cuffs on the ears', 'diplomatic'),
     ('klackon', 'Klackon', 'an insectoid alien with chitinous plating, '
      'mandibles and compound eyes', 'industry'),
     ('human', 'Human Commander', 'a grey-haired human officer in a high-collar '
@@ -348,8 +351,9 @@ def main():
             else:
                 asset(fname,
                       '%s. %s%s.\n\nKeep the image exactly %s with the same '
-                      'fully transparent background. Add no text or '
-                      'lettering.'
+                      'fully transparent background. Keep the GNN badge on '
+                      'the uniform exactly as it is, lettering and all — do '
+                      'not blank it or redraw it. Add no other text.'
                       % (pose_desc, framing[0].upper(), framing[1:], SQUARE),
                       note='**Upload `%s_desk_hero.png` first**, then paste '
                            'this. It is an edit of that image, not a new one.'

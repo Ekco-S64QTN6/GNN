@@ -47,7 +47,7 @@ Save the result as `assets/generated/anchors/bulrathi_speaking.png`.
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 #### `anchors/bulrathi_listening.png`
@@ -59,7 +59,7 @@ Save the result as `assets/generated/anchors/bulrathi_listening.png`.
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 ### Psilon
@@ -85,7 +85,7 @@ Save the result as `assets/generated/anchors/psilon_speaking.png`.
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 #### `anchors/psilon_listening.png`
@@ -97,7 +97,7 @@ Save the result as `assets/generated/anchors/psilon_listening.png`.
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 ### Mrrshan
@@ -123,7 +123,7 @@ Save the result as `assets/generated/anchors/mrrshan_speaking.png`.
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 #### `anchors/mrrshan_listening.png`
@@ -135,7 +135,7 @@ Save the result as `assets/generated/anchors/mrrshan_listening.png`.
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 ### Meklar
@@ -161,7 +161,7 @@ Save the result as `assets/generated/anchors/meklar_speaking.png`.
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 #### `anchors/meklar_listening.png`
@@ -173,7 +173,7 @@ Save the result as `assets/generated/anchors/meklar_listening.png`.
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 ### Sakkra
@@ -199,7 +199,7 @@ Save the result as `assets/generated/anchors/sakkra_speaking.png`.
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 #### `anchors/sakkra_listening.png`
@@ -211,7 +211,7 @@ Save the result as `assets/generated/anchors/sakkra_listening.png`.
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 ### Alkari
@@ -237,7 +237,7 @@ Save the result as `assets/generated/anchors/alkari_speaking.png`.
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 #### `anchors/alkari_listening.png`
@@ -249,7 +249,7 @@ Save the result as `assets/generated/anchors/alkari_listening.png`.
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 ### Darlok
@@ -275,7 +275,7 @@ Save the result as `assets/generated/anchors/darlok_speaking.png`.
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 #### `anchors/darlok_listening.png`
@@ -287,7 +287,7 @@ Save the result as `assets/generated/anchors/darlok_listening.png`.
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 ### Silicoid
@@ -313,7 +313,7 @@ Save the result as `assets/generated/anchors/silicoid_speaking.png`.
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 #### `anchors/silicoid_listening.png`
@@ -325,7 +325,45 @@ Save the result as `assets/generated/anchors/silicoid_listening.png`.
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
+```
+
+### Mrrshan Matriarch
+
+#### `anchors/mrrshan_f_desk_hero.png`
+
+Save the result as `assets/generated/anchors/mrrshan_f_desk_hero.png`.
+
+```
+Create a 1024x1024 image with a fully transparent background.
+
+1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a Mrrshan Matriarch, a tawny feline alien with slit pupils, tufted ears and a short muzzle, finer-boned and longer-maned than the male, jewelled cuffs on the ears, wearing a GNN-badged broadcast uniform, upright and square to camera, shoulders level, looking straight down the lens, mouth closed, arms down and out of frame. Head, shoulders and chest only — no desk, no table, no furniture, nothing beneath or in front of the figure. Framing: head and shoulders, chest cropped at the bottom edge of the frame, the head occupying the upper middle. Palette: warm ambers and oxblood reds, brass highlights. Background: fully transparent, subject cleanly cut out on empty transparency with no backdrop, vignette or floor.
+
+Do not include: captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
+```
+
+#### `anchors/mrrshan_f_speaking.png`
+
+Save the result as `assets/generated/anchors/mrrshan_f_speaking.png`.
+
+**Upload `mrrshan_f_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
+
+```
+EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
+```
+
+#### `anchors/mrrshan_f_listening.png`
+
+Save the result as `assets/generated/anchors/mrrshan_f_listening.png`.
+
+**Upload `mrrshan_f_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
+
+```
+EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 ### Klackon
@@ -351,7 +389,7 @@ Save the result as `assets/generated/anchors/klackon_speaking.png`.
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 #### `anchors/klackon_listening.png`
@@ -363,7 +401,7 @@ Save the result as `assets/generated/anchors/klackon_listening.png`.
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 ### Human Commander
@@ -389,7 +427,7 @@ Save the result as `assets/generated/anchors/human_speaking.png`.
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 #### `anchors/human_listening.png`
@@ -401,7 +439,7 @@ Save the result as `assets/generated/anchors/human_listening.png`.
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
 
 ## Newsroom Set
@@ -832,4 +870,4 @@ Do not include: captions, headlines, tickers, labels, letters, numbers or writin
 
 ---
 
-**62 prompts.** Save each one to the path under its filename, then run `python3 tools/condition_plates.py --preview`.
+**65 prompts.** Save each one to the path under its filename, then run `python3 tools/condition_plates.py --preview`.

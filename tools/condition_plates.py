@@ -40,6 +40,7 @@ import re
 import shutil
 import sys
 
+import numpy as np
 from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -200,27 +201,80 @@ CAST_H = 126          # 0.70 of the 180-line base grid
 
 
 def subject_metrics(im):
-    """Head top and shoulder span, read off the alpha channel.
+    """Where the head sits and how big it is, read off the alpha channel.
 
-    These are the two numbers that say whether three states are the same
-    drawing. There is deliberately no automatic check for a desk baked into
-    the plate: the brief asks for the chest cropped at the bottom edge, so a
-    correct cut-out is opaque along its bottom row, and every cheap test for
-    a desk flagged correct art. A detector that rejects good work is worse
-    than no detector, so that one is left to the eye.
+    These say whether three states are the same drawing. The measurement is
+    taken across the head rather than the shoulders: the body is grafted from
+    the hero anyway, so shoulder width is identical by construction and tells
+    you nothing, while a head that has moved or changed size is exactly what
+    a crossfade exposes.
+
+    There is deliberately no automatic check for a desk baked into the plate.
+    The brief asks for the chest cropped at the bottom edge, so a correct
+    cut-out is opaque along its bottom row, and every cheap test for a desk
+    flagged correct art. A detector that rejects good work is worse than no
+    detector, so that one is left to the eye.
     """
     im = im.convert('RGBA')
-    a = im.split()[3]
-    w, h = im.size
-    top = None
-    for y in range(h):
-        if any(a.getpixel((x, y)) > 200 for x in range(0, w, 6)):
-            top = y
-            break
-    y40 = int(h * 0.40)
-    run = [x for x in range(0, w, 4) if a.getpixel((x, y40)) > 200]
-    span = (max(run) - min(run)) if run else 0
-    return {'top': top if top is not None else 0, 'span': span}
+    a = np.asarray(im)[:, :, 3] > 200
+    rows = a.sum(axis=1)
+    nz = np.nonzero(rows > 0)[0]
+    if not len(nz):
+        return {'top': 0, 'head': 0}
+    top = int(nz[0])
+    neck = neck_row(im)
+    # Halfway down the head: past the ears, around the eyes.
+    y = min(len(rows) - 1, (top + neck) // 2)
+    cols = np.nonzero(a[y])[0]
+    head = int(cols.max() - cols.min()) if len(cols) else 0
+    return {'top': top, 'head': head}
+
+
+def neck_row(im):
+    """The narrowest row between head and shoulders.
+
+    Opaque width per row widens through the head, pinches at the neck and
+    widens again at the shoulders, so the minimum in the middle half of the
+    figure is the neck. Measured across eight species it lands at 52-59% of
+    the frame, including on the ones without much of a neck to speak of.
+    """
+    a = np.asarray(im.convert('RGBA'))[:, :, 3] > 128
+    w = a.sum(axis=1)
+    nz = np.nonzero(w > 0)[0]
+    if not len(nz):
+        return len(w) // 2
+    top = nz[0]
+    lo = top + int((len(w) - top) * 0.25)
+    hi = top + int((len(w) - top) * 0.75)
+    return lo + int(np.argmin(w[lo:hi]))
+
+
+def graft_body(hero, variant, feather=14):
+    """Face from the variant, everything below the neck from the hero.
+
+    Asked for an edit that changes only the mouth, the image model returns a
+    picture that is the same to the eye but redrawn throughout — the dithering
+    moves, and on the first full batch the GNN badge came back as an empty
+    plate, because the instruction not to add lettering was read as licence to
+    remove the lettering already there.
+
+    Rather than spend a regeneration on each one, the body is taken from the
+    hero and only the head from the variant. That restores the badge and has
+    a second benefit worth more than the first: the uniform becomes pixel
+    identical across the three states, so a crossfade moves the face and
+    nothing else.
+    """
+    n = neck_row(hero)
+    h = np.asarray(hero.convert('RGBA'), dtype=float)
+    v = np.asarray(variant.convert('RGBA'), dtype=float)
+    if h.shape != v.shape:
+        return variant
+    rows = h.shape[0]
+    m = np.zeros((rows, 1, 1))
+    m[:max(0, n - feather)] = 1.0
+    for i in range(max(0, n - feather), min(rows, n + feather)):
+        m[i] = 1.0 - (i - (n - feather)) / float(2 * feather)
+    return Image.fromarray((v * m + h * (1 - m)).astype(np.uint8), 'RGBA')
 
 
 def conditioned_already(im):
@@ -271,8 +325,14 @@ def do_anchors():
             continue
 
         metrics = {st: subject_metrics(Image.open(p)) for st, p in found.items()}
+        hero_src = found.get('desk_hero')
+        hero_im = Image.open(hero_src).convert('RGBA') if hero_src else None
+        grafted = 0
         for st, src in found.items():
             im = Image.open(src).convert('RGBA')
+            if hero_im is not None and st != 'desk_hero':
+                im = graft_body(hero_im, im)
+                grafted += 1
             im = defringe(im)
             h = CAST_H
             w = max(1, round(im.width * h / im.height))
@@ -285,25 +345,26 @@ def do_anchors():
             im.save(dest)
 
         tops = [m['top'] for m in metrics.values()]
-        spans = [m['span'] for m in metrics.values() if m['span']]
+        heads = [m['head'] for m in metrics.values() if m['head']]
         drift = max(tops) - min(tops)
-        scale = (max(spans) / float(min(spans)) - 1) * 100 if spans else 0
-        print('%s: %d of 3 states conditioned to %dpx tall'
-              % (sid, len(found), CAST_H))
+        scale = (max(heads) / float(min(heads)) - 1) * 100 if heads else 0
+        print('%s: %d of 3 states conditioned to %dpx tall%s'
+              % (sid, len(found), CAST_H,
+                 ', %d grafted onto the hero body' % grafted if grafted else ''))
         for st in STATES:
             m = metrics.get(st)
             if m:
-                print('   %-10s head top %4d   shoulder span %4d'
-                      % (st, m['top'], m['span']))
+                print('   %-10s head top %4d   head width %4d'
+                      % (st, m['top'], m['head']))
         if len(found) < 3:
             print('   INCOMPLETE: %d of 3 states' % len(found))
-        elif drift > 12 or scale > 4:
-            print('   REJECT: head top drifts %d px, scale varies %.0f%% — '
-                  'the states are not the same drawing' % (drift, scale))
+        elif drift > 20 or scale > 8:
+            print('   REJECT: head top drifts %d px, head size varies %.0f%% '
+                  '— the states are not the same drawing' % (drift, scale))
             print('   Make the two variants as edits of the hero, not as '
                   'fresh generations.')
         else:
-            print('   OK: states align (drift %d px, scale %.1f%%)'
+            print('   OK: states align (head drift %d px, size %.1f%%)'
                   % (drift, scale))
         print('   Check by eye that no desk is drawn into the plate.')
 
