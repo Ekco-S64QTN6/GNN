@@ -23,6 +23,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, 'assets', 'generated')
 MANIFEST = os.path.join(ROOT, 'assets', 'gfx-manifest.json')
 
+LANDSCAPE = '1792x1024'
+SQUARE = '1024x1024'
+
 STYLE = ('1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 '
          'aesthetic, chunky visible pixels as if drawn for a 320x200 DOS '
          'screen, painterly pixel dithering, hand-placed pixels, no '
@@ -34,12 +37,16 @@ STYLE = ('1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 '
 # of the costume; it is allowed only on the prompts that have a uniform in
 # them, because offering the exception to a landscape backdrop just invites
 # lettering into a picture that should have none.
-_NEG_BASE = ('no modern logos, no real-world brand names, no realistic human '
-             'faces, no anti-aliasing, no smooth gradients beyond 1993 VGA '
-             'dithering, no watermark, no signature, no 3D render, no airbrush')
-NEGATIVE = ('no captions, headlines, tickers, labels, letters, numbers or '
+#
+# Written as a list of things rather than a list of "no X", because these now
+# follow "Do not include:" rather than sitting in a negative-prompt field.
+_NEG_BASE = ('modern logos, real-world brand names, photorealistic faces or '
+             'photographic texture, anti-aliasing, smooth gradients beyond '
+             '1993 VGA dithering, watermarks, signatures, 3D renders, '
+             'airbrushed shading')
+NEGATIVE = ('captions, headlines, tickers, labels, letters, numbers or '
             'writing of any kind anywhere in the image, ' + _NEG_BASE)
-NEGATIVE_UNIFORM = ('no captions, headlines, tickers, labels or lettering '
+NEGATIVE_UNIFORM = ('captions, headlines, tickers, labels or lettering '
                     'anywhere other than the small GNN badge on the uniform, '
                     + _NEG_BASE)
 
@@ -245,17 +252,24 @@ def covered_by(items, pool, dirs=None, min_w=0):
     return out
 
 
-def prompt(subject, framing, palette, background, negative=None):
+def prompt(subject, framing, palette, background, negative=None,
+           size=LANDSCAPE, transparent=False):
+    """One self-contained block: everything the model needs, nothing else.
+
+    The size goes inside it. Stated anywhere else it is something the operator
+    has to remember to ask for separately, which is a step that gets skipped.
+    And "Negative prompt:" is Stable Diffusion syntax — a chat model reads it
+    as more description and cheerfully draws a watermark — so it is phrased as
+    the plain instruction it needs to be.
+    """
+    opening = 'Create a %s image%s.' % (
+        size, ' with a fully transparent background' if transparent else '')
     return (
-        '%s. %s. Framing: %s. Palette: %s. Background: %s.\n\n'
-        '**Negative prompt:** %s'
-        % (STYLE, subject, framing, PALETTES[palette], background,
+        '%s\n\n%s. %s. Framing: %s. Palette: %s. Background: %s.\n\n'
+        'Do not include: %s.'
+        % (opening, STYLE, subject, framing, PALETTES[palette], background,
            negative or NEGATIVE)
     )
-
-
-LANDSCAPE = '1792x1024'
-SQUARE = '1024x1024'
 
 
 def main():
@@ -265,11 +279,10 @@ def main():
     w = L.append
     count = [0]
 
-    def asset(fname, size, prompt_text, note=None):
-        """One asset: what to save it as, what size, and what to paste."""
+    def asset(fname, prompt_text, note=None):
+        """One asset: where it is saved, and the single block to paste."""
         w('#### `%s`\n' % fname)
-        w('<sub>%s &middot; save as `assets/generated/%s`</sub>\n'
-          % (size, fname))
+        w('Save the result as `assets/generated/%s`.\n' % fname)
         if note:
             w('%s\n' % note)
         w('```\n%s\n```\n' % prompt_text)
@@ -286,14 +299,16 @@ def main():
       'studio to put them in.\n' % (len(brolls), len(portraits)))
     w('---\n')
     w('## How to use this\n')
-    w('**Paste the fenced block. Nothing outside it.** Everything else on the '
-      'page is for you, not for the image model — filenames, sizes and the '
-      'occasional note about why an asset is the shape it is.\n')
-    w('**Use the size given under each filename.** Full-bleed plates are '
-      '`%s`, because the broadcast frame is %dx%d (%.2f:1) and a landscape '
-      'plate covers it without losing its sides. Cut-out characters and props '
-      'are `%s`, because they are subjects on transparency rather than '
-      'pictures of a frame.\n' % (LANDSCAPE, vw, vh, aspect, SQUARE))
+    w('**Copy the whole fenced block and paste it. That is the entire job.** '
+      'Each block already says what size to make the image, so there is '
+      'nothing to set up beforehand and nothing to remember. Everything '
+      'outside the block is for you — where to save the file, and the '
+      'occasional note.\n')
+    w('Two shapes are used. Rooms, backdrops and cutaways are `%s`, because '
+      'the broadcast frame is %dx%d (%.2f:1) and a wide plate covers it '
+      'without losing its sides. Characters and props are `%s`, because they '
+      'are subjects cut out on transparency rather than pictures of a frame.\n'
+      % (LANDSCAPE, vw, vh, aspect, SQUARE))
     w('**Nothing has to be the right pixel size or colour count** when it '
       'leaves the image model. `tools/condition_plates.py` fits every plate to '
       'the frame, removes the black fringe left on cut-out edges, hardens the '
@@ -320,7 +335,7 @@ def main():
         for pose, pose_desc, framing in POSES:
             fname = 'anchors/%s_%s.png' % (sid, pose)
             if pose == 'desk_hero':
-                asset(fname, SQUARE, prompt(
+                asset(fname, prompt(
                     'a %s, %s, wearing a GNN-badged broadcast uniform, %s. '
                     'Head, shoulders and chest only — no desk, no table, no '
                     'furniture, nothing beneath or in front of the figure'
@@ -328,13 +343,16 @@ def main():
                     framing, palette,
                     'fully transparent, subject cleanly cut out on empty '
                     'transparency with no backdrop, vignette or floor',
-                    negative=NEGATIVE_UNIFORM))
+                    negative=NEGATIVE_UNIFORM, size=SQUARE,
+                    transparent=True))
             else:
-                asset(fname, SQUARE,
-                      '%s. %s%s.\n\nKeep the transparent background. Add no '
-                      'text or lettering.'
-                      % (pose_desc, framing[0].upper(), framing[1:]),
-                      note='Upload `%s_desk_hero.png` and ask for this edit.'
+                asset(fname,
+                      '%s. %s%s.\n\nKeep the image exactly %s with the same '
+                      'fully transparent background. Add no text or '
+                      'lettering.'
+                      % (pose_desc, framing[0].upper(), framing[1:], SQUARE),
+                      note='**Upload `%s_desk_hero.png` first**, then paste '
+                           'this. It is an edit of that image, not a new one.'
                            % sid)
 
     w('## Newsroom Set\n')
@@ -345,11 +363,11 @@ def main():
       'the engine keys the exterior backdrop into. Nothing else in the room '
       'may be pure black.\n')
     for sid, subject, palette, framing, background in SET:
-        size = LANDSCAPE if sid == 'studio_wide_empty' else SQUARE
-        if sid == 'desk_oval_front':
-            size = LANDSCAPE
-        asset('set/%s.png' % sid, size,
-              prompt(subject, framing, palette, background))
+        wide = sid in ('studio_wide_empty', 'desk_oval_front')
+        asset('set/%s.png' % sid,
+              prompt(subject, framing, palette, background,
+                     size=LANDSCAPE if wide else SQUARE,
+                     transparent=sid != 'studio_wide_empty'))
 
     w('## News Desk Plates — superseded\n')
     w('`set/desk_oval_front.png` above is the desk. The earlier three-up and '
@@ -361,11 +379,13 @@ def main():
     w('The footage behind the anchor\'s shoulder. One plate per story '
       'category; the keywords are what routes a story to it.\n')
     for cid, subject, palette, keywords in CUTAWAYS:
-        asset('cutaways/%s.png' % cid, LANDSCAPE,
+        asset('cutaways/%s.png' % cid,
               prompt(subject, 'wide cutaway plate, full bleed to all four '
                      'edges, no border and no frame, the subject readable at '
-                     'a glance', palette, 'full-bleed scene, no transparency'),
-              note='*Routes from:* `%s`' % '`, `'.join(keywords))
+                     'a glance', palette, 'full-bleed scene, no transparency',
+                     size=LANDSCAPE),
+              note='Shown behind the anchor for stories about: `%s`.'
+                   % '`, `'.join(keywords))
 
     w('## Exterior Window Backdrops\n')
     w('What is seen through the window in the back wall. Four moods across '
@@ -375,12 +395,12 @@ def main():
       'of the edges.\n')
     for bid, subject, palette in BACKDROPS:
         for phase, light in DAY_CYCLE:
-            asset('backdrops/%s_%s.png' % (bid, phase), LANDSCAPE,
+            asset('backdrops/%s_%s.png' % (bid, phase),
                   prompt('%s, %s' % (subject, light),
                          'wide backdrop plate, full bleed, horizon in the '
                          'lower third, the subject centred and clear of the '
                          'edges', palette,
-                         'full-bleed scene, no transparency'))
+                         'full-bleed scene, no transparency', size=LANDSCAPE))
 
     w('---\n')
     w('**%d prompts.** Save each one to the path under its filename, then run '

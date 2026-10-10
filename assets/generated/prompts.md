@@ -6,9 +6,9 @@ Produced by `tools/prompt_bridge.py`. Each one is a gap the Master of Orion 1 ca
 
 ## How to use this
 
-**Paste the fenced block. Nothing outside it.** Everything else on the page is for you, not for the image model — filenames, sizes and the occasional note about why an asset is the shape it is.
+**Copy the whole fenced block and paste it. That is the entire job.** Each block already says what size to make the image, so there is nothing to set up beforehand and nothing to remember. Everything outside the block is for you — where to save the file, and the occasional note.
 
-**Use the size given under each filename.** Full-bleed plates are `1792x1024`, because the broadcast frame is 320x180 (1.78:1) and a landscape plate covers it without losing its sides. Cut-out characters and props are `1024x1024`, because they are subjects on transparency rather than pictures of a frame.
+Two shapes are used. Rooms, backdrops and cutaways are `1792x1024`, because the broadcast frame is 320x180 (1.78:1) and a wide plate covers it without losing its sides. Characters and props are `1024x1024`, because they are subjects cut out on transparency rather than pictures of a frame.
 
 **Nothing has to be the right pixel size or colour count** when it leaves the image model. `tools/condition_plates.py` fits every plate to the frame, removes the black fringe left on cut-out edges, hardens the alpha and cuts the palette to 256. Shape is the only thing you have to get right.
 
@@ -28,360 +28,380 @@ No desk in these: the desk is its own plate, and the anchors sit between the roo
 
 #### `anchors/bulrathi_desk_hero.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/bulrathi_desk_hero.png`</sub>
+Save the result as `assets/generated/anchors/bulrathi_desk_hero.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a Bulrathi, a large brown-furred bear-like alien, heavy brow, broad shoulders, wearing a GNN-badged broadcast uniform, upright and square to camera, shoulders level, looking straight down the lens, mouth closed, arms down and out of frame. Head, shoulders and chest only — no desk, no table, no furniture, nothing beneath or in front of the figure. Framing: head and shoulders, chest cropped at the bottom edge of the frame, the head occupying the upper middle. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: fully transparent, subject cleanly cut out on empty transparency with no backdrop, vignette or floor.
 
-**Negative prompt:** no captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `anchors/bulrathi_speaking.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/bulrathi_speaking.png`</sub>
+Save the result as `assets/generated/anchors/bulrathi_speaking.png`.
 
-Upload `bulrathi_desk_hero.png` and ask for this edit.
+**Upload `bulrathi_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 #### `anchors/bulrathi_listening.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/bulrathi_listening.png`</sub>
+Save the result as `assets/generated/anchors/bulrathi_listening.png`.
 
-Upload `bulrathi_desk_hero.png` and ask for this edit.
+**Upload `bulrathi_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 ### Psilon
 
 #### `anchors/psilon_desk_hero.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/psilon_desk_hero.png`</sub>
+Save the result as `assets/generated/anchors/psilon_desk_hero.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a Psilon, a slender grey-skinned alien with an enormous domed cranium and huge black eyes, wearing a GNN-badged broadcast uniform, upright and square to camera, shoulders level, looking straight down the lens, mouth closed, arms down and out of frame. Head, shoulders and chest only — no desk, no table, no furniture, nothing beneath or in front of the figure. Framing: head and shoulders, chest cropped at the bottom edge of the frame, the head occupying the upper middle. Palette: cyan and magenta on deep indigo, phosphor-green readouts. Background: fully transparent, subject cleanly cut out on empty transparency with no backdrop, vignette or floor.
 
-**Negative prompt:** no captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `anchors/psilon_speaking.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/psilon_speaking.png`</sub>
+Save the result as `assets/generated/anchors/psilon_speaking.png`.
 
-Upload `psilon_desk_hero.png` and ask for this edit.
+**Upload `psilon_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 #### `anchors/psilon_listening.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/psilon_listening.png`</sub>
+Save the result as `assets/generated/anchors/psilon_listening.png`.
 
-Upload `psilon_desk_hero.png` and ask for this edit.
+**Upload `psilon_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 ### Mrrshan
 
 #### `anchors/mrrshan_desk_hero.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/mrrshan_desk_hero.png`</sub>
+Save the result as `assets/generated/anchors/mrrshan_desk_hero.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a Mrrshan, a tawny feline alien with slit pupils, tufted ears and a short muzzle, wearing a GNN-badged broadcast uniform, upright and square to camera, shoulders level, looking straight down the lens, mouth closed, arms down and out of frame. Head, shoulders and chest only — no desk, no table, no furniture, nothing beneath or in front of the figure. Framing: head and shoulders, chest cropped at the bottom edge of the frame, the head occupying the upper middle. Palette: warm ambers and oxblood reds, brass highlights. Background: fully transparent, subject cleanly cut out on empty transparency with no backdrop, vignette or floor.
 
-**Negative prompt:** no captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `anchors/mrrshan_speaking.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/mrrshan_speaking.png`</sub>
+Save the result as `assets/generated/anchors/mrrshan_speaking.png`.
 
-Upload `mrrshan_desk_hero.png` and ask for this edit.
+**Upload `mrrshan_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 #### `anchors/mrrshan_listening.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/mrrshan_listening.png`</sub>
+Save the result as `assets/generated/anchors/mrrshan_listening.png`.
 
-Upload `mrrshan_desk_hero.png` and ask for this edit.
+**Upload `mrrshan_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 ### Meklar
 
 #### `anchors/meklar_desk_hero.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/meklar_desk_hero.png`</sub>
+Save the result as `assets/generated/anchors/meklar_desk_hero.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a Meklar, a cyborg with a segmented metal faceplate, exposed cabling and a single glowing optical band, wearing a GNN-badged broadcast uniform, upright and square to camera, shoulders level, looking straight down the lens, mouth closed, arms down and out of frame. Head, shoulders and chest only — no desk, no table, no furniture, nothing beneath or in front of the figure. Framing: head and shoulders, chest cropped at the bottom edge of the frame, the head occupying the upper middle. Palette: rust orange and iron grey, sodium-lamp yellow. Background: fully transparent, subject cleanly cut out on empty transparency with no backdrop, vignette or floor.
 
-**Negative prompt:** no captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `anchors/meklar_speaking.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/meklar_speaking.png`</sub>
+Save the result as `assets/generated/anchors/meklar_speaking.png`.
 
-Upload `meklar_desk_hero.png` and ask for this edit.
+**Upload `meklar_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 #### `anchors/meklar_listening.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/meklar_listening.png`</sub>
+Save the result as `assets/generated/anchors/meklar_listening.png`.
 
-Upload `meklar_desk_hero.png` and ask for this edit.
+**Upload `meklar_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 ### Sakkra
 
 #### `anchors/sakkra_desk_hero.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/sakkra_desk_hero.png`</sub>
+Save the result as `assets/generated/anchors/sakkra_desk_hero.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a Sakkra, a green reptilian alien with a crested skull and vertical slit pupils, wearing a GNN-badged broadcast uniform, upright and square to camera, shoulders level, looking straight down the lens, mouth closed, arms down and out of frame. Head, shoulders and chest only — no desk, no table, no furniture, nothing beneath or in front of the figure. Framing: head and shoulders, chest cropped at the bottom edge of the frame, the head occupying the upper middle. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: fully transparent, subject cleanly cut out on empty transparency with no backdrop, vignette or floor.
 
-**Negative prompt:** no captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `anchors/sakkra_speaking.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/sakkra_speaking.png`</sub>
+Save the result as `assets/generated/anchors/sakkra_speaking.png`.
 
-Upload `sakkra_desk_hero.png` and ask for this edit.
+**Upload `sakkra_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 #### `anchors/sakkra_listening.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/sakkra_listening.png`</sub>
+Save the result as `assets/generated/anchors/sakkra_listening.png`.
 
-Upload `sakkra_desk_hero.png` and ask for this edit.
+**Upload `sakkra_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 ### Alkari
 
 #### `anchors/alkari_desk_hero.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/alkari_desk_hero.png`</sub>
+Save the result as `assets/generated/anchors/alkari_desk_hero.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a Alkari, an avian alien with a hooked beak, crest feathers and bright round eyes, wearing a GNN-badged broadcast uniform, upright and square to camera, shoulders level, looking straight down the lens, mouth closed, arms down and out of frame. Head, shoulders and chest only — no desk, no table, no furniture, nothing beneath or in front of the figure. Framing: head and shoulders, chest cropped at the bottom edge of the frame, the head occupying the upper middle. Palette: muted teal and bone white, warning-stripe yellow. Background: fully transparent, subject cleanly cut out on empty transparency with no backdrop, vignette or floor.
 
-**Negative prompt:** no captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `anchors/alkari_speaking.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/alkari_speaking.png`</sub>
+Save the result as `assets/generated/anchors/alkari_speaking.png`.
 
-Upload `alkari_desk_hero.png` and ask for this edit.
+**Upload `alkari_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 #### `anchors/alkari_listening.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/alkari_listening.png`</sub>
+Save the result as `assets/generated/anchors/alkari_listening.png`.
 
-Upload `alkari_desk_hero.png` and ask for this edit.
+**Upload `alkari_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 ### Darlok
 
 #### `anchors/darlok_desk_hero.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/darlok_desk_hero.png`</sub>
+Save the result as `assets/generated/anchors/darlok_desk_hero.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a Darlok, a hooded shadow-shrouded figure whose face is an indistinct darkness with two faint red points, wearing a GNN-badged broadcast uniform, upright and square to camera, shoulders level, looking straight down the lens, mouth closed, arms down and out of frame. Head, shoulders and chest only — no desk, no table, no furniture, nothing beneath or in front of the figure. Framing: head and shoulders, chest cropped at the bottom edge of the frame, the head occupying the upper middle. Palette: deep violet and ultraviolet white, bruised purple shadows. Background: fully transparent, subject cleanly cut out on empty transparency with no backdrop, vignette or floor.
 
-**Negative prompt:** no captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `anchors/darlok_speaking.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/darlok_speaking.png`</sub>
+Save the result as `assets/generated/anchors/darlok_speaking.png`.
 
-Upload `darlok_desk_hero.png` and ask for this edit.
+**Upload `darlok_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 #### `anchors/darlok_listening.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/darlok_listening.png`</sub>
+Save the result as `assets/generated/anchors/darlok_listening.png`.
 
-Upload `darlok_desk_hero.png` and ask for this edit.
+**Upload `darlok_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 ### Silicoid
 
 #### `anchors/silicoid_desk_hero.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/silicoid_desk_hero.png`</sub>
+Save the result as `assets/generated/anchors/silicoid_desk_hero.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a Silicoid, a crystalline rock-bodied being with faceted mineral plates and glowing seams, wearing a GNN-badged broadcast uniform, upright and square to camera, shoulders level, looking straight down the lens, mouth closed, arms down and out of frame. Head, shoulders and chest only — no desk, no table, no furniture, nothing beneath or in front of the figure. Framing: head and shoulders, chest cropped at the bottom edge of the frame, the head occupying the upper middle. Palette: rust orange and iron grey, sodium-lamp yellow. Background: fully transparent, subject cleanly cut out on empty transparency with no backdrop, vignette or floor.
 
-**Negative prompt:** no captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `anchors/silicoid_speaking.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/silicoid_speaking.png`</sub>
+Save the result as `assets/generated/anchors/silicoid_speaking.png`.
 
-Upload `silicoid_desk_hero.png` and ask for this edit.
+**Upload `silicoid_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 #### `anchors/silicoid_listening.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/silicoid_listening.png`</sub>
+Save the result as `assets/generated/anchors/silicoid_listening.png`.
 
-Upload `silicoid_desk_hero.png` and ask for this edit.
+**Upload `silicoid_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 ### Klackon
 
 #### `anchors/klackon_desk_hero.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/klackon_desk_hero.png`</sub>
+Save the result as `assets/generated/anchors/klackon_desk_hero.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a Klackon, an insectoid alien with chitinous plating, mandibles and compound eyes, wearing a GNN-badged broadcast uniform, upright and square to camera, shoulders level, looking straight down the lens, mouth closed, arms down and out of frame. Head, shoulders and chest only — no desk, no table, no furniture, nothing beneath or in front of the figure. Framing: head and shoulders, chest cropped at the bottom edge of the frame, the head occupying the upper middle. Palette: rust orange and iron grey, sodium-lamp yellow. Background: fully transparent, subject cleanly cut out on empty transparency with no backdrop, vignette or floor.
 
-**Negative prompt:** no captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `anchors/klackon_speaking.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/klackon_speaking.png`</sub>
+Save the result as `assets/generated/anchors/klackon_speaking.png`.
 
-Upload `klackon_desk_hero.png` and ask for this edit.
+**Upload `klackon_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 #### `anchors/klackon_listening.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/klackon_listening.png`</sub>
+Save the result as `assets/generated/anchors/klackon_listening.png`.
 
-Upload `klackon_desk_hero.png` and ask for this edit.
+**Upload `klackon_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 ### Human Commander
 
 #### `anchors/human_desk_hero.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/human_desk_hero.png`</sub>
+Save the result as `assets/generated/anchors/human_desk_hero.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a Human Commander, a grey-haired human officer in a high-collar uniform, lined face, calm expression, wearing a GNN-badged broadcast uniform, upright and square to camera, shoulders level, looking straight down the lens, mouth closed, arms down and out of frame. Head, shoulders and chest only — no desk, no table, no furniture, nothing beneath or in front of the figure. Framing: head and shoulders, chest cropped at the bottom edge of the frame, the head occupying the upper middle. Palette: warm ambers and oxblood reds, brass highlights. Background: fully transparent, subject cleanly cut out on empty transparency with no backdrop, vignette or floor.
 
-**Negative prompt:** no captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels or lettering anywhere other than the small GNN badge on the uniform, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `anchors/human_speaking.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/human_speaking.png`</sub>
+Save the result as `assets/generated/anchors/human_speaking.png`.
 
-Upload `human_desk_hero.png` and ask for this edit.
+**Upload `human_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: open the mouth as if mid-word. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 #### `anchors/human_listening.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/anchors/human_listening.png`</sub>
+Save the result as `assets/generated/anchors/human_listening.png`.
 
-Upload `human_desk_hero.png` and ask for this edit.
+**Upload `human_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
 EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
 
-Keep the transparent background. Add no text or lettering.
+Keep the image exactly 1024x1024 with the same fully transparent background. Add no text or lettering.
 ```
 
 ## Newsroom Set
@@ -392,42 +412,50 @@ The window in the back wall must be **flat pure black** — that is what the eng
 
 #### `set/studio_wide_empty.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/set/studio_wide_empty.png`</sub>
+Save the result as `assets/generated/set/studio_wide_empty.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. the interior of a starship television studio: bevelled hull wall panels, a large octagonal viewport dominating the centre of the back wall, angled instrument consoles built into the side walls with rows of lit indicator buttons, a raised circular floor dais with an inlaid trim ring. No desk, no furniture in the centre, no figures. Framing: wide empty set plate, the window centred on the back wall, floor occupying the lower third, the centre of the room completely empty. Palette: muted teal and bone white, warning-stripe yellow. Background: the window opening is a flat area of pure black, showing nothing at all — no stars, no planet, no light.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `set/desk_oval_front.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/set/desk_oval_front.png`</sub>
+Save the result as `assets/generated/set/desk_oval_front.png`.
 
 ```
+Create a 1792x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. an oval television news desk seen straight on, brushed metal top, curved front panel with a lit strip running around it and a blank recessed plate in the centre for a station emblem. The desk only, nothing behind it. Framing: foreground layer, the desk filling the lower half of the frame, drawn as it would be seen from a camera at seated eye level. Palette: muted teal and bone white, warning-stripe yellow. Background: transparent background, the desk cleanly cut out.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `set/console_left.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/set/console_left.png`</sub>
+Save the result as `assets/generated/set/console_left.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. an angled wall-mounted instrument console with rows of small lit square indicator buttons and two small readout screens, seen from its right. Framing: single prop plate, the console filling the frame. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: transparent background, cleanly cut out.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `set/console_right.png`
 
-<sub>1024x1024 &middot; save as `assets/generated/set/console_right.png`</sub>
+Save the result as `assets/generated/set/console_right.png`.
 
 ```
+Create a 1024x1024 image with a fully transparent background.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. an angled wall-mounted instrument console with rows of small lit square indicator buttons and two small readout screens, seen from its left. Framing: single prop plate, the console filling the frame. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: transparent background, cleanly cut out.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 ## News Desk Plates — superseded
@@ -440,146 +468,170 @@ The footage behind the anchor's shoulder. One plate per story category; the keyw
 
 #### `cutaways/starship_battle.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/starship_battle.png`</sub>
+Save the result as `assets/generated/cutaways/starship_battle.png`.
 
-*Routes from:* `fleet`, `war`, `invasion`, `attack`
+Shown behind the anchor for stories about: `fleet`, `war`, `invasion`, `attack`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. two capital starships exchanging beam fire across open space, hull plating glowing where it is struck, debris tumbling. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `cutaways/space_vortex.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/space_vortex.png`</sub>
+Save the result as `assets/generated/cutaways/space_vortex.png`.
 
-*Routes from:* `physics`, `quantum`, `anomaly`, `wormhole`
+Shown behind the anchor for stories about: `physics`, `quantum`, `anomaly`, `wormhole`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a swirling gravitational vortex tearing a hole in a starfield, light bending around its rim. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: deep violet and ultraviolet white, bruised purple shadows. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `cutaways/planet_invasion.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/planet_invasion.png`</sub>
+Save the result as `assets/generated/cutaways/planet_invasion.png`.
 
-*Routes from:* `invasion`, `troops`, `siege`
+Shown behind the anchor for stories about: `invasion`, `troops`, `siege`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. drop-pods streaking down through a planet atmosphere toward a defended colony, flak bursts around them. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `cutaways/hacker_code.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/hacker_code.png`</sub>
+Save the result as `assets/generated/cutaways/hacker_code.png`.
 
-*Routes from:* `hack`, `cyber`, `breach`, `malware`
+Shown behind the anchor for stories about: `hack`, `cyber`, `breach`, `malware`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a dim terminal room, cascading columns of alien glyphs on a wall of screens, one operator silhouetted. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: cyan and magenta on deep indigo, phosphor-green readouts. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `cutaways/council_vote.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/council_vote.png`</sub>
+Save the result as `assets/generated/cutaways/council_vote.png`.
 
-*Routes from:* `vote`, `council`, `senate`, `legislation`
+Shown behind the anchor for stories about: `vote`, `council`, `senate`, `legislation`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a tiered alien council chamber mid-vote, delegates of several species raising voting tokens. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: warm ambers and oxblood reds, brass highlights. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `cutaways/asteroid_mining.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/asteroid_mining.png`</sub>
+Save the result as `assets/generated/cutaways/asteroid_mining.png`.
 
-*Routes from:* `mining`, `minerals`, `resources`
+Shown behind the anchor for stories about: `mining`, `minerals`, `resources`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. mining rigs clamped to a tumbling asteroid, ore conveyors and floodlights against black space. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: rust orange and iron grey, sodium-lamp yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `cutaways/virus_outbreak.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/virus_outbreak.png`</sub>
+Save the result as `assets/generated/cutaways/virus_outbreak.png`.
 
-*Routes from:* `plague`, `virus`, `outbreak`, `disease`
+Shown behind the anchor for stories about: `plague`, `virus`, `outbreak`, `disease`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a quarantined colony dome interior, figures in sealed suits under harsh amber warning light. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: cyan and magenta on deep indigo, phosphor-green readouts. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `cutaways/station_trade.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/station_trade.png`</sub>
+Save the result as `assets/generated/cutaways/station_trade.png`.
 
-*Routes from:* `trade`, `cargo`, `economy`, `shipping`
+Shown behind the anchor for stories about: `trade`, `cargo`, `economy`, `shipping`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a busy orbital trade station with freighters docked at radial arms, cargo moving along lit gantries. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: muted teal and bone white, warning-stripe yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `cutaways/solar_flare.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/solar_flare.png`</sub>
+Save the result as `assets/generated/cutaways/solar_flare.png`.
 
-*Routes from:* `solar`, `flare`, `star`, `radiation`
+Shown behind the anchor for stories about: `solar`, `flare`, `star`, `radiation`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. an enormous solar prominence arcing off a star, a small silhouetted station in the foreground. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: deep violet and ultraviolet white, bruised purple shadows. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `cutaways/black_hole.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/black_hole.png`</sub>
+Save the result as `assets/generated/cutaways/black_hole.png`.
 
-*Routes from:* `black hole`, `gravity`, `singularity`
+Shown behind the anchor for stories about: `black hole`, `gravity`, `singularity`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. an accretion disc around a black hole, light smeared into a ring, a survey probe dwarfed beside it. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: deep violet and ultraviolet white, bruised purple shadows. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `cutaways/spy_infiltration.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/spy_infiltration.png`</sub>
+Save the result as `assets/generated/cutaways/spy_infiltration.png`.
 
-*Routes from:* `spy`, `espionage`, `infiltration`, `sabotage`
+Shown behind the anchor for stories about: `spy`, `espionage`, `infiltration`, `sabotage`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a cloaked figure slipping through a sealed bulkhead door into a lit corridor, alarm strip glowing. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `cutaways/council_summit.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/cutaways/council_summit.png`</sub>
+Save the result as `assets/generated/cutaways/council_summit.png`.
 
-*Routes from:* `treaty`, `summit`, `accord`, `diplomacy`
+Shown behind the anchor for stories about: `treaty`, `summit`, `accord`, `diplomacy`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a formal summit table with ambassadors of several alien species seated opposite one another, banners behind. Framing: wide cutaway plate, full bleed to all four edges, no border and no frame, the subject readable at a glance. Palette: warm ambers and oxblood reds, brass highlights. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 ## Exterior Window Backdrops
@@ -588,162 +640,194 @@ What is seen through the window in the back wall. Four moods across four times o
 
 #### `backdrops/earth_globe_dawn.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/earth_globe_dawn.png`</sub>
+Save the result as `assets/generated/backdrops/earth_globe_dawn.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a blue-green homeworld seen from high orbit through a wide studio window, terminator line crossing it, low warm light raking across the scene, long shadows. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: muted teal and bone white, warning-stripe yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/earth_globe_day.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/earth_globe_day.png`</sub>
+Save the result as `assets/generated/backdrops/earth_globe_day.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a blue-green homeworld seen from high orbit through a wide studio window, terminator line crossing it, flat bright illumination, crisp detail, pale sky. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: muted teal and bone white, warning-stripe yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/earth_globe_dusk.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/earth_globe_dusk.png`</sub>
+Save the result as `assets/generated/backdrops/earth_globe_dusk.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a blue-green homeworld seen from high orbit through a wide studio window, terminator line crossing it, deep orange and violet sky, rim-lit edges. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: muted teal and bone white, warning-stripe yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/earth_globe_night.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/earth_globe_night.png`</sub>
+Save the result as `assets/generated/backdrops/earth_globe_night.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a blue-green homeworld seen from high orbit through a wide studio window, terminator line crossing it, near-black with artificial lights and starfield dominant. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: muted teal and bone white, warning-stripe yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/asteroid_field_dawn.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/asteroid_field_dawn.png`</sub>
+Save the result as `assets/generated/backdrops/asteroid_field_dawn.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a working asteroid mining field seen through a studio window, rigs and running lights among tumbling rock, low warm light raking across the scene, long shadows. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: rust orange and iron grey, sodium-lamp yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/asteroid_field_day.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/asteroid_field_day.png`</sub>
+Save the result as `assets/generated/backdrops/asteroid_field_day.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a working asteroid mining field seen through a studio window, rigs and running lights among tumbling rock, flat bright illumination, crisp detail, pale sky. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: rust orange and iron grey, sodium-lamp yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/asteroid_field_dusk.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/asteroid_field_dusk.png`</sub>
+Save the result as `assets/generated/backdrops/asteroid_field_dusk.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a working asteroid mining field seen through a studio window, rigs and running lights among tumbling rock, deep orange and violet sky, rim-lit edges. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: rust orange and iron grey, sodium-lamp yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/asteroid_field_night.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/asteroid_field_night.png`</sub>
+Save the result as `assets/generated/backdrops/asteroid_field_night.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a working asteroid mining field seen through a studio window, rigs and running lights among tumbling rock, near-black with artificial lights and starfield dominant. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: rust orange and iron grey, sodium-lamp yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/colony_domes_dawn.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/colony_domes_dawn.png`</sub>
+Save the result as `assets/generated/backdrops/colony_domes_dawn.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a colony of geodesic domes on a dusty plain seen through a studio window, distant ridgeline beyond, low warm light raking across the scene, long shadows. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: muted teal and bone white, warning-stripe yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/colony_domes_day.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/colony_domes_day.png`</sub>
+Save the result as `assets/generated/backdrops/colony_domes_day.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a colony of geodesic domes on a dusty plain seen through a studio window, distant ridgeline beyond, flat bright illumination, crisp detail, pale sky. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: muted teal and bone white, warning-stripe yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/colony_domes_dusk.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/colony_domes_dusk.png`</sub>
+Save the result as `assets/generated/backdrops/colony_domes_dusk.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a colony of geodesic domes on a dusty plain seen through a studio window, distant ridgeline beyond, deep orange and violet sky, rim-lit edges. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: muted teal and bone white, warning-stripe yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/colony_domes_night.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/colony_domes_night.png`</sub>
+Save the result as `assets/generated/backdrops/colony_domes_night.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a colony of geodesic domes on a dusty plain seen through a studio window, distant ridgeline beyond, near-black with artificial lights and starfield dominant. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: muted teal and bone white, warning-stripe yellow. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/orion_shipyard_dawn.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/orion_shipyard_dawn.png`</sub>
+Save the result as `assets/generated/backdrops/orion_shipyard_dawn.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. an orbital shipyard with a half-built capital ship in its scaffold, work lights and tugs around it, low warm light raking across the scene, long shadows. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/orion_shipyard_day.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/orion_shipyard_day.png`</sub>
+Save the result as `assets/generated/backdrops/orion_shipyard_day.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. an orbital shipyard with a half-built capital ship in its scaffold, work lights and tugs around it, flat bright illumination, crisp detail, pale sky. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/orion_shipyard_dusk.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/orion_shipyard_dusk.png`</sub>
+Save the result as `assets/generated/backdrops/orion_shipyard_dusk.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. an orbital shipyard with a half-built capital ship in its scaffold, work lights and tugs around it, deep orange and violet sky, rim-lit edges. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `backdrops/orion_shipyard_night.png`
 
-<sub>1792x1024 &middot; save as `assets/generated/backdrops/orion_shipyard_night.png`</sub>
+Save the result as `assets/generated/backdrops/orion_shipyard_night.png`.
 
 ```
+Create a 1792x1024 image.
+
 1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. an orbital shipyard with a half-built capital ship in its scaffold, work lights and tugs around it, near-black with artificial lights and starfield dominant. Framing: wide backdrop plate, full bleed, horizon in the lower third, the subject centred and clear of the edges. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: full-bleed scene, no transparency.
 
-**Negative prompt:** no captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no watermark, no signature, no 3D render, no airbrush
+Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 ---
