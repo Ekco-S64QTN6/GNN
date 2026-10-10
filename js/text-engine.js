@@ -7,19 +7,29 @@
    target duration, and it types that line out so the last
    character lands as the anchor stops speaking.
 
-   It also renders the lower-third chyron and the "on air"
-   readout under the console, and it can hold a line on screen
-   during a pause instead of instantly clearing.
+   It also renders the lower-third chyron and the story panel,
+   and it can hold a line on screen during a pause instead of
+   instantly clearing.
+
+   The story panel used to be a black box bolted under the
+   console, outside the picture. It is now a caption over the
+   broadcast, where a channel puts it.
    ============================================================ */
 
 const GNNTextEngine = (() => {
     'use strict';
 
-    // Console readout box (canvas pixels, 3x of the 320x200 original).
-    const BOX = { x: 114, y: 435, w: 735, h: 135 };
-    const PADDING = 14;
-    const LINE_HEIGHT = 26;
-    const FONT_SIZE = 15;
+    // The story caption, as a fraction of the frame so it survives a change
+    // of resolution. Sits over the lower left of the set, clear of the name
+    // card, chyron and ticker stacked beneath it.
+    const PANEL = { x: 0.030, y: 0.515, w: 0.455, h: 0.215 };
+    let BOX = { x: 0, y: 0, w: 0, h: 0 };
+
+    // Type sizes scale with the frame too; at 1280x720 these land close to
+    // where they were tuned.
+    let PADDING = 14;
+    let LINE_HEIGHT = 26;
+    let FONT_SIZE = 15;
     const MIN_CHAR_MS = 14;
     const MAX_CHAR_MS = 110;
 
@@ -114,18 +124,39 @@ const GNNTextEngine = (() => {
     // Rendering
     // ---------------------------------------------------------
 
+    /** Resolve the caption's pixel rect against the canvas it is drawn on. */
+    function layout(ctx) {
+        const w = ctx.canvas.width;
+        const h = ctx.canvas.height;
+        BOX = {
+            x: Math.round(PANEL.x * w), y: Math.round(PANEL.y * h),
+            w: Math.round(PANEL.w * w), h: Math.round(PANEL.h * h),
+        };
+        const k = h / 720;
+        PADDING = Math.max(8, Math.round(14 * k));
+        LINE_HEIGHT = Math.max(14, Math.round(26 * k));
+        FONT_SIZE = Math.max(9, Math.round(15 * k));
+    }
+
     function render(ctx, now) {
+        layout(ctx);
         ctx.save();
         ctx.imageSmoothingEnabled = false;
 
-        ctx.fillStyle = '#000000';
+        // A caption over the picture, not a hole cut in it: translucent so
+        // the set reads through, with a station-coloured spine down the left
+        // so it still reads as broadcast furniture.
+        if (!fullText && !cue) { ctx.restore(); return; }
+        ctx.fillStyle = 'rgba(4,12,20,0.82)';
         ctx.fillRect(BOX.x, BOX.y, BOX.w, BOX.h);
+        ctx.fillStyle = kind === 'breaking' ? '#ff3b3b' : '#1f7fa8';
+        ctx.fillRect(BOX.x, BOX.y, Math.max(3, Math.round(BOX.w * 0.008)), BOX.h);
 
         if (cue) {
-            ctx.font = '9px "Press Start 2P", monospace';
+            ctx.font = `${Math.max(7, Math.round(FONT_SIZE * 0.6))}px "Press Start 2P", monospace`;
             ctx.textBaseline = 'top';
             ctx.fillStyle = '#4d7f96';
-            ctx.fillText(cue, BOX.x + PADDING, BOX.y + 6);
+            ctx.fillText(cue, BOX.x + PADDING, BOX.y + Math.round(PADDING * 0.45));
         }
 
         if (fullText && visible > 0) {
@@ -135,8 +166,10 @@ const GNNTextEngine = (() => {
 
             const shown = fullText.substring(0, visible);
             const wrapped = wrap(ctx, shown, BOX.w - PADDING * 2);
-            const top = BOX.y + (cue ? 24 : PADDING);
-            const maxLines = Math.floor((BOX.h - (cue ? 30 : PADDING * 2)) / LINE_HEIGHT);
+            const lead = Math.round(LINE_HEIGHT * 0.92);
+            const top = BOX.y + (cue ? lead : PADDING);
+            const maxLines = Math.floor(
+                (BOX.h - (cue ? lead + PADDING : PADDING * 2)) / LINE_HEIGHT);
             const start = Math.max(0, wrapped.length - maxLines);
             for (let i = start; i < wrapped.length; i++) {
                 ctx.fillText(wrapped[i], BOX.x + PADDING, top + (i - start) * LINE_HEIGHT);
@@ -151,7 +184,7 @@ const GNNTextEngine = (() => {
         } else if (holding || !fullText) {
             blinkAnchor = blinkAnchor || now;
             if (Math.floor(now / 520) % 2 === 0) {
-                ctx.font = '11px "Press Start 2P", monospace';
+                ctx.font = `${Math.max(8, Math.round(FONT_SIZE * 0.75))}px "Press Start 2P", monospace`;
                 ctx.fillStyle = '#264a5c';
                 ctx.textBaseline = 'top';
                 ctx.fillText('▌', BOX.x + PADDING, BOX.y + PADDING);

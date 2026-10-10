@@ -7,31 +7,48 @@
    ghost it as one signal — the way a failing CRT would — rather
    than as a per-element effect.
 
-   Layer stack:
-     1  studio frame (background_tv.png)
-     2  anchor                       ] drawn into the
-     3  holographic globe            ] viewport buffer,
-     4  over-the-shoulder icon plate ] then post-processed
-     5  cutaway / commercial break   ] and blitted as one
-     6  chyron lower third           ]
-     7  commodity ticker             ]
-     8  alert border + glitch artefacts
-     9  console readout (outside the monitor)
+   The window is the television. There is no set around the picture
+   and no picture inside a set: the broadcast fills the whole frame
+   the way a channel does, and everything else is chrome composited
+   over it.
+
+   Layer stack, all of it inside the one viewport:
+     1  set plate (the newsroom) or the MOO1 scene as a fallback
+     2  anchor
+     3  holographic globe
+     4  over-the-shoulder icon plate
+     5  cutaway / commercial break
+     6  prompter / chyron lower third
+     7  name card, LIVE clock, ON AIR
+     8  commodity ticker
+     9  alert border + glitch artefacts
+
+   The viewport is the canvas, so the post-process still treats the
+   signal as one image — a failing channel rolls and tears whole,
+   not per element.
    ============================================================ */
 
 const GNNRenderer = (() => {
     'use strict';
 
-    const SCALE = 3;
-    const CANVAS_W = 320 * SCALE;
-    const CANVAS_H = 200 * SCALE;
+    // 320x180 is 16:9 at the horizontal pixel density of the source
+    // material, which was 320x200. Scaling by an integer keeps every
+    // source pixel square and whole; the canvas is then letterboxed to
+    // the window by CSS rather than resampled here.
+    const SCALE = 4;
+    const BASE_W = 320;
+    const BASE_H = 180;
+    const CANVAS_W = BASE_W * SCALE;
+    const CANVAS_H = BASE_H * SCALE;
 
-    // The lit area of the studio monitor, measured off background_tv.png.
-    const VIEW = { x: 42, y: 42, w: 876, h: 316 };
+    // The picture is the whole canvas now.
+    const VIEW = { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H };
 
-    const ANCHOR = { x: 42, y: 42, w: 876, h: 315 };
-    const GLOBE = { x: 228, y: 108, w: 147, h: 126 };
-    const ICON = { x: 624, y: 114, w: 123, h: 111 };
+    // Everything below is in viewport-local space, as a fraction of the
+    // frame, so the layout survives a change of resolution.
+    const ANCHOR = { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H };
+    const GLOBE = { x: 0.07, y: 0.12, w: 0.17, h: 0.26 };
+    const ICON = { x: 0.68, y: 0.11, w: 0.24, h: 0.30 };
 
     let canvas = null;
     let ctx = null;
@@ -39,6 +56,7 @@ const GNNRenderer = (() => {
     let vctx = null;
 
     let bgImage = null;
+    let setPlate = null;
     let anchorFrames = [];
     let globeFrames = [];
 
@@ -53,6 +71,10 @@ const GNNRenderer = (() => {
         vctx = vcanvas.getContext('2d');
         vctx.imageSmoothingEnabled = false;
 
+        // The newsroom set, when it has been generated. Without it the
+        // MOO1 newscast scene stands in: it is a complete picture rather
+        // than a set, so it is cover-fitted and the anchors ride on it.
+        setPlate = assets.set || null;
         bgImage = assets.bg;
         anchorFrames = assets.anchors || [];
         globeFrames = assets.globes || [];
@@ -62,6 +84,18 @@ const GNNRenderer = (() => {
     // Viewport contents
     // ---------------------------------------------------------
 
+    /**
+     * Draw `img` so it covers the frame completely, cropping the overflow
+     * rather than stretching. Source art is 2.77:1 while the frame is 16:9,
+     * and stretching a 1993 pixel grid to fit is immediately visible.
+     */
+    function drawCover(c, img, w, h) {
+        const scale = Math.max(w / img.width, h / img.height);
+        const dw = img.width * scale;
+        const dh = img.height * scale;
+        c.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    }
+
     function drawViewport(now, frames, icon) {
         const c = vctx;
         c.imageSmoothingEnabled = false;
@@ -70,12 +104,14 @@ const GNNRenderer = (() => {
         const breakActive = GNNCutsceneManager.isBreakActive();
 
         if (!breakActive) {
+            if (setPlate) drawCover(c, setPlate, VIEW.w, VIEW.h);
             if (anchorFrames[frames.anchor]) {
-                c.drawImage(anchorFrames[frames.anchor], 0, 0, ANCHOR.w, ANCHOR.h);
+                drawCover(c, anchorFrames[frames.anchor], ANCHOR.w, ANCHOR.h);
             }
             if (globeFrames[frames.globe]) {
                 c.drawImage(globeFrames[frames.globe],
-                    GLOBE.x - VIEW.x, GLOBE.y - VIEW.y, GLOBE.w, GLOBE.h);
+                    GLOBE.x * VIEW.w, GLOBE.y * VIEW.h,
+                    GLOBE.w * VIEW.w, GLOBE.h * VIEW.h);
             }
             if (icon && !GNNCutsceneManager.isCutawayActive()) {
                 drawIconPlate(c, icon);
@@ -92,15 +128,17 @@ const GNNRenderer = (() => {
     }
 
     function drawIconPlate(c, icon) {
-        const x = ICON.x - VIEW.x;
-        const y = ICON.y - VIEW.y;
+        const x = ICON.x * VIEW.w;
+        const y = ICON.y * VIEW.h;
+        const iw = ICON.w * VIEW.w;
+        const ih = ICON.h * VIEW.h;
         c.save();
         c.fillStyle = 'rgba(2,8,14,0.55)';
-        c.fillRect(x - 5, y - 5, ICON.w + 10, ICON.h + 10);
+        c.fillRect(x - 5, y - 5, iw + 10, ih + 10);
         c.strokeStyle = '#2f7f9c';
         c.lineWidth = 2;
-        c.strokeRect(x - 5, y - 5, ICON.w + 10, ICON.h + 10);
-        c.drawImage(icon, x, y, ICON.w, ICON.h);
+        c.strokeRect(x - 5, y - 5, iw + 10, ih + 10);
+        c.drawImage(icon, x, y, iw, ih);
         c.restore();
     }
 
@@ -223,8 +261,8 @@ const GNNRenderer = (() => {
         try {
             ctx.imageSmoothingEnabled = false;
 
-            if (bgImage) ctx.drawImage(bgImage, 0, 0, CANVAS_W, CANVAS_H);
-            else { ctx.fillStyle = '#080c14'; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H); }
+            ctx.fillStyle = '#05080e';
+            ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
             drawViewport(now, frames, icon);
             blitViewport(now);
@@ -244,6 +282,6 @@ const GNNRenderer = (() => {
 
     return {
         init, renderFrame, getContext,
-        VIEW, CANVAS_W, CANVAS_H, SCALE,
+        VIEW, CANVAS_W, CANVAS_H, SCALE, BASE_W, BASE_H,
     };
 })();

@@ -58,6 +58,12 @@
         statusText.textContent = 'Loading studio plates…';
         const bg = await GNNAssets.loadImage(`${ASSET_DIR}/background_tv.png`);
 
+        // The generated newsroom, if it has been made. Optional on purpose:
+        // the station still goes to air on the MOO1 scene alone, so a missing
+        // plate is a look, not a failure.
+        const set = await GNNAssets.loadImage(
+            `${ASSET_DIR}/generated/set/studio_wide_empty.png`);
+
         // In parallel: fifty sequential awaits is fifty serial round trips.
         const nums = [];
         for (let i = 1; i <= TOTAL_FRAMES; i++) nums.push(String(i).padStart(3, '0'));
@@ -75,7 +81,7 @@
                 `${s.sfx} effects · ${s.music} music beds · ${s.bulletins} archive bulletins`;
         }
         statusText.textContent = 'Studio ready';
-        return { bg, anchors: anchors.filter(Boolean), globes: globes.filter(Boolean) };
+        return { bg, set, anchors: anchors.filter(Boolean), globes: globes.filter(Boolean) };
     }
 
     // =========================================================
@@ -325,7 +331,26 @@
     // Boot
     // =========================================================
 
+    /**
+     * Fade the controls out when the pointer stops. Watching a channel should
+     * not mean looking at a toolbar; it comes back the moment the mouse does.
+     */
+    function watchPointerIdle() {
+        const IDLE_MS = 2800;
+        let timer = null;
+        const wake = () => {
+            document.body.classList.remove('ui-idle');
+            clearTimeout(timer);
+            timer = setTimeout(
+                () => document.body.classList.add('ui-idle'), IDLE_MS);
+        };
+        ['mousemove', 'mousedown', 'keydown', 'touchstart']
+            .forEach((e) => window.addEventListener(e, wake, { passive: true }));
+        wake();
+    }
+
     async function init() {
+        watchPointerIdle();
         try {
             try {
                 if (document.fonts && document.fonts.load) {

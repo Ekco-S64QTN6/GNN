@@ -23,14 +23,19 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, 'assets', 'generated')
 MANIFEST = os.path.join(ROOT, 'assets', 'gfx-manifest.json')
 
-STYLE = ('1993 VGA pixel art, 320x200, 256-colour DOS-era palette, '
+STYLE = ('1993 VGA pixel art, 320x180, 256-colour DOS-era palette, '
          'Master of Orion 1 aesthetic, slight CRT scanline character, '
          'painterly pixel dithering, hand-placed pixels, no photographic detail')
 
+# The station badge on a uniform is wanted and is the one exception; every
+# other piece of lettering is drawn by the engine at runtime, and baking a
+# headline or a ticker into a plate freezes it.
 NEGATIVE = ('no modern logos, no real-world brand names, no realistic human '
             'faces, no anti-aliasing, no smooth gradients beyond 1993 VGA '
-            'dithering, no text or lettering of any kind (the engine draws all '
-            'text), no watermark, no signature, no 3D render, no airbrush')
+            'dithering, no captions, headlines, tickers, labels or lettering '
+            'anywhere in the scene other than the GNN badge on a uniform (the '
+            'engine draws all other text), no watermark, no signature, no 3D '
+            'render, no airbrush')
 
 PALETTES = {
     'military': 'cold steel blues and gunmetal greys, hazard amber accents',
@@ -65,16 +70,19 @@ SPECIES = [
      'uniform, lined face, calm expression', 'diplomatic'),
 ]
 
+# The pose text used to begin "seated at a news desk", which is what put an
+# opaque desk across the bottom of the first batch. The anchor is a cut-out;
+# the desk is a separate plate in front of it.
 POSES = [
-    ('desk_hero', 'seated at a news desk, three-quarter view, facing the viewer '
-     'slightly off-axis, hands resting on the desk surface',
-     'waist-up portrait framing, subject occupying the centre third'),
-    ('speaking', 'seated at a news desk, mouth open mid-sentence, one hand '
-     'raised in a small explanatory gesture',
-     'waist-up portrait framing, subject occupying the centre third'),
-    ('listening', 'seated at a news desk, mouth closed, head turned slightly '
-     'off-camera as if listening to a co-anchor',
-     'waist-up portrait framing, subject occupying the centre third'),
+    ('desk_hero', 'upright and square to camera, shoulders level, looking '
+     'straight down the lens, mouth closed, arms down and out of frame',
+     'head and shoulders, chest cropped at the bottom edge of the frame, '
+     'the head occupying the upper middle'),
+    ('speaking', 'EDIT: open the mouth as if mid-word. Change nothing else',
+     'do not re-pose, re-scale, re-frame, re-light or redraw any other part'),
+    ('listening', 'EDIT: turn the eyes slightly off-camera, as if attending '
+     'to a co-anchor. Change nothing else',
+     'do not re-pose, re-scale, re-frame, re-light or redraw any other part'),
 ]
 
 # The twelve cutaway subjects the scene catalogue maps stories onto, with the
@@ -191,25 +199,24 @@ DESK = [
 
 
 def viewport():
-    """The lit area of the studio monitor, read from the renderer.
+    """The broadcast frame, read from the renderer's own constants.
 
-    Generated plates are composited into this rect, so its shape — not the
-    image model's default — is the aspect ratio every full-bleed plate has to
-    be drawn at. Returns (source_w, source_h, aspect).
+    The picture fills the window, so this is the whole canvas rather than a
+    lit area inside a set. Generated plates are composited into it, so its
+    shape — not the image model's default — is the aspect ratio every
+    full-bleed plate has to be drawn at. Returns (base_w, base_h, aspect).
     """
     src = os.path.join(ROOT, 'js', 'renderer.js')
-    w, h, scale = 876, 316, 3
+    w, h = 320, 180
     try:
         text = open(src).read()
-        m = re.search(r"VIEW\s*=\s*{[^}]*?w:\s*(\d+)[^}]*?h:\s*(\d+)", text)
-        sm = re.search(r"SCALE\s*=\s*(\d+)", text)
-        if m:
-            w, h = int(m.group(1)), int(m.group(2))
-        if sm:
-            scale = int(sm.group(1))
+        mw = re.search(r"BASE_W\s*=\s*(\d+)", text)
+        mh = re.search(r"BASE_H\s*=\s*(\d+)", text)
+        if mw and mh:
+            w, h = int(mw.group(1)), int(mh.group(1))
     except OSError:
         pass
-    return int(round(w / scale)), int(round(h / scale)), w / float(h)
+    return w, h, w / float(h)
 
 
 def load_catalogue():
@@ -257,10 +264,20 @@ def main():
     w('Paste each prompt into an image model, then save the result to the '
       'filename shown above it, under `assets/generated/`. Directory structure '
       'matters — the engine resolves assets by that path.\n')
+    w('**Ask for landscape, the widest the model offers — 1792x1024 in '
+      'ChatGPT.** The broadcast frame is %dx%d (%.2f:1) and everything is '
+      'fitted to it by `tools/condition_plates.py`, which also removes the '
+      'black edge fringe, cuts the palette to 256 colours and hardens the '
+      'alpha. Nothing here needs to be the right size or the right number of '
+      'colours when it leaves the image model; it needs to be the right '
+      '*shape*, and 1792x1024 is within a hair of the frame.\n'
+      % (viewport()[0], viewport()[1], viewport()[2]))
+    w('**Run every finished batch through the conditioner** before judging it: '
+      '`python3 tools/condition_plates.py --preview`.\n')
     w('**Catalogue at time of writing:** %d admitted cutaways, %d admitted '
       'portraits. Those cover subject matter, not framing: MOO1 has ambassador '
-      'portraits but none seated at a news desk, and no three-up desk at all.\n'
-      % (len(brolls), len(portraits)))
+      'portraits, but none cut out for a news set and nothing resembling a '
+      'studio to put them in.\n' % (len(brolls), len(portraits)))
     w('**Style is locked across every prompt** so the generated set cuts '
       'together with the extracted set. Do not paraphrase the style or negative '
       'clauses.\n')
@@ -272,6 +289,17 @@ def main():
     w('Three states per species. The engine crossfades `desk_hero` to '
       '`speaking` on the active anchor and holds `listening` on the others, so '
       'the three must share pose, scale, eye-line and lighting exactly.\n')
+    w('**Generate the hero once, then make the other two by editing that '
+      'image** — open the mouth, raise a paw — rather than by running the '
+      'prompt three times. Three independent generations do not match, and '
+      'the mismatch is not subtle: the first Bulrathi set came back with the '
+      'head top at 63, 44 and 28 pixels and the shoulder span at 716, 776 and '
+      '848, an 18% growth in scale across the three. Crossfaded, that reads '
+      'as the anchor lurching at the camera.\n')
+    w('**No desk in these.** The desk is its own plate and the anchors '
+      'composite in front of the set and behind it. A desk baked into the '
+      'character plate is opaque across the full width of the frame and paints '
+      'over both.\n')
     for sid, label, look, palette in SPECIES:
         near = [i for i in portraits if i.startswith('EMBASSY/')]
         w('### %s\n' % label)
@@ -281,12 +309,21 @@ def main():
         for pose, pose_desc, framing in POSES:
             fname = 'anchors/%s_%s.png' % (sid, pose)
             w('#### `%s`\n' % fname)
-            w('```\n%s\n```\n' % prompt(
-                'a %s, %s, wearing a GNN-badged broadcast uniform, %s'
-                % (label, look, pose_desc),
-                framing, palette,
-                'transparent background, subject cleanly cut out for '
-                'compositing over a desk plate'))
+            if pose == 'desk_hero':
+                w('```\n%s\n```\n' % prompt(
+                    'a %s, %s, wearing a GNN-badged broadcast uniform, %s. '
+                    'Head, shoulders and chest only — no desk, no table, no '
+                    'furniture, nothing beneath or in front of the figure'
+                    % (label, look, pose_desc),
+                    framing, palette,
+                    'fully transparent, subject cleanly cut out on empty '
+                    'transparency with no backdrop, vignette or floor — the '
+                    'engine composites it over the set and the desk plate'))
+            else:
+                w('*Not a new picture.* Upload `anchors/%s_desk_hero.png` and '
+                  'ask for this edit, so the two match it exactly.\n' % sid)
+                w('```\n%s. %s%s.\n\n**Negative prompt:** %s\n```\n'
+                  % (pose_desc, framing[0].upper(), framing[1:], NEGATIVE))
             count += 1
 
     vw, vh, aspect = viewport()
@@ -295,25 +332,26 @@ def main():
       'picture, because the engine draws the room behind the anchors and the '
       'desk in front of them — a single baked image of the whole scene has '
       'nobody able to sit at it.\n')
-    w('**Geometry.** The broadcast is composited into the lit area of the '
-      'studio monitor, which is **%d x %d source pixels, %.2f:1**. Full-bleed '
-      'plates must be drawn at that ratio. An image model asked for its default '
-      '3:2 gives a plate that loses nearly half its height to the crop — '
-      'generate at **1536 x %d** or another %.2f:1 size.\n'
-      % (vw, vh, aspect, int(round(1536 / aspect)), aspect))
+    w('**Geometry.** The picture fills the window: there is no set around it '
+      'and no monitor frame inside it. The frame is **%d x %d source pixels, '
+      '%.2f:1**, and a full-bleed plate is drawn to cover it. A plate at the '
+      'image model\'s default 3:2 loses its sides or its top and bottom to '
+      'the crop, so ask for landscape.\n' % (vw, vh, aspect))
+    w('The window in the back wall is left **flat pure black** so the engine '
+      'can composite an exterior backdrop into it. Nothing else in the room '
+      'may be pure black, or it will be treated as window too.\n')
     for sid, subject, palette, framing, background in SET:
         fname = 'set/%s.png' % sid
         w('#### `%s`\n' % fname)
         w('```\n%s\n```\n' % prompt(subject, framing, palette, background))
         count += 1
 
-    w('## News Desk Plates\n')
-    for did, subject, palette, framing in DESK:
-        fname = 'desk/%s.png' % did
-        w('#### `%s`\n' % fname)
-        w('```\n%s\n```\n' % prompt(subject, framing, palette,
-                                    'studio interior, dark behind the desk'))
-        count += 1
+    w('## News Desk Plates — superseded\n')
+    w('`set/desk_oval_front.png` above is the desk, and it is already made. '
+      'These earlier three-up and two-up prompts drew a desk *and* the studio '
+      'behind it as one picture, which cannot work now that anchors composite '
+      'between the room and the desk. **Do not generate these.** They are kept '
+      'only so the filenames are not reused for something else.\n')
 
     w('## PIP Cutaways\n')
     w('One wide plate per story category. Keyword mapping is listed so the '
@@ -323,21 +361,27 @@ def main():
         w('#### `%s`\n' % fname)
         w('*Routes from:* `%s`\n' % '`, `'.join(keywords))
         w('```\n%s\n```\n' % prompt(
-            subject, 'wide cutaway plate, full 320x200 bleed, no border',
+            subject, 'wide cutaway plate, full bleed to all four edges, '
+            'no border and no frame, the subject readable at a glance',
             palette, 'full-bleed scene, no transparency'))
         count += 1
 
     w('## Exterior Window Backdrops\n')
-    w('Four moods across four times of day. The scheduler picks a mood per show '
-      'block and a time of day from the local clock.\n')
+    w('What is seen through the window in the back wall of the set. Four moods '
+      'across four times of day; the scheduler picks a mood per show block and '
+      'a time of day from the local clock.\n')
+    w('Generate these the same shape as everything else. The engine fits them '
+      'into the window opening and crops the overflow, so the subject wants to '
+      'be centred and nothing important should sit near an edge.\n')
     for bid, subject, palette in BACKDROPS:
         for phase, light in DAY_CYCLE:
             fname = 'backdrops/%s_%s.png' % (bid, phase)
             w('#### `%s`\n' % fname)
             w('```\n%s\n```\n' % prompt(
                 '%s, %s' % (subject, light),
-                'wide backdrop plate, full 320x200 bleed, horizon in the '
-                'lower third', palette, 'full-bleed scene, no transparency'))
+                'wide backdrop plate, full bleed, horizon in the lower third, '
+                'the subject centred and clear of the edges', palette,
+                'full-bleed scene, no transparency'))
             count += 1
 
     w('---\n')
