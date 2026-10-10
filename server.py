@@ -60,7 +60,7 @@ EDGE_FORMAT = os.environ.get('GNN_TTS_FORMAT', 'audio-24khz-96kbitrate-mono-mp3'
 # squashed and the quiet ones do not, which is why one voice sounds clean and
 # the next sounds harsh. Normalise to one broadcast target before the browser
 # ever sees it.
-TARGET_LUFS = float(os.environ.get('GNN_TTS_LUFS', -19.0))
+TARGET_LUFS = float(os.environ.get('GNN_TTS_LUFS', -21.0))
 TARGET_PEAK_DB = float(os.environ.get('GNN_TTS_PEAK', -3.0))
 INTERSAMPLE_HEADROOM_DB = 1.8
 
@@ -313,18 +313,43 @@ def measure_loudness(mp3):
     return lufs, peak
 
 
+# Speech from the local engine averages -26 to -28 LUFS with peaks only
+# 4-10dB below full scale: quiet body, tall transients. Lifting that to a
+# broadcast target with gain alone drives the peaks over and leaves a limiter
+# removing up to 10dB, which is heard as every word being squashed — and the
+# amount varies per clip, so one story sounds fine and the next is mangled.
+#
+# The fix is to reduce the crest factor first, the way any broadcast chain
+# does: gentle compression, then gain, then a limiter that only ever catches
+# strays.
+#
+# Settings chosen by sweep, not taste. The engine's raw loudness range is only
+# 2.9 LU, so compression costs almost no dynamics here — the crest is isolated
+# plosives, not expression. 4:1 above -24dB with a -21 LUFS target leaves the
+# limiter removing 1.8dB on the tallest transient (it was 10dB) while LRA
+# stays at 1.3 LU.
+COMP_THRESHOLD_DB = -24.0
+COMP_RATIO = 4.0
+COMP_ATTACK_MS = 10
+COMP_RELEASE_MS = 200
+COMP_FILTER = ('acompressor=threshold=%.1fdB:ratio=%.1f:attack=%d:release=%d'
+               ':knee=6:detection=rms'
+               % (COMP_THRESHOLD_DB, COMP_RATIO, COMP_ATTACK_MS, COMP_RELEASE_MS))
+
+
 def normalize(mp3):
     """
     Level-match a clip to a loudness target and hand it back as lossless PCM.
 
-    Loudness is normalised; peaks are *limited*, not used to set the gain.
-    Backing the whole clip off until its loudest sample cleared a ceiling is
-    what made consecutive lines differ by 8 LU: the ceiling bound on every
-    line, so a single plosive in a long read dragged that entire read down.
-    Crest factor was being turned into perceived volume.
+    Three stages, in the order a broadcast chain uses them:
 
-    Decoding once and serving WAV also avoids a second lossy generation; on
-    localhost the extra bytes cost nothing.
+      1. compress  — tame the crest factor so the clip *can* reach the target
+      2. gain      — put it at the loudness target
+      3. limit     — catch whatever still pokes through
+
+    The limiter is a safety net, not a leveller. If it is removing more than a
+    decibel or two the stage in front of it is wrong, and the result will
+    sound like each word is being stepped on.
 
     Returns (payload, content_type), falling back to the original MP3 if
     ffmpeg cannot be used.
@@ -332,25 +357,28 @@ def normalize(mp3):
     if not shutil.which('ffmpeg'):
         return mp3, 'audio/mpeg'
     try:
-        lufs, peak = measure_loudness(mp3)
+        # Measure *after* compression: that is the signal being levelled.
+        probe = _ffmpeg(['-i', 'pipe:0', '-af', COMP_FILTER,
+                         '-f', 'wav', 'pipe:1'], mp3)
+        measured = probe.stdout if probe.returncode == 0 and probe.stdout else mp3
+        lufs, peak = measure_loudness(measured)
+
         gain = 0.0
         if lufs is not None and lufs > -70:
             gain = TARGET_LUFS - lufs
         elif peak is not None:
             # Integrated loudness is meaningless on a very short clip; fall
-            # back to putting the peak where a normal read's peak lands.
+            # back to placing the peak where a normal read's peak lands.
             gain = TARGET_PEAK_DB - peak
         gain = max(-24.0, min(24.0, gain))
 
-        # The limiter catches the few transients that the loudness match
-        # pushes high, instead of the gain stage pre-emptively ducking every
-        # clip to protect against them. It works on sample peaks while the
-        # target is a true peak, and inter-sample peaks run 1-2dB above
-        # sample peaks, so it is set below the target by that much.
+        # The limiter runs on sample peaks while the target is a true peak,
+        # and inter-sample peaks sit 1-2dB above sample peaks, so it is set
+        # that much below the target.
         ceiling = 10 ** ((TARGET_PEAK_DB - INTERSAMPLE_HEADROOM_DB) / 20.0)
-        chain = ('volume=%.2fdB,'
-                 'alimiter=limit=%.4f:attack=1:release=60:level=disabled'
-                 % (gain, ceiling))
+        chain = ('%s,volume=%.2fdB,'
+                 'alimiter=limit=%.4f:attack=5:release=120:level=disabled'
+                 % (COMP_FILTER, gain, ceiling))
         r = _ffmpeg(['-i', 'pipe:0', '-af', chain,
                      '-ar', '24000', '-ac', '1', '-c:a', 'pcm_s16le',
                      '-f', 'wav', 'pipe:1'], mp3)

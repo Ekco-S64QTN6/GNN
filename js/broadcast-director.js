@@ -255,6 +255,13 @@ const GNNDirector = (() => {
 
         GNNCutsceneManager.prefetch(item);
         say(text);
+
+        // Warm the next story while this one reads. Synthesis takes a fifth
+        // of a second to a second and a half depending on length, and the
+        // director waits on it, so without this every story starts with a
+        // pause that scales with how long it is.
+        const upcoming = queue[0];
+        if (upcoming && GNNTTS.prefetch) GNNTTS.prefetch(storyText(upcoming));
         setState(S.READ, now);
         if (onStory) onStory(item);
     }
