@@ -23,19 +23,25 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, 'assets', 'generated')
 MANIFEST = os.path.join(ROOT, 'assets', 'gfx-manifest.json')
 
-STYLE = ('1993 VGA pixel art, 320x180, 256-colour DOS-era palette, '
-         'Master of Orion 1 aesthetic, slight CRT scanline character, '
-         'painterly pixel dithering, hand-placed pixels, no photographic detail')
+STYLE = ('1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 '
+         'aesthetic, chunky visible pixels as if drawn for a 320x200 DOS '
+         'screen, painterly pixel dithering, hand-placed pixels, no '
+         'photographic detail')
 
-# The station badge on a uniform is wanted and is the one exception; every
-# other piece of lettering is drawn by the engine at runtime, and baking a
-# headline or a ticker into a plate freezes it.
-NEGATIVE = ('no modern logos, no real-world brand names, no realistic human '
-            'faces, no anti-aliasing, no smooth gradients beyond 1993 VGA '
-            'dithering, no captions, headlines, tickers, labels or lettering '
-            'anywhere in the scene other than the GNN badge on a uniform (the '
-            'engine draws all other text), no watermark, no signature, no 3D '
-            'render, no airbrush')
+# All runtime text — headlines, chyrons, the ticker — is drawn by the engine,
+# so a plate with lettering baked into it is a plate with a frozen headline.
+# The one exception is the station badge on an anchor's uniform, which is part
+# of the costume; it is allowed only on the prompts that have a uniform in
+# them, because offering the exception to a landscape backdrop just invites
+# lettering into a picture that should have none.
+_NEG_BASE = ('no modern logos, no real-world brand names, no realistic human '
+             'faces, no anti-aliasing, no smooth gradients beyond 1993 VGA '
+             'dithering, no watermark, no signature, no 3D render, no airbrush')
+NEGATIVE = ('no captions, headlines, tickers, labels, letters, numbers or '
+            'writing of any kind anywhere in the image, ' + _NEG_BASE)
+NEGATIVE_UNIFORM = ('no captions, headlines, tickers, labels or lettering '
+                    'anywhere other than the small GNN badge on the uniform, '
+                    + _NEG_BASE)
 
 PALETTES = {
     'military': 'cold steel blues and gunmetal greys, hazard amber accents',
@@ -49,7 +55,7 @@ PALETTES = {
 # The species the show format puts on the desk, with the look to lock.
 SPECIES = [
     ('bulrathi', 'Bulrathi', 'a large brown-furred bear-like alien, heavy brow, '
-     'broad shoulders filling the frame', 'military'),
+     'broad shoulders', 'military'),
     ('psilon', 'Psilon', 'a slender grey-skinned alien with an enormous domed '
      'cranium and huge black eyes', 'science'),
     ('mrrshan', 'Mrrshan', 'a tawny feline alien with slit pupils, tufted ears '
@@ -158,11 +164,10 @@ SET = [
      'buttons, a raised circular floor dais with an inlaid trim ring. No desk, '
      'no furniture in the centre, no figures',
      'station',
-     'wide empty set plate, the viewport centred on the back wall, floor '
-     'occupying the lower third, nothing in the middle ground where the desk '
-     'and anchors will be composited',
-     'the viewport opening is flat pure black with no stars and no planet — the '
-     'engine composites the exterior backdrop into it'),
+     'wide empty set plate, the window centred on the back wall, floor '
+     'occupying the lower third, the centre of the room completely empty',
+     'the window opening is a flat area of pure black, showing nothing at '
+     'all — no stars, no planet, no light'),
     ('desk_oval_front',
      'an oval television news desk seen straight on, brushed metal top, curved '
      'front panel with a lit strip running around it and a blank recessed plate '
@@ -170,8 +175,7 @@ SET = [
      'station',
      'foreground layer, the desk filling the lower half of the frame, drawn as '
      'it would be seen from a camera at seated eye level',
-     'transparent background, the desk cleanly cut out so anchors composite '
-     'behind it'),
+     'transparent background, the desk cleanly cut out'),
     ('console_left',
      'an angled wall-mounted instrument console with rows of small lit square '
      'indicator buttons and two small readout screens, seen from its right',
@@ -241,12 +245,17 @@ def covered_by(items, pool, dirs=None, min_w=0):
     return out
 
 
-def prompt(subject, framing, palette, background):
+def prompt(subject, framing, palette, background, negative=None):
     return (
         '%s. %s. Framing: %s. Palette: %s. Background: %s.\n\n'
         '**Negative prompt:** %s'
-        % (STYLE, subject, framing, PALETTES[palette], background, NEGATIVE)
+        % (STYLE, subject, framing, PALETTES[palette], background,
+           negative or NEGATIVE)
     )
+
+
+LANDSCAPE = '1792x1024'
+SQUARE = '1024x1024'
 
 
 def main():
@@ -254,145 +263,133 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     L = []
     w = L.append
+    count = [0]
+
+    def asset(fname, size, prompt_text, note=None):
+        """One asset: what to save it as, what size, and what to paste."""
+        w('#### `%s`\n' % fname)
+        w('<sub>%s &middot; save as `assets/generated/%s`</sub>\n'
+          % (size, fname))
+        if note:
+            w('%s\n' % note)
+        w('```\n%s\n```\n' % prompt_text)
+        count[0] += 1
 
     portraits = covered_by(items, 'portrait')
     brolls = covered_by(items, 'broll')
+    vw, vh, aspect = viewport()
 
     w('# GNN — Generated Asset Prompts\n')
-    w('Produced by `tools/prompt_bridge.py`. Every prompt below is a gap the '
-      'Master of Orion 1 catalogue cannot fill in broadcast framing.\n')
-    w('Paste each prompt into an image model, then save the result to the '
-      'filename shown above it, under `assets/generated/`. Directory structure '
-      'matters — the engine resolves assets by that path.\n')
-    w('**Ask for landscape, the widest the model offers — 1792x1024 in '
-      'ChatGPT.** The broadcast frame is %dx%d (%.2f:1) and everything is '
-      'fitted to it by `tools/condition_plates.py`, which also removes the '
-      'black edge fringe, cuts the palette to 256 colours and hardens the '
-      'alpha. Nothing here needs to be the right size or the right number of '
-      'colours when it leaves the image model; it needs to be the right '
-      '*shape*, and 1792x1024 is within a hair of the frame.\n'
-      % (viewport()[0], viewport()[1], viewport()[2]))
-    w('**Run every finished batch through the conditioner** before judging it: '
-      '`python3 tools/condition_plates.py --preview`.\n')
-    w('**Catalogue at time of writing:** %d admitted cutaways, %d admitted '
-      'portraits. Those cover subject matter, not framing: MOO1 has ambassador '
+    w('Produced by `tools/prompt_bridge.py`. Each one is a gap the Master of '
+      'Orion 1 catalogue cannot fill: it has %d usable cutaways and %d '
       'portraits, but none cut out for a news set and nothing resembling a '
       'studio to put them in.\n' % (len(brolls), len(portraits)))
-    w('**Style is locked across every prompt** so the generated set cuts '
-      'together with the extracted set. Do not paraphrase the style or negative '
-      'clauses.\n')
+    w('---\n')
+    w('## How to use this\n')
+    w('**Paste the fenced block. Nothing outside it.** Everything else on the '
+      'page is for you, not for the image model — filenames, sizes and the '
+      'occasional note about why an asset is the shape it is.\n')
+    w('**Use the size given under each filename.** Full-bleed plates are '
+      '`%s`, because the broadcast frame is %dx%d (%.2f:1) and a landscape '
+      'plate covers it without losing its sides. Cut-out characters and props '
+      'are `%s`, because they are subjects on transparency rather than '
+      'pictures of a frame.\n' % (LANDSCAPE, vw, vh, aspect, SQUARE))
+    w('**Nothing has to be the right pixel size or colour count** when it '
+      'leaves the image model. `tools/condition_plates.py` fits every plate to '
+      'the frame, removes the black fringe left on cut-out edges, hardens the '
+      'alpha and cuts the palette to 256. Shape is the only thing you have to '
+      'get right.\n')
+    w('**Run the conditioner on each batch before judging it:** '
+      '`python3 tools/condition_plates.py --preview`. For anchors it also '
+      'checks the three states line up and tells you if they do not.\n')
+    w('**Do not paraphrase the style or negative lines.** They are what makes '
+      'generated art cut together with the art decoded from the game.\n')
     w('---\n')
 
-    count = 0
-
     w('## Anchor Portraits\n')
-    w('Three states per species. The engine crossfades `desk_hero` to '
-      '`speaking` on the active anchor and holds `listening` on the others, so '
-      'the three must share pose, scale, eye-line and lighting exactly.\n')
-    w('**Generate the hero once, then make the other two by editing that '
-      'image** — open the mouth, raise a paw — rather than by running the '
-      'prompt three times. Three independent generations do not match, and '
-      'the mismatch is not subtle: the first Bulrathi set came back with the '
-      'head top at 63, 44 and 28 pixels and the shoulder span at 716, 776 and '
-      '848, an 18% growth in scale across the three. Crossfaded, that reads '
-      'as the anchor lurching at the camera.\n')
-    w('**No desk in these.** The desk is its own plate and the anchors '
-      'composite in front of the set and behind it. A desk baked into the '
-      'character plate is opaque across the full width of the frame and paints '
-      'over both.\n')
+    w('Three states per species. The engine crossfades `desk_hero` into '
+      '`speaking` on whoever is talking and holds `listening` on everyone '
+      'else, so the three have to be the same drawing with one thing changed '
+      '— **make the hero first, then ask for the other two as edits of it.** '
+      'Generating them separately gives three subtly different characters and '
+      'the crossfade turns into a lurch.\n')
+    w('No desk in these: the desk is its own plate, and the anchors sit '
+      'between the room and it.\n')
     for sid, label, look, palette in SPECIES:
-        near = [i for i in portraits if i.startswith('EMBASSY/')]
         w('### %s\n' % label)
-        if near:
-            w('> MOO1 has ambassador portraits (%s and others) but none in desk '
-              'framing, so these are generated.\n' % near[0])
         for pose, pose_desc, framing in POSES:
             fname = 'anchors/%s_%s.png' % (sid, pose)
-            w('#### `%s`\n' % fname)
             if pose == 'desk_hero':
-                w('```\n%s\n```\n' % prompt(
+                asset(fname, SQUARE, prompt(
                     'a %s, %s, wearing a GNN-badged broadcast uniform, %s. '
                     'Head, shoulders and chest only — no desk, no table, no '
                     'furniture, nothing beneath or in front of the figure'
                     % (label, look, pose_desc),
                     framing, palette,
                     'fully transparent, subject cleanly cut out on empty '
-                    'transparency with no backdrop, vignette or floor — the '
-                    'engine composites it over the set and the desk plate'))
+                    'transparency with no backdrop, vignette or floor',
+                    negative=NEGATIVE_UNIFORM))
             else:
-                w('*Not a new picture.* Upload `anchors/%s_desk_hero.png` and '
-                  'ask for this edit, so the two match it exactly.\n' % sid)
-                w('```\n%s. %s%s.\n\n**Negative prompt:** %s\n```\n'
-                  % (pose_desc, framing[0].upper(), framing[1:], NEGATIVE))
-            count += 1
+                asset(fname, SQUARE,
+                      '%s. %s%s.\n\nKeep the transparent background. Add no '
+                      'text or lettering.'
+                      % (pose_desc, framing[0].upper(), framing[1:]),
+                      note='Upload `%s_desk_hero.png` and ask for this edit.'
+                           % sid)
 
-    vw, vh, aspect = viewport()
     w('## Newsroom Set\n')
-    w('The room the desk sits in. Generated as separate layers rather than one '
-      'picture, because the engine draws the room behind the anchors and the '
-      'desk in front of them — a single baked image of the whole scene has '
-      'nobody able to sit at it.\n')
-    w('**Geometry.** The picture fills the window: there is no set around it '
-      'and no monitor frame inside it. The frame is **%d x %d source pixels, '
-      '%.2f:1**, and a full-bleed plate is drawn to cover it. A plate at the '
-      'image model\'s default 3:2 loses its sides or its top and bottom to '
-      'the crop, so ask for landscape.\n' % (vw, vh, aspect))
-    w('The window in the back wall is left **flat pure black** so the engine '
-      'can composite an exterior backdrop into it. Nothing else in the room '
-      'may be pure black, or it will be treated as window too.\n')
+    w('The room the anchors sit in, as separate layers: the engine draws the '
+      'room, then the anchors, then the desk in front of them. One baked '
+      'picture of the whole scene would have nobody able to sit at it.\n')
+    w('The window in the back wall must be **flat pure black** — that is what '
+      'the engine keys the exterior backdrop into. Nothing else in the room '
+      'may be pure black.\n')
     for sid, subject, palette, framing, background in SET:
-        fname = 'set/%s.png' % sid
-        w('#### `%s`\n' % fname)
-        w('```\n%s\n```\n' % prompt(subject, framing, palette, background))
-        count += 1
+        size = LANDSCAPE if sid == 'studio_wide_empty' else SQUARE
+        if sid == 'desk_oval_front':
+            size = LANDSCAPE
+        asset('set/%s.png' % sid, size,
+              prompt(subject, framing, palette, background))
 
     w('## News Desk Plates — superseded\n')
-    w('`set/desk_oval_front.png` above is the desk, and it is already made. '
-      'These earlier three-up and two-up prompts drew a desk *and* the studio '
-      'behind it as one picture, which cannot work now that anchors composite '
-      'between the room and the desk. **Do not generate these.** They are kept '
-      'only so the filenames are not reused for something else.\n')
+    w('`set/desk_oval_front.png` above is the desk. The earlier three-up and '
+      'two-up prompts drew a desk *and* the studio behind it as one picture, '
+      'which cannot work now that the anchors composite between them. **Do '
+      'not generate these.** Listed only so the filenames are not reused.\n')
 
     w('## PIP Cutaways\n')
-    w('One wide plate per story category. Keyword mapping is listed so the '
-      'router in `cutscene-manager.js` can be pointed at these directly.\n')
+    w('The footage behind the anchor\'s shoulder. One plate per story '
+      'category; the keywords are what routes a story to it.\n')
     for cid, subject, palette, keywords in CUTAWAYS:
-        fname = 'cutaways/%s.png' % cid
-        w('#### `%s`\n' % fname)
-        w('*Routes from:* `%s`\n' % '`, `'.join(keywords))
-        w('```\n%s\n```\n' % prompt(
-            subject, 'wide cutaway plate, full bleed to all four edges, '
-            'no border and no frame, the subject readable at a glance',
-            palette, 'full-bleed scene, no transparency'))
-        count += 1
+        asset('cutaways/%s.png' % cid, LANDSCAPE,
+              prompt(subject, 'wide cutaway plate, full bleed to all four '
+                     'edges, no border and no frame, the subject readable at '
+                     'a glance', palette, 'full-bleed scene, no transparency'),
+              note='*Routes from:* `%s`' % '`, `'.join(keywords))
 
     w('## Exterior Window Backdrops\n')
-    w('What is seen through the window in the back wall of the set. Four moods '
-      'across four times of day; the scheduler picks a mood per show block and '
-      'a time of day from the local clock.\n')
-    w('Generate these the same shape as everything else. The engine fits them '
-      'into the window opening and crops the overflow, so the subject wants to '
-      'be centred and nothing important should sit near an edge.\n')
+    w('What is seen through the window in the back wall. Four moods across '
+      'four times of day; the scheduler picks a mood per show block and the '
+      'time of day from the clock. The engine fits these into the window '
+      'opening and crops the overflow, so keep the subject centred and clear '
+      'of the edges.\n')
     for bid, subject, palette in BACKDROPS:
         for phase, light in DAY_CYCLE:
-            fname = 'backdrops/%s_%s.png' % (bid, phase)
-            w('#### `%s`\n' % fname)
-            w('```\n%s\n```\n' % prompt(
-                '%s, %s' % (subject, light),
-                'wide backdrop plate, full bleed, horizon in the lower third, '
-                'the subject centred and clear of the edges', palette,
-                'full-bleed scene, no transparency'))
-            count += 1
+            asset('backdrops/%s_%s.png' % (bid, phase), LANDSCAPE,
+                  prompt('%s, %s' % (subject, light),
+                         'wide backdrop plate, full bleed, horizon in the '
+                         'lower third, the subject centred and clear of the '
+                         'edges', palette,
+                         'full-bleed scene, no transparency'))
 
     w('---\n')
-    w('**%d prompts.** Save each to `assets/generated/<path shown>`, then run '
-      '`python3 tools/verify_assets.py` to confirm the engine resolves them.\n'
-      % count)
+    w('**%d prompts.** Save each one to the path under its filename, then run '
+      '`python3 tools/condition_plates.py --preview`.\n' % count[0])
 
     dest = os.path.join(OUT_DIR, 'prompts.md')
     with open(dest, 'w') as fh:
         fh.write('\n'.join(L))
-    print('%d prompts -> %s' % (count, dest))
+    print('%d prompts -> %s' % (count[0], dest))
     print('catalogue: %d admitted cutaways, %d admitted portraits'
           % (len(brolls), len(portraits)))
     return 0
