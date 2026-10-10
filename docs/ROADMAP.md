@@ -27,8 +27,7 @@ Reference imagery in `docs/`: `NEWS ROOM MOCK UP.jpg` (current layout),
 > comes from the admitted MOO1 pools or from `assets/generated/`.
 
 ### Hard exclusions
-No Web3 / crypto / NFT. No real-world brands, social handles or named
-politicians. No modern corporate branding. Everything inside 4X lore.
+No Web3 / crypto / NFT.
 
 ---
 

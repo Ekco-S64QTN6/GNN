@@ -367,6 +367,16 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
+    def end_headers(self):
+        # Static files are served with only Last-Modified, which lets a
+        # browser cache them heuristically and skip revalidation entirely —
+        # so a fixed .js can keep serving stale for hours and a measurement
+        # taken afterwards is measuring the old build. Force revalidation;
+        # unchanged files still answer 304, which costs nothing on localhost.
+        if not self.path.startswith('/api/'):
+            self.send_header('Cache-Control', 'no-cache, must-revalidate')
+        super().end_headers()
+
     def log_message(self, fmt, *args):
         if '/api/' in (self.path or ''):
             sys.stderr.write('[GNN] %s\n' % (fmt % args))

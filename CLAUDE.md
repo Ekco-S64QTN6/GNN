@@ -43,6 +43,7 @@ the metric is the thing to doubt.
 | Assets | 873 items / 4,316 frames, decoded byte-exact from 22 LBX archives |
 | Admitted pools | 76 broll · 132 portrait · 399 sprite · 27 chrome |
 | Output ceiling | peak 0.872 under deliberate overload, zero clipped samples |
+| Per-line loudness | −19.3 to −20.3 LUFS, 1.0 LU spread, true peak −3.0 dBFS |
 | Spoken lines | 22 consecutive, 0 truncated |
 | Broadcast | runs the full rundown with zero exceptions over 90 s+ |
 
@@ -123,6 +124,30 @@ past full scale, worst event a 150 ms swell into +1.5 dBFS. 0.98 × 1.2 = 1.18,
 matching to three figures.
 → constraint 10.
 
+### Voice level dipped between lines — normalising peak, not loudness
+The anchor dropping in volume for a line and coming back. The normaliser used
+peak as a hard ceiling:
+
+```python
+gain = TARGET_LUFS - lufs
+gain = min(gain, TARGET_PEAK_DB - peak)    # ceiling always won
+```
+
+Measured at the endpoint, every line came back at exactly −3.0 dBFS peak and
+anywhere from −19.7 to −27.8 LUFS. The ceiling bound on *every* clip, so what
+was actually normalised was the peak — crest factor translated straight into
+perceived loudness, and one sharp plosive in a long read dragged that whole
+read 8 dB below the short line before it. In the owner's capture this showed as
+a **16–23 dB spread between utterances**.
+
+Loudness is now normalised; peaks are *limited* rather than setting the gain.
+The limiter works on sample peaks while the target is a true peak, so it sits
+1.8 dB below to leave inter-sample headroom. Across seven lines of 1.8–15.3 s:
+**8.1 LU spread → 1.0 LU**, max true peak −3.0 dBFS.
+
+→ **Normalise loudness and limit peaks. Never let a peak ceiling set the gain
+of a whole clip.**
+
 ### `duckMusic()` un-ducked to unity
 Treated its argument as an absolute gain rather than a multiplier on the mixed
 level, so the bed swelled to full scale at the end of every spoken line.
@@ -141,6 +166,14 @@ mid-signal. 178–234 pops → 0. → constraint 8.
 ### One-shots at unity
 The per-call `GainNode` was left at its 1.0 default while relying on a scheduled
 ramp that can land in the past, so effects intermittently fired at full scale.
+
+### Static files had no `Cache-Control`
+Served with only `Last-Modified`, so browsers cached the JS heuristically and
+could skip revalidation entirely — a fixed `audio-engine.js` kept serving stale
+for hours, and any recording made afterwards measured the *old* build. Static
+responses now send `no-cache, must-revalidate`; unchanged files still answer
+304. **If a fix appears not to have taken effect, suspect this before
+re-debugging the fix** — and hard-reload (Ctrl+Shift+R).
 
 ### `stop.sh` killed its own shell
 Matched strays with `pgrep -f "python3? .*server\.py"`, which also matches any
@@ -211,5 +244,8 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   One marginal item in 76.
 - `RENDER_FPS` is **20**, not 10.
 - rss2json returns HTTP 429 during back-to-back harness runs. External.
+- **Do not run `./stop.sh` while a CDP probe is running** — it reaps the
+  harness browser and the probe dies mid-measurement. This has cost three
+  measurement runs.
 - Decoded SFX buffers are never evicted — bounded by the 41-file library, a
   tradeoff rather than a leak. Music beds are LRU-capped at 4.
