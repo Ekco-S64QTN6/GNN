@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=GNN
+GenericName=Galactic News Network
+Comment=An unscripted live newscast, read from real feeds by a robot anchor
+Exec=/home/ekco/github/GNN/broadcast.sh
+Path=/home/ekco/github/GNN
+Icon=video-display
+Terminal=false
+Categories=AudioVideo;Player;
+StartupWMClass=GNN
+Keywords=news;broadcast;moo;orion;

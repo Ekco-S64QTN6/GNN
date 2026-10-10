@@ -294,6 +294,44 @@ Three states per species. The engine crossfades `desk_hero` to `speaking` on the
 **Negative prompt:** no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no text or lettering of any kind (the engine draws all text), no watermark, no signature, no 3D render, no airbrush
 ```
 
+## Newsroom Set
+
+The room the desk sits in. Generated as separate layers rather than one picture, because the engine draws the room behind the anchors and the desk in front of them — a single baked image of the whole scene has nobody able to sit at it.
+
+**Geometry.** The broadcast is composited into the lit area of the studio monitor, which is **292 x 105 source pixels, 2.77:1**. Full-bleed plates must be drawn at that ratio. An image model asked for its default 3:2 gives a plate that loses nearly half its height to the crop — generate at **1536 x 554** or another 2.77:1 size.
+
+#### `set/studio_wide_empty.png`
+
+```
+1993 VGA pixel art, 320x200, 256-colour DOS-era palette, Master of Orion 1 aesthetic, slight CRT scanline character, painterly pixel dithering, hand-placed pixels, no photographic detail. the interior of a starship television studio: bevelled hull wall panels, a large octagonal viewport dominating the centre of the back wall, angled instrument consoles built into the side walls with rows of lit indicator buttons, a raised circular floor dais with an inlaid trim ring. No desk, no furniture in the centre, no figures. Framing: wide empty set plate, the viewport centred on the back wall, floor occupying the lower third, nothing in the middle ground where the desk and anchors will be composited. Palette: muted teal and bone white, warning-stripe yellow. Background: the viewport opening is flat pure black with no stars and no planet — the engine composites the exterior backdrop into it.
+
+**Negative prompt:** no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no text or lettering of any kind (the engine draws all text), no watermark, no signature, no 3D render, no airbrush
+```
+
+#### `set/desk_oval_front.png`
+
+```
+1993 VGA pixel art, 320x200, 256-colour DOS-era palette, Master of Orion 1 aesthetic, slight CRT scanline character, painterly pixel dithering, hand-placed pixels, no photographic detail. an oval television news desk seen straight on, brushed metal top, curved front panel with a lit strip running around it and a blank recessed plate in the centre for a station emblem. The desk only, nothing behind it. Framing: foreground layer, the desk filling the lower half of the frame, drawn as it would be seen from a camera at seated eye level. Palette: muted teal and bone white, warning-stripe yellow. Background: transparent background, the desk cleanly cut out so anchors composite behind it.
+
+**Negative prompt:** no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no text or lettering of any kind (the engine draws all text), no watermark, no signature, no 3D render, no airbrush
+```
+
+#### `set/console_left.png`
+
+```
+1993 VGA pixel art, 320x200, 256-colour DOS-era palette, Master of Orion 1 aesthetic, slight CRT scanline character, painterly pixel dithering, hand-placed pixels, no photographic detail. an angled wall-mounted instrument console with rows of small lit square indicator buttons and two small readout screens, seen from its right. Framing: single prop plate, the console filling the frame. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: transparent background, cleanly cut out.
+
+**Negative prompt:** no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no text or lettering of any kind (the engine draws all text), no watermark, no signature, no 3D render, no airbrush
+```
+
+#### `set/console_right.png`
+
+```
+1993 VGA pixel art, 320x200, 256-colour DOS-era palette, Master of Orion 1 aesthetic, slight CRT scanline character, painterly pixel dithering, hand-placed pixels, no photographic detail. an angled wall-mounted instrument console with rows of small lit square indicator buttons and two small readout screens, seen from its left. Framing: single prop plate, the console filling the frame. Palette: cold steel blues and gunmetal greys, hazard amber accents. Background: transparent background, cleanly cut out.
+
+**Negative prompt:** no modern logos, no real-world brand names, no realistic human faces, no anti-aliasing, no smooth gradients beyond 1993 VGA dithering, no text or lettering of any kind (the engine draws all text), no watermark, no signature, no 3D render, no airbrush
+```
+
 ## News Desk Plates
 
 #### `desk/desk_three_up_empty.png`
@@ -570,4 +608,4 @@ Four moods across four times of day. The scheduler picks a mood per show block a
 
 ---
 
-**60 prompts.** Save each to `assets/generated/<path shown>`, then run `python3 tools/verify_assets.py` to confirm the engine resolves them.
+**64 prompts.** Save each to `assets/generated/<path shown>`, then run `python3 tools/verify_assets.py` to confirm the engine resolves them.

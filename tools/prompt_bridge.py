@@ -15,6 +15,7 @@ covers is reported as covered, with the asset id, and no prompt is written.
 """
 
 import json
+import re
 import os
 import sys
 
@@ -135,6 +136,48 @@ DAY_CYCLE = [
     ('night', 'near-black with artificial lights and starfield dominant'),
 ]
 
+# The newsroom itself. The desk prompts below dress a room that was never
+# described anywhere, which is why a generated desk has nothing to sit in.
+#
+# These are separate plates, not one picture, because the engine composites:
+# the room is drawn behind the anchors and the desk in front of them, so a
+# single baked image of the whole scene cannot have anyone sit at it.
+SET = [
+    ('studio_wide_empty',
+     'the interior of a starship television studio: bevelled hull wall panels, '
+     'a large octagonal viewport dominating the centre of the back wall, angled '
+     'instrument consoles built into the side walls with rows of lit indicator '
+     'buttons, a raised circular floor dais with an inlaid trim ring. No desk, '
+     'no furniture in the centre, no figures',
+     'station',
+     'wide empty set plate, the viewport centred on the back wall, floor '
+     'occupying the lower third, nothing in the middle ground where the desk '
+     'and anchors will be composited',
+     'the viewport opening is flat pure black with no stars and no planet — the '
+     'engine composites the exterior backdrop into it'),
+    ('desk_oval_front',
+     'an oval television news desk seen straight on, brushed metal top, curved '
+     'front panel with a lit strip running around it and a blank recessed plate '
+     'in the centre for a station emblem. The desk only, nothing behind it',
+     'station',
+     'foreground layer, the desk filling the lower half of the frame, drawn as '
+     'it would be seen from a camera at seated eye level',
+     'transparent background, the desk cleanly cut out so anchors composite '
+     'behind it'),
+    ('console_left',
+     'an angled wall-mounted instrument console with rows of small lit square '
+     'indicator buttons and two small readout screens, seen from its right',
+     'military',
+     'single prop plate, the console filling the frame',
+     'transparent background, cleanly cut out'),
+    ('console_right',
+     'an angled wall-mounted instrument console with rows of small lit square '
+     'indicator buttons and two small readout screens, seen from its left',
+     'military',
+     'single prop plate, the console filling the frame',
+     'transparent background, cleanly cut out'),
+]
+
 DESK = [
     ('desk_three_up_empty', 'an empty three-seat television news desk in a '
      'science-fiction studio, angled front panel with an inset station emblem '
@@ -145,6 +188,28 @@ DESK = [
      'science-fiction studio, angled front panel, seen straight on', 'station',
      'wide backdrop plate, desk occupying the lower third'),
 ]
+
+
+def viewport():
+    """The lit area of the studio monitor, read from the renderer.
+
+    Generated plates are composited into this rect, so its shape — not the
+    image model's default — is the aspect ratio every full-bleed plate has to
+    be drawn at. Returns (source_w, source_h, aspect).
+    """
+    src = os.path.join(ROOT, 'js', 'renderer.js')
+    w, h, scale = 876, 316, 3
+    try:
+        text = open(src).read()
+        m = re.search(r"VIEW\s*=\s*{[^}]*?w:\s*(\d+)[^}]*?h:\s*(\d+)", text)
+        sm = re.search(r"SCALE\s*=\s*(\d+)", text)
+        if m:
+            w, h = int(m.group(1)), int(m.group(2))
+        if sm:
+            scale = int(sm.group(1))
+    except OSError:
+        pass
+    return int(round(w / scale)), int(round(h / scale)), w / float(h)
 
 
 def load_catalogue():
@@ -223,6 +288,24 @@ def main():
                 'transparent background, subject cleanly cut out for '
                 'compositing over a desk plate'))
             count += 1
+
+    vw, vh, aspect = viewport()
+    w('## Newsroom Set\n')
+    w('The room the desk sits in. Generated as separate layers rather than one '
+      'picture, because the engine draws the room behind the anchors and the '
+      'desk in front of them — a single baked image of the whole scene has '
+      'nobody able to sit at it.\n')
+    w('**Geometry.** The broadcast is composited into the lit area of the '
+      'studio monitor, which is **%d x %d source pixels, %.2f:1**. Full-bleed '
+      'plates must be drawn at that ratio. An image model asked for its default '
+      '3:2 gives a plate that loses nearly half its height to the crop — '
+      'generate at **1536 x %d** or another %.2f:1 size.\n'
+      % (vw, vh, aspect, int(round(1536 / aspect)), aspect))
+    for sid, subject, palette, framing, background in SET:
+        fname = 'set/%s.png' % sid
+        w('#### `%s`\n' % fname)
+        w('```\n%s\n```\n' % prompt(subject, framing, palette, background))
+        count += 1
 
     w('## News Desk Plates\n')
     for did, subject, palette, framing in DESK:

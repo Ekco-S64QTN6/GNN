@@ -64,9 +64,14 @@ done
 # whose command line happens to mention the port is never a target.
 marker="remote-debugging-port=$CDP_PORT"
 tag="GNNHarness"
+# The app window from ./broadcast.sh is ours too, and is identified the same
+# careful way: by the dedicated profile directory this project gives it, never
+# by a bare name that could match your own browser.
+appwin="user-data-dir=[^ ]*gnn-window"
 harness_pids() {
     local pid comm
-    for pid in $(pgrep -f "$marker" 2>/dev/null; pgrep -f "$tag" 2>/dev/null); do
+    for pid in $(pgrep -f "$marker" 2>/dev/null; pgrep -f "$tag" 2>/dev/null; \
+                 pgrep -f "$appwin" 2>/dev/null); do
         [ "$pid" = "$$" ] && continue
         comm="$(ps -o comm= -p "$pid" 2>/dev/null)"
         case "$comm" in
@@ -77,7 +82,7 @@ harness_pids() {
 
 pids="$(harness_pids)"
 if [ -n "$pids" ]; then
-    echo "closing $(echo "$pids" | wc -l) headless browser process(es) from the test harness…"
+    echo "closing $(echo "$pids" | wc -l) browser process(es) this project started…"
     # shellcheck disable=SC2086
     kill -TERM $pids 2>/dev/null
     sleep 2

@@ -167,6 +167,28 @@ mid-signal. 178–234 pops → 0. → constraint 8.
 The per-call `GainNode` was left at its 1.0 default while relying on a scheduled
 ramp that can land in the past, so effects intermittently fired at full scale.
 
+### The limiter was crushing every word
+The fix above traded one fault for another. The local engine outputs at -26 to
+-28 LUFS with peaks only 4-10dB below full scale — quiet body, tall plosives —
+so lifting it to a -19 LUFS target with gain alone drove peaks over and left
+the limiter removing **up to 10.1 dB** (toss 3.6, ident 7.4, banter 6.1, long
+10.1). That is heard as every word being stepped on, and because the amount
+varies per clip it is also why one story sounded fine and the next was mangled.
+
+Gentle compression now runs in front of the gain, so the clip can reach the
+target without the limiter doing the levelling. Settings came from a sweep of
+threshold/ratio/target against measured limiter reduction *and* retained
+loudness range — the engine's raw LRA is only 2.9 LU, so compression costs
+almost no dynamics here because the crest is isolated plosives, not expression.
+
+| | limiter removes | spread | peak | LRA |
+|---|---|---|---|---|
+| target -19, no compression | **10.1 dB** | 8.1 LU | -3.0 | 1.6 |
+| 4:1 above -24dB, target -21 | **1.8 dB** | 0.5 LU | -4.6 | 1.3 |
+
+→ **A limiter is a safety net, not a leveller. If it is removing more than a
+decibel or two, the stage in front of it is wrong.**
+
 ### Static files had no `Cache-Control`
 Served with only `Last-Modified`, so browsers cached the JS heuristically and
 could skip revalidation entirely — a fixed `audio-engine.js` kept serving stale
@@ -244,6 +266,11 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   One marginal item in 76.
 - `RENDER_FPS` is **20**, not 10.
 - rss2json returns HTTP 429 during back-to-back harness runs. External.
+- **`pgrep -f <pattern>` matches the shell that is running the check**, so a
+  check for leftover processes reports its own command line as a survivor.
+  This produced a false "window left behind" and a false "launcher still
+  running" in one session, and once killed the shell doing the killing. Filter
+  on `ps -o comm=` as `stop.sh` does, never on the command line alone.
 - **Do not run `./stop.sh` while a CDP probe is running** — it reaps the
   harness browser and the probe dies mid-measurement. This has cost three
   measurement runs.
