@@ -369,7 +369,13 @@ const GNNRenderer = (() => {
             if (fault === 'ghost_signal' || fault === 'interference') drawGhost(now);
             if (GNNGlitch.isOrionMode()) drawOrionBadge(now);
 
-            GNNTextEngine.render(ctx, now);
+            // A commercial is a self-contained segment that sets its own
+            // type — a product name, a tagline, its own margins. Drawing the
+            // teleprompter caption over it put a panel through the tagline.
+            // The break owns the frame while it is running.
+            if (!GNNCutsceneManager.isBreakActive()) {
+                GNNTextEngine.render(ctx, now);
+            }
         } catch (err) {
             console.error('[GNN Renderer]', err);
         }

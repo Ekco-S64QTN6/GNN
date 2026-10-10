@@ -38,6 +38,7 @@
     const statusText = $('status-text');
     const segmentBadge = $('segment-badge');
     const tickerToggle = $('ticker-toggle');
+    const telemetryToggle = $('telemetry-toggle');
     const assetReadout = $('asset-readout');
     const secretLog = $('secret-log');
     const telemetry = $('telemetry');
@@ -117,7 +118,7 @@
 
         GNNRenderer.renderFrame(now, frames, icon);
 
-        if (telemetry) {
+        if (telemetry && document.body.classList.contains('show-telemetry')) {
             const r = GNNDirector.report();
             telemetry.textContent =
                 `SEG ${r.state} · RUNDOWN ${r.queued} · READ ${r.storiesRead} · ` +
@@ -241,6 +242,24 @@
             });
             injectInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') btnInject.click();
+            });
+        }
+
+        // The engineering readout is a development instrument, not part of
+        // the broadcast, so it is off unless asked for. The preference
+        // survives a reload; everything else here does not, but a diagnostic
+        // you have to re-enable every time is one you stop using.
+        if (telemetryToggle) {
+            let on = false;
+            try { on = localStorage.getItem('gnn.telemetry') === '1'; }
+            catch (err) { on = false; }   // private window, blocked storage
+            telemetryToggle.checked = on;
+            document.body.classList.toggle('show-telemetry', on);
+            telemetryToggle.addEventListener('change', () => {
+                const v = telemetryToggle.checked;
+                document.body.classList.toggle('show-telemetry', v);
+                try { localStorage.setItem('gnn.telemetry', v ? '1' : '0'); }
+                catch (err) { /* not worth failing a toggle over */ }
             });
         }
 

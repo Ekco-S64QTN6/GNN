@@ -67,11 +67,12 @@ def main():
         cdp.send('Input.dispatchMouseEvent', type='mouseReleased', x=600, y=880,
                  button='left', clickCount=1)
 
-        app = rect(cdp, '#app')
-        tail = rect(cdp, '#telemetry')
-        # #app's box can stop short of its last child; extend to the telemetry line.
-        app['h'] = max(app['h'], (tail['y'] + tail['h']) - app['y'] + 10)
-        screen = rect(cdp, '#canvas-wrapper')
+        # #app fills the window now and the picture fills #app, so the shot
+        # is simply the picture. This used to stretch #app down to the
+        # telemetry line beneath it; there is nothing beneath it any more,
+        # and the readout is hidden unless it is switched on.
+        app = rect(cdp, '#canvas-wrapper')
+        screen = app
 
         print('hero...')
         wait_for(cdp, lambda p: p['state'] == 'READ' and 25 < p['prompt'] < 95, label='READ')

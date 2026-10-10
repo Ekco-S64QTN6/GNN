@@ -91,25 +91,42 @@ _pipe_lock = threading.Lock()
 
 # The catalogue the selector is built from. Kokoro's ids encode accent and
 # gender: a/b = American/British, m/f = male/female.
+# The shortlist, chosen by ear. The engine ships a good many more and most
+# of them are worse; offering them only makes the good ones harder to find.
 LOCAL_VOICES = [
     ('am_michael', 'MICHAEL — Anchor Prime'),
-    ('am_fenrir', 'FENRIR — Deep Baritone'),
-    ('am_onyx', 'ONYX — Resonant Sci-Fi'),
-    ('am_puck', 'PUCK — Sector Desk'),
-    ('am_adam', 'ADAM — Night Rotation'),
-    ('am_echo', 'ECHO — Relay Operator'),
-    ('am_eric', 'ERIC — Field Correspondent'),
-    ('am_liam', 'LIAM — Outer Rim'),
     ('bm_george', 'GEORGE — Interstellar BBC'),
     ('bm_daniel', 'DANIEL — Council Desk'),
     ('bm_fable', 'FABLE — Archive Reader'),
     ('bm_lewis', 'LEWIS — Colonial Service'),
     ('af_heart', 'HEART — Anchor (F)'),
     ('af_bella', 'BELLA — Smooth Sci-Fi (F)'),
-    ('af_nicole', 'NICOLE — Night Rotation (F)'),
     ('bf_emma', 'EMMA — Interstellar BBC (F)'),
     ('bf_isabella', 'ISABELLA — Council Desk (F)'),
+    ('vox_unit', 'VOX UNIT — Station Automation'),
 ]
+
+# The anchor is a machine, and no speech model ships a convincing robot: they
+# are all trained to sound human. So one is built instead, by putting a human
+# read through the things that make a voice sound machine-made.
+#
+#   asetrate/atempo  drop the pitch a little without slowing the read
+#   tremolo at 55Hz  amplitude modulation — the buzz under the voice, and the
+#                    nearest thing ffmpeg has to a ring modulator
+#   chorus           two detuned copies, so it is a unit speaking, not a mouth
+#   highpass/lowpass band-limit it to a comm channel
+#   acrusher         quantise, for the 1993 of it
+ROBOT_VOICES = {
+    'vox_unit': (
+        'am_michael',
+        'asetrate=24000*0.92,aresample=24000,atempo=1.087,'
+        'tremolo=f=55:d=0.35,'
+        'chorus=0.6:0.9:50|60:0.4|0.32:0.25|0.4:2|2.3,'
+        'highpass=f=180,lowpass=f=6800,'
+        'acrusher=bits=10:mode=log:aa=0.4'
+    ),
+}
+
 LOCAL_VOICE_IDS = {v for v, _ in LOCAL_VOICES}
 
 
@@ -144,14 +161,26 @@ def synthesize_local(text, voice, rate):
         speed = 1.0
     speed = max(0.5, min(2.0, speed))
 
-    pipe = local_pipeline('b' if voice.startswith('b') else 'a')
-    parts = [chunk.audio.numpy() for chunk in pipe(text, voice=voice, speed=speed)]
+    robot = ROBOT_VOICES.get(voice)
+    base = robot[0] if robot else voice
+
+    pipe = local_pipeline('b' if base.startswith('b') else 'a')
+    parts = [chunk.audio.numpy() for chunk in pipe(text, voice=base, speed=speed)]
     if not parts:
         return b''
     audio = np.concatenate(parts)
     buf = io.BytesIO()
     sf.write(buf, audio, LOCAL_SR, format='WAV', subtype='PCM_16')
-    return buf.getvalue()
+    wav = buf.getvalue()
+
+    if robot and shutil.which('ffmpeg'):
+        r = _ffmpeg(['-i', 'pipe:0', '-af', robot[1],
+                     '-ar', str(LOCAL_SR), '-ac', '1', '-c:a', 'pcm_s16le',
+                     '-f', 'wav', 'pipe:1'], wav)
+        if r.returncode == 0 and r.stdout:
+            return r.stdout
+        sys.stderr.write('[GNN] robot filter failed, serving the plain read\n')
+    return wav
 
 
 def _install_format_override():

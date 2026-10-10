@@ -163,13 +163,68 @@ const GNNTTS = (() => {
     // Speaking
     // ---------------------------------------------------------
 
+    // Initialisms that are genuinely spoken letter by letter, and so are
+    // left shouting. Everything short and not on this list is treated as a
+    // word, because WAR and OIL and GAS outnumber the acronyms their shape
+    // cannot be told apart from.
+    const SPELLED_OUT = new Set([
+        'US', 'USA', 'UK', 'EU', 'UN', 'UAE', 'FBI', 'CIA', 'NSA', 'DOJ',
+        'NHS', 'BBC', 'CNN', 'ITV', 'WHO', 'IMF', 'WTO', 'OPEC', 'NFL',
+        'NBA', 'MLB', 'UFC', 'GDP', 'CEO', 'CFO', 'IPO', 'AI', 'EV', 'UFO',
+        'ISS', 'ESA', 'FAA', 'CDC', 'EPA', 'IRS', 'GOP', 'PM', 'MP', 'DC',
+    ]);
+
+    /**
+     * Stop the anchor spelling out shouted words.
+     *
+     * Wire headlines arrive in capitals often enough that roughly one read in
+     * ten was being spelled: PUTIN came out "P, U, T, I, N", which is the one
+     * thing that breaks the illusion completely. Every engine treats an
+     * all-capital word as an initialism, and from the text alone PUTIN and
+     * NATO are indistinguishable.
+     *
+     * The surrounding text is what tells them apart. In a headline that is
+     * mostly capitals the capitals are formatting and carry no meaning, so
+     * everything not a known initialism is given back its lower case —
+     * including the short words, because WAR and UP were being spelled too.
+     * In ordinary mixed-case prose a capitalised word is deliberate, so only
+     * ones too long and too vowel-rich to be an initialism are touched.
+     *
+     * This mispronounces the occasional genuine initialism — IAEA becomes
+     * "Iaea" — and that is the deliberate trade: a wrong pronunciation
+     * passes, a spelled-out word does not.
+     */
+    function unshout(text) {
+        const str = String(text);
+        const words = str.match(/\b[A-Za-z][A-Za-z'’.-]*\b/g) || [];
+        const longEnough = words.filter((w) => w.replace(/[^A-Za-z]/g, '').length > 2);
+        const shouted = longEnough.filter((w) => w === w.toUpperCase());
+        const headline = longEnough.length > 0
+            && shouted.length / longEnough.length > 0.5;
+
+        return str.replace(/\b[A-Z][A-Z'’.-]+\b/g, (word) => {
+            const letters = word.replace(/[^A-Z]/g, '');
+            if (letters.length < 2) return word;
+            if (SPELLED_OUT.has(letters)) return word;
+            if (!headline) {
+                // Deliberate capitals in ordinary prose: only unshout what is
+                // too long and too vowel-rich to be an initialism.
+                if (letters.length < 4) return word;
+                if (!/[AEIOUY]/.test(letters)) return word;
+            } else if (!/[AEIOUY]/.test(letters) && letters.length <= 4) {
+                return word;                     // NHS, BBC, NFL inside a shout
+            }
+            return word.charAt(0) + word.slice(1).toLowerCase();
+        });
+    }
+
     function sanitize(text) {
-        return String(text || '')
+        return unshout(String(text || '')
             .replace(/\s*—\s*/g, ', ')
             .replace(/[«»"“”]/g, '')
             .replace(/&[a-z]+;/gi, ' ')
             .replace(/\s+/g, ' ')
-            .trim();
+            .trim());
     }
 
     /**

@@ -47,6 +47,7 @@ the metric is the thing to doubt.
 | Spoken lines | 22 consecutive, 0 truncated |
 | Broadcast | runs the full rundown with zero exceptions over 90 s+ |
 | Frame | 320×180 base, 1280×720 canvas, 16:9, full-bleed — no CRT frame |
+| Voices | 9 shortlisted by ear, plus `vox_unit` (a DSP robot, not a model) |
 
 Verify all of it:
 
@@ -197,6 +198,24 @@ almost no dynamics here because the crest is isolated plosives, not expression.
 
 → **A limiter is a safety net, not a leveller. If it is removing more than a
 decibel or two, the stage in front of it is wrong.**
+
+### The anchor spelled words out
+Wire headlines arrive in capitals, and every engine reads an all-capital word
+as an initialism, so PUTIN came out "P, U, T, I, N" on roughly one read in ten.
+From the text alone PUTIN and NATO are indistinguishable; the surrounding text
+is what tells them apart. `unshout()` in `tts.js` treats capitals as formatting
+when the line is mostly capitals (a wire headline, where they carry no meaning)
+and as deliberate otherwise. A short allowlist — US, EU, BBC, FBI and the like
+— keeps the initialisms that really are spelled.
+
+It mispronounces the occasional genuine one: IAEA becomes "Iaea". That is the
+owner's explicit preference — **a wrong pronunciation passes, a spelled-out
+word does not.**
+
+### The caption drew over the commercials
+A break sets its own type: product name, tagline, its own margins. The
+teleprompter caption was still being drawn on top of it and put a panel
+through the tagline. The break owns the frame while it runs.
 
 ### Static files had no `Cache-Control`
 Served with only `Last-Modified`, so browsers cached the JS heuristically and

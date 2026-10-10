@@ -468,6 +468,10 @@ body.ui-idle #asset-readout {
 /* A dev readout, not part of the broadcast. It rides over the top edge and
    fades with the controls, so watching the channel means seeing the channel.
    The harness still reads it out of the DOM either way. */
+/* Off unless station configuration asks for it. */
+#telemetry { display: none; }
+body.show-telemetry #telemetry { display: block; }
+
 #telemetry {
     position: absolute;
     left: 0;
