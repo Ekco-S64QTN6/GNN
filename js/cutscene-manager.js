@@ -21,7 +21,12 @@ const GNNCutsceneManager = (() => {
     'use strict';
 
     // Cutaway window over the anchor's right shoulder, in 320x200 space.
-    const PIP = { x: 176, y: 20, w: 128, h: 92 };
+    // Fractions of the frame, not pixels of a 320x200 screen that no longer
+    // exists: the old constants were divided by 200 against a frame 180 tall
+    // and came to 40% of the width, which put the over-the-shoulder box
+    // across the anchors beside it. Matched to the story icon plate in
+    // renderer.js, since they occupy the same corner for the same reason.
+    const PIP = { x: 0.755, y: 0.075, w: 0.175, h: 0.215 };
     const PIP_MS = 7200;
 
     let cutaway = null;        // { scene, startedAt, mode }
@@ -363,10 +368,10 @@ const GNNCutsceneManager = (() => {
             drawChrome(ctx, view, cutaway.label, 'GNN LIVE FOOTAGE');
         } else {
             const dest = {
-                x: view.x + (PIP.x / 320) * view.w,
-                y: view.y + (PIP.y / 200) * view.h,
-                w: (PIP.w / 320) * view.w,
-                h: (PIP.h / 200) * view.h,
+                x: view.x + PIP.x * view.w,
+                y: view.y + PIP.y * view.h,
+                w: PIP.w * view.w,
+                h: PIP.h * view.h,
             };
             ctx.save();
             ctx.fillStyle = '#000';

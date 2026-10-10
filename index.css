@@ -96,7 +96,10 @@ body {
     display: block;
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    /* `contain` letterboxed the picture into black bars on any window that
+       was not the canvas's aspect. The canvas takes the window's shape now,
+       so it fills it. */
+    object-fit: fill;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
 }
@@ -152,11 +155,14 @@ body {
     transition: opacity 0.45s ease;
 }
 
-body.ui-idle #controls,
-body.ui-idle #telemetry,
-body.ui-idle #asset-readout {
-    opacity: 0;
-    pointer-events: none;
+/* The window is the broadcast. The transport controls, the voice picker,
+   the asset readout and the engineering line are all gone from the screen:
+   every character carries its own voice, and a channel does not have a
+   pause button. Station configuration is still there, on the `s` key, for
+   the feed list. */
+#controls,
+#asset-readout {
+    display: none;
 }
 
 #controls:hover {
@@ -471,6 +477,7 @@ body.ui-idle #asset-readout {
 /* Off unless station configuration asks for it. */
 #telemetry { display: none; }
 body.show-telemetry #telemetry { display: block; }
+body.show-telemetry #controls { display: flex; }
 
 #telemetry {
     position: absolute;

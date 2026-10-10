@@ -68,27 +68,44 @@
             GNNAssets.loadImage(`${GEN}/set/desk_oval_front.png`),
         ]);
 
-        // Three at the desk, because one alien alone in a newsroom reads as
-        // a portrait rather than a broadcast. The first seat is the anchor
-        // who reads; the others are there to be listened to and cut to.
+        // Two at the desk. Three looked like a panel show, and with the
+        // over-the-shoulder box in the corner the third was half hidden
+        // behind it anyway.
         //
-        // The line-up turns over through the day, so the station has a
-        // morning desk and a night desk rather than the same three faces
-        // forever. Rotating by the hour rather than at random means the
-        // same block shows the same team, the way a schedule does.
-        const ROSTER = ['bulrathi', 'mrrshan_f', 'psilon', 'alkari', 'sakkra',
-                        'meklar', 'darlok', 'mrrshan', 'silicoid', 'klackon',
-                        'human'];
-        const block = Math.floor(new Date().getHours() / 4);   // six a day
-        const DESK_SEATS = [0, 1, 2].map(
-            (i) => ROSTER[(block * 3 + i) % ROSTER.length]);
-        const seated = (await Promise.all(DESK_SEATS.map(async (sid) => {
+        // Each seat carries its own voice, because the anchor is a
+        // character rather than a sprite: one speech model reading for a
+        // bear, a cat and a grey alien is the same person wearing masks.
+        // The line-up turns over through the day so there is a morning desk
+        // and a night desk, and rotating by block rather than at random
+        // means a given hour always shows the same team.
+        const ROSTER = [
+            { sid: 'human', voice: 'am_michael' },
+            { sid: 'mrrshan_f', voice: 'af_bella' },
+            { sid: 'bulrathi', voice: 'bm_lewis' },
+            { sid: 'psilon', voice: 'bm_fable' },
+            { sid: 'sakkra', voice: 'bm_daniel' },
+            { sid: 'mrrshan', voice: 'bm_george' },
+            { sid: 'alkari', voice: 'bf_emma' },
+            { sid: 'darlok', voice: 'vox_unit' },
+            { sid: 'meklar', voice: 'vox_unit' },
+            { sid: 'silicoid', voice: 'bf_isabella' },
+            { sid: 'klackon', voice: 'af_heart' },
+        ];
+        // The main desk is fixed: the human commander reads and the Mrrshan
+        // matriarch sits beside him. Rotating the whole roster by the hour
+        // put two of whoever came next in the list at the desk, which is not
+        // a newsroom — a channel has anchors, and the rest of the cast are
+        // correspondents who appear elsewhere. The rotation is kept for the
+        // show-block work in docs/ROADMAP.md, which is where it belongs.
+        const lineup = [ROSTER[0], ROSTER[1]];
+        const seated = (await Promise.all(lineup.map(async (who) => {
             const [hero, speaking, listening] = await Promise.all([
-                GNNAssets.loadImage(`${GEN}/anchors/${sid}_desk_hero.png`),
-                GNNAssets.loadImage(`${GEN}/anchors/${sid}_speaking.png`),
-                GNNAssets.loadImage(`${GEN}/anchors/${sid}_listening.png`),
+                GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_desk_hero.png`),
+                GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_speaking.png`),
+                GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_listening.png`),
             ]);
-            return hero ? { sid, hero, speaking: speaking || hero,
+            return hero ? { sid: who.sid, voice: who.voice, hero,
+                            speaking: speaking || hero,
                             listening: listening || hero } : null;
         }))).filter(Boolean);
 
@@ -113,6 +130,7 @@
         statusText.textContent = 'Studio ready';
         return {
             bg, set, desk, seated,
+            deskVoice: seated.length ? seated[0].voice : null,
             anchors: anchors.filter(Boolean),
             globes: globes.filter(Boolean),
         };
@@ -387,6 +405,18 @@
      * Fade the controls out when the pointer stops. Watching a channel should
      * not mean looking at a toolbar; it comes back the moment the mouse does.
      */
+    /** Station configuration, on a key, since nothing is on screen. */
+    function wireSettingsKey() {
+        window.addEventListener('keydown', (e) => {
+            if (e.key !== 's' && e.key !== 'S' && e.key !== 'Escape') return;
+            const panel = $('settings-panel');
+            if (!panel) return;
+            const t = e.target && e.target.tagName;
+            if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') return;
+            panel.classList.toggle('hidden');
+        });
+    }
+
     function watchPointerIdle() {
         const IDLE_MS = 2800;
         let timer = null;
@@ -403,6 +433,7 @@
 
     async function init() {
         watchPointerIdle();
+        wireSettingsKey();
         try {
             try {
                 if (document.fonts && document.fonts.load) {
@@ -422,6 +453,11 @@
 
             const assets = await loadAllAssets();
             GNNRenderer.init(canvas, assets);
+
+            // The anchor in the first seat reads, so the station speaks with
+            // that character's voice rather than whatever the catalogue
+            // happened to list first.
+            if (assets.deskVoice) GNNTTS.setVoice(assets.deskVoice);
 
             wireModules();
             wireUI();

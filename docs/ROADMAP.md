@@ -187,3 +187,38 @@ Update `CLAUDE.md` as state changes. Do not add a third status document.
 realtime. It is flatter than a commercial engine; that is a known, accepted
 tradeoff. If voice quality is revisited, isolate it as its own task with
 benchmarked before/after recordings — not mixed into a feature refactor.
+
+## The rest of the cast
+
+Decided while watching the two-anchor desk run, and recorded so it is not
+re-litigated.
+
+**Correspondents come in through the monitor, not through a second set.**
+The obvious move — give each extra character its own studio and cut to it —
+means a set, a desk and a camera angle per character, and every one of them
+is another plate to generate and another layout to get wrong. The monitor
+above the desk is already there, already framed, and already used for
+cutaway footage. A correspondent appearing in it as a LIVE window is how a
+real channel carries a remote, it needs one portrait rather than a room, and
+it gives the anchors something to talk *to*. Field reports, specialist
+desks and guest experts all arrive that way.
+
+What that needs: the PIP has to accept a cast portrait as well as footage,
+the director needs a beat type for a two-way (anchor asks, correspondent
+answers, anchor thanks), and the correspondent's voice has to duck the
+anchors rather than overlap them.
+
+**Anchors facing each other needs new art, not a transform.** The plates are
+drawn square to camera, looking down the lens, because that is what the
+prompt asks for. Rotating or mirroring them in the engine tilts a head or
+flips a badge; it does not turn a face. Two seats looking slightly inward
+wants a three-quarter variant of the hero — a `_turn_left` and `_turn_right`
+framing — and that is a generation per species, so it waits until the cast
+is otherwise finished.
+
+**The roster rotation is written and currently pinned off.** `main.js` holds
+the full eleven-character roster with a voice each, and the code to pick a
+line-up by show block. The desk is pinned to the human commander and the
+Mrrshan matriarch because a channel has anchors rather than a rota. The
+rotation belongs to the show-block work above: different blocks, different
+desks, with these two as the main daytime pair.

@@ -31,17 +31,21 @@
 const GNNRenderer = (() => {
     'use strict';
 
-    // 320x180 is 16:9 at the horizontal pixel density of the source
-    // material, which was 320x200. Scaling by an integer keeps every
-    // source pixel square and whole; the canvas is then letterboxed to
-    // the window by CSS rather than resampled here.
+    // The window is the broadcast, edge to edge, so the frame takes the
+    // window's shape rather than a fixed one. A fixed 16:9 canvas letterboxed
+    // itself into black bars above and below on any window that was not
+    // 16:9 — the picture was correct and the television it sat in was not.
+    //
+    // Height is pinned to the source material's pixel density (180 lines at
+    // 4x) and width follows the window, so a wider window shows more room
+    // rather than the same room stretched.
     const SCALE = 4;
     const BASE_W = 320;
     const BASE_H = 180;
-    const CANVAS_W = BASE_W * SCALE;
-    const CANVAS_H = BASE_H * SCALE;
+    let CANVAS_W = BASE_W * SCALE;
+    let CANVAS_H = BASE_H * SCALE;
 
-    // The picture is the whole canvas now.
+    // The picture is the whole canvas.
     const VIEW = { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H };
 
     // Everything below is in viewport-local space, as a fraction of the
@@ -69,6 +73,29 @@ const GNNRenderer = (() => {
     let anchorFrames = [];
     let globeFrames = [];
 
+    /** Resize the frame to the window, keeping the vertical pixel density. */
+    function fit() {
+        if (!canvas) return;
+        const aspect = (window.innerWidth || BASE_W) / (window.innerHeight || BASE_H);
+        const w = Math.max(BASE_W, Math.round(BASE_H * aspect)) * SCALE;
+        const h = BASE_H * SCALE;
+        if (w === CANVAS_W && h === CANVAS_H && canvas.width === w) return;
+        CANVAS_W = w;
+        CANVAS_H = h;
+        VIEW.w = w;
+        VIEW.h = h;
+        ANCHOR.w = w;
+        ANCHOR.h = h;
+        canvas.width = w;
+        canvas.height = h;
+        ctx.imageSmoothingEnabled = false;
+        if (vcanvas) {
+            vcanvas.width = w;
+            vcanvas.height = h;
+            vctx.imageSmoothingEnabled = false;
+        }
+    }
+
     function init(canvasEl, assets) {
         canvas = canvasEl;
         ctx = canvas.getContext('2d');
@@ -79,6 +106,14 @@ const GNNRenderer = (() => {
         vcanvas.height = VIEW.h;
         vctx = vcanvas.getContext('2d');
         vctx.imageSmoothingEnabled = false;
+        fit();
+        window.addEventListener('resize', fit);
+        // A window manager can hand the page one size and settle on another
+        // a frame later, and no resize event need follow. The first fit saw
+        // 1280x720 for a window that became 1200x757, and the canvas was
+        // then stretched to fit by CSS — the picture filled the window and
+        // every proportion in it was wrong. Checking per frame is a few
+        // comparisons and cannot get this wrong.
 
         // The newsroom set, when it has been generated. Without it the
         // MOO1 newscast scene stands in: it is a complete picture rather
@@ -216,15 +251,21 @@ const GNNRenderer = (() => {
     // anchor filled the window and there was nowhere to put a second.
     //
     // CAST.h is the whole plate; most of its lower half is behind the desk.
-    const CAST = { h: 0.34, seat: 0.655 };
+    // `seat` is where the plate's bottom edge lands, and the desk is drawn
+    // over it: they have to overlap, or the anchors float above the desk
+    // with a band of floor showing between.
+    const CAST = { h: 0.34, seat: 0.72 };
     const SEATS = {
         1: [0.50],
-        2: [0.38, 0.62],
-        3: [0.30, 0.50, 0.70],
+        2: [0.37, 0.63],
+        3: [0.28, 0.50, 0.72],
     };
-    // Full width, top edge at the desk line, the rest off the bottom of the
-    // frame the way a desk in front of a camera actually sits.
-    const DESK = { w: 1.0, top: 0.635 };
+    // The desk's top edge is derived from where the anchors are seated, not
+    // set alongside it. Two independent numbers drifted apart every time
+    // either was adjusted and left a band of studio floor showing between
+    // the anchors' shoulders and the desk.
+    const DESK = { w: 1.0, overlap: 0.055 };
+    const deskTop = () => CAST.seat - DESK.overlap;
 
     /**
      * The desk. The anchor whose turn it is takes the lip frame the animator
@@ -251,7 +292,7 @@ const GNNRenderer = (() => {
     function drawDesk(c, img) {
         const w = DESK.w * VIEW.w;
         const h = img.height * (w / img.width);
-        c.drawImage(img, (VIEW.w - w) / 2, DESK.top * VIEW.h, w, h);
+        c.drawImage(img, (VIEW.w - w) / 2, deskTop() * VIEW.h, w, h);
     }
 
     /** A studio monitor: the art, inset in a lit bezel. */
@@ -390,10 +431,11 @@ const GNNRenderer = (() => {
     function renderFrame(now, frames, icon) {
         if (!ctx) return;
         try {
+            fit();
             ctx.imageSmoothingEnabled = false;
 
             ctx.fillStyle = '#05080e';
-            ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+            ctx.fillRect(0, 0, VIEW.w, VIEW.h);
 
             drawViewport(now, frames, icon);
             blitViewport(now);
@@ -419,6 +461,8 @@ const GNNRenderer = (() => {
 
     return {
         init, renderFrame, getContext,
-        VIEW, CANVAS_W, CANVAS_H, SCALE, BASE_W, BASE_H, bottomStack,
+        VIEW, SCALE, BASE_W, BASE_H, bottomStack, fit,
+        get CANVAS_W() { return CANVAS_W; },
+        get CANVAS_H() { return CANVAS_H; },
     };
 })();
