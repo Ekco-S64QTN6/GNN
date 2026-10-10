@@ -62,6 +62,7 @@ EDGE_FORMAT = os.environ.get('GNN_TTS_FORMAT', 'audio-24khz-96kbitrate-mono-mp3'
 # ever sees it.
 TARGET_LUFS = float(os.environ.get('GNN_TTS_LUFS', -19.0))
 TARGET_PEAK_DB = float(os.environ.get('GNN_TTS_PEAK', -3.0))
+INTERSAMPLE_HEADROOM_DB = 1.8
 
 
 # --- local voice engine ------------------------------------------------
@@ -314,12 +315,16 @@ def measure_loudness(mp3):
 
 def normalize(mp3):
     """
-    Level-match a clip and hand it back as lossless PCM.
+    Level-match a clip to a loudness target and hand it back as lossless PCM.
 
-    A single linear gain, not a compressor: the voice keeps its own dynamics
-    and simply arrives where the mixer expects it. Decoding once and serving
-    WAV also avoids a second lossy generation, and on localhost the extra
-    bytes cost nothing.
+    Loudness is normalised; peaks are *limited*, not used to set the gain.
+    Backing the whole clip off until its loudest sample cleared a ceiling is
+    what made consecutive lines differ by 8 LU: the ceiling bound on every
+    line, so a single plosive in a long read dragged that entire read down.
+    Crest factor was being turned into perceived volume.
+
+    Decoding once and serving WAV also avoids a second lossy generation; on
+    localhost the extra bytes cost nothing.
 
     Returns (payload, content_type), falling back to the original MP3 if
     ffmpeg cannot be used.
@@ -331,10 +336,22 @@ def normalize(mp3):
         gain = 0.0
         if lufs is not None and lufs > -70:
             gain = TARGET_LUFS - lufs
-        if peak is not None:
-            gain = min(gain, TARGET_PEAK_DB - peak)
+        elif peak is not None:
+            # Integrated loudness is meaningless on a very short clip; fall
+            # back to putting the peak where a normal read's peak lands.
+            gain = TARGET_PEAK_DB - peak
         gain = max(-24.0, min(24.0, gain))
-        r = _ffmpeg(['-i', 'pipe:0', '-af', 'volume=%.2fdB' % gain,
+
+        # The limiter catches the few transients that the loudness match
+        # pushes high, instead of the gain stage pre-emptively ducking every
+        # clip to protect against them. It works on sample peaks while the
+        # target is a true peak, and inter-sample peaks run 1-2dB above
+        # sample peaks, so it is set below the target by that much.
+        ceiling = 10 ** ((TARGET_PEAK_DB - INTERSAMPLE_HEADROOM_DB) / 20.0)
+        chain = ('volume=%.2fdB,'
+                 'alimiter=limit=%.4f:attack=1:release=60:level=disabled'
+                 % (gain, ceiling))
+        r = _ffmpeg(['-i', 'pipe:0', '-af', chain,
                      '-ar', '24000', '-ac', '1', '-c:a', 'pcm_s16le',
                      '-f', 'wav', 'pipe:1'], mp3)
         if r.returncode == 0 and r.stdout:
