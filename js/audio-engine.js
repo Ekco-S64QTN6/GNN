@@ -21,6 +21,7 @@ const GNNAudio = (() => {
     let muted = false;
 
     let masterGain = null;
+    let stationMakeup = null;
     let comp = null;
     const runningWaiters = [];
 
@@ -77,16 +78,22 @@ const GNNAudio = (() => {
 
     const STATION_TRIM = 0.9;
     /**
-     * Output make-up, applied *after* the limiter.
+     * Output make-up, applied *before* the limiter.
      *
      * Taking the anchor off the compressors cost about 8dB, because the old
      * mix was only that loud by driving them into constant gain reduction.
-     * Level has to come back somewhere that cannot modulate the programme,
-     * and post-limiter is the only such place: the limiter bounds what
-     * reaches this stage, so raising it lifts the whole mix without letting
-     * the bed breathe against the voice.
+     * Level has to come back somewhere that cannot modulate the programme.
+     *
+     * It must not come back *after* the limiter. A limiter does not hard-bound
+     * its output: with a finite attack a fast transient passes through before
+     * the gain reduction catches up, so the stage downstream sees peaks above
+     * the threshold. Multiplying those by 1.2 is what put the mix at +1.5dBFS
+     * and clipped 51 samples in the capture that prompted this. Make-up goes
+     * in front of the limiter, which then bounds the real output.
      */
-    const STATION_LEVEL = 1.2;
+    const MAKEUP_GAIN = 1.2;
+    /** Post-limiter fader. Volume and mute only — never above unity. */
+    const STATION_LEVEL = 1.0;
     /**
      * Mix levels.
      *
@@ -148,10 +155,16 @@ const GNNAudio = (() => {
             comp.threshold.value = -3;
             comp.knee.value = 4;
             comp.ratio.value = 20;
-            // A limiter has to catch the transient, not follow it: 5ms let
-            // stings overshoot past full scale before it engaged.
-            comp.attack.value = 0.003;
-            comp.release.value = 0.15;
+            // A limiter has to catch the transient, not follow it. Even at
+            // 3ms a sting got through; the make-up that used to sit after
+            // this stage then multiplied the overshoot straight past 0dBFS.
+            comp.attack.value = 0.001;
+            comp.release.value = 0.12;
+
+            // Make-up in front of the limiter, so the limiter is the last
+            // thing that touches level and its ceiling is the real ceiling.
+            stationMakeup = ctx.createGain();
+            stationMakeup.gain.value = MAKEUP_GAIN;
 
             masterGain = ctx.createGain();
             masterGain.gain.value = STATION_LEVEL;
@@ -216,8 +229,9 @@ const GNNAudio = (() => {
             stationBus.connect(crusherDry);
             stationBus.connect(crusher);
             crusher.connect(crusherWet);
-            crusherDry.connect(comp);
-            crusherWet.connect(comp);
+            crusherDry.connect(stationMakeup);
+            crusherWet.connect(stationMakeup);
+            stationMakeup.connect(comp);
             comp.connect(masterGain);
             masterGain.connect(ctx.destination);
         }
