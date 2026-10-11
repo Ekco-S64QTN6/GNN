@@ -1,5 +1,15 @@
 # Newsroom set — the prompt
 
+**The desk is now part of this image.** It used to be generated separately
+so the anchors could sit between the room and it — but the cast plates end
+at the hands with no body below them, so there is nothing for a desk to
+need to hide. The anchors are drawn straight on top, hands landing on the
+surface.
+
+That removes the reason they never matched: two plates had to agree on
+perspective, lighting, palette and style, and separately generated ones
+never quite do. One scene cannot disagree with itself.
+
 ## Why the set looks cheaper than the cast
 
 Measured off the two plates:
@@ -39,8 +49,15 @@ smoked glass, worn paint. Dense, atmospheric and deeply detailed, drawn
 with the same care as a finely rendered character portrait.
 
 The set of a science-fiction television news studio, photographed head-on
-from a camera at seated eye level. Empty — no people, no desk, no consoles,
-no furniture of any kind.
+from a camera at seated eye level. No people anywhere.
+
+Centred in the room stands a wide anchor desk, seen slightly from above so
+both its dark top surface and its front face are visible, with a pale
+bevelled lip along the front edge. It is a broad shallow trapezoid whose
+ends taper inward toward the floor. Its front face carries a lit strip
+along the upper edge, a large recessed panel in the centre, and a smaller
+readout panel either side. Its top edge sits at about three fifths of the
+way down the image. Nothing rests on it and nobody sits at it.
 
 The back wall is one enormous curved panoramic window, gently arched,
 spanning about eighty percent of the image width and reaching from just
@@ -64,9 +81,9 @@ The floor is dark polished composite filling the foreground, marked with
 faint inlaid guide lines, crossed by loose cable runs taped down toward the
 edges, and holding long soft reflections of the lights above.
 
-The entire middle and lower middle of the room is clear empty floor. There
-is nothing standing anywhere in the room — no desk, no control panels, no
-counters, no equipment at waist or desk height on either side.
+Apart from that desk the room is unfurnished: no control panels, no
+counters, no consoles, no equipment at waist or desk height on either side
+of it. Clear floor everywhere else.
 
 Palette: charcoal and gunmetal, cool white and cyan light strips, warm amber
 accents.
@@ -77,18 +94,23 @@ be pure black.
 
 Do not include: flat untextured surfaces, large areas of a single colour,
 minimal or vector-like shapes, captions, headlines, tickers, labels,
-letters, numbers or writing of any kind, people, a desk, control consoles,
-counters or any furniture whatsoever, modern logos, real-world brand names,
+letters, numbers or writing of any kind other than a station name on the
+front of the desk, people, chairs, control consoles, counters or any
+furniture other than the one desk, modern logos, real-world brand names,
 watermarks, signatures.
 ```
 
 ---
 
-## The desk, same problem
+## When this lands
 
-The desk plate is flat for the same reason. When you regenerate it, put the
-same style block at the top of its prompt in `prompts.md` — or tell me and
-I will change it there so it comes out of the generator that way.
+Save it as `assets/generated/set/studio_wide_empty.png`, delete
+`assets/generated/set/desk_oval_front.png`, and run
+`python3 tools/condition_plates.py`. The renderer already handles both: with
+a desk plate present it composites as before, and without one it seats the
+anchors at the desk line in the set image. If the desk in the generated
+scene does not sit at exactly three fifths down, that is one number —
+`DESK_LINE` in `renderer.js` — and I will match it to whatever comes back.
 
 ## What changed from the last attempt
 

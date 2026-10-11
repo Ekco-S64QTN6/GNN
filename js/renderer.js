@@ -141,6 +141,8 @@ const GNNRenderer = (() => {
             // would only be painting something nothing can see.
             if (setPlate) drawCover(c, setPlate, VIEW.w, VIEW.h);
             drawCast(c, frames.anchor);
+            // Only when the desk is its own plate. With the desk drawn into
+            // the set, the anchors are already sitting at it.
             if (deskPlate) drawDesk(c, deskPlate);
             if (icon && !GNNCutsceneManager.isCutawayActive()) {
                 drawIconPlate(c, icon);
@@ -262,6 +264,20 @@ const GNNRenderer = (() => {
     // the lowest thing and the desk has to start just under them so they
     // read as resting on it rather than behind it.
     const DESK = { overlap: 0.015, bottom: 0.79 };
+
+    // Where the desk's top edge sits when the desk is drawn into the set
+    // plate rather than supplied separately.
+    //
+    // Two plates have to agree on perspective, lighting, palette and style,
+    // and separately generated ones never quite do — which is most of why
+    // the desk never looked like it belonged in the room. One scene with
+    // the desk already in it cannot disagree with itself.
+    //
+    // This works because the cast plates end at the hands with nothing
+    // below them, so there is no body for a desk to need to hide. The
+    // anchors are simply drawn on top, with their hands landing on the
+    // surface.
+    const DESK_LINE = 0.60;
     const deskTop = () => CAST.seat - DESK.overlap;
 
     /**
@@ -274,6 +290,10 @@ const GNNRenderer = (() => {
         if (!list.length) return;
         const seats = SEATS[list.length] || SEATS[1];
         const h = CAST.h * VIEW.h;
+        // Hands land on the desk's top edge: just under it when the desk is
+        // a separate plate drawn over them, just on it when the desk is part
+        // of the set and they are drawn over it.
+        const seatY = deskPlate ? CAST.seat : DESK_LINE;
         // Whoever has the chair, not whoever is sitting on the left.
         const chair = (typeof GNNDirector !== 'undefined' && GNNDirector.activeSeat)
             ? GNNDirector.activeSeat() % list.length : 0;
@@ -302,7 +322,7 @@ const GNNRenderer = (() => {
             if (!img) return;
             const w = img.width * (h / img.height);
             c.drawImage(img, seats[i] * VIEW.w - w / 2,
-                        CAST.seat * VIEW.h - h, w, h);
+                        seatY * VIEW.h - h, w, h);
         });
     }
 
@@ -487,6 +507,7 @@ const GNNRenderer = (() => {
         const list = seated.slice(0, 3);
         const seats = SEATS[list.length] || SEATS[1];
         const h = CAST.h * VIEW.h;
+        const seatY = deskPlate ? CAST.seat : DESK_LINE;
         return {
             monitor: {
                 x: ICON.x * VIEW.w, y: ICON.y * VIEW.h,
@@ -498,7 +519,7 @@ const GNNRenderer = (() => {
                 const w = img ? img.width * (h / img.height) : h;
                 return {
                     x: seats[i] * VIEW.w - w / 2,
-                    y: CAST.seat * VIEW.h - h,
+                    y: seatY * VIEW.h - h,
                     w, h: h * 0.45,
                 };
             }),
