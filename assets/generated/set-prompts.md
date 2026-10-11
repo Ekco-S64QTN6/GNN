@@ -1,18 +1,28 @@
 # Newsroom set — the prompt
 
-Written from the reference the owner generated, not invented. My previous
-attempts were wrong in two specific, measurable ways:
+## Why the set looks cheaper than the cast
 
-| | mine | the reference |
+Measured off the two plates:
+
+| | mean local contrast | pixels sitting in a flat area |
 |---|---|---|
-| window width | ~50% of the frame | **~80%** — it spans nearly the whole back wall |
-| window height | ~33% | **~37%**, and it starts just under the ceiling |
-| the room | "spare and open", "almost bare" | **dense** — console wings, light columns, ceiling soffit, cable runs |
+| anchor | **27.98** | 6% |
+| set | 14.32 | **29%** |
 
-The second one is the real error. A television studio is not minimalist
-architecture; it is a room packed with equipment, screens, lighting rigs and
-cabling, and that clutter is what makes it read as a working newsroom rather
-than a lobby. Every prompt I wrote asked for the opposite.
+The set has half the shading density and five times the flat area. Every
+wall and floor panel is a large block of nearly one colour, while the
+anchors are shaded continuously with a dozen tones across a cheekbone. Put
+side by side, one looks drawn and the other looks filled in.
+
+That is my fault twice over. The cast prompt asks for **"painterly pixel
+dithering, hand-placed pixels"**, which is what gives them that quality. For
+the set I first kept the `320x200 DOS screen` clause, which flattens
+everything, and when I dropped it I replaced it with **"crisp clean
+pixels"** — which is a straight instruction to produce flat graphic
+artwork. Both were wrong, in opposite directions.
+
+The style line below asks for the same hand as the character plates,
+without the resolution clause.
 
 ---
 
@@ -21,38 +31,42 @@ than a lobby. Every prompt I wrote asked for the opposite.
 ```
 Create a 1792x1024 image.
 
-Highly detailed modern pixel art, rich colour, crisp clean pixels with
-careful dithering — the look of a modern pixel-art game rather than a 1990s
-one. Cinematic, densely detailed, confident lighting.
+Painterly pixel art of the highest craft. Every surface shaded with many
+tones and hand-placed dithering — no flat fills anywhere, no large areas of
+a single colour. Strong directional lighting with bloom, bounced light and
+soft falloff. Rich material texture: brushed metal, scuffed composite,
+smoked glass, worn paint. Dense, atmospheric and deeply detailed, drawn
+with the same care as a finely rendered character portrait.
 
 The set of a science-fiction television news studio, photographed head-on
-from a camera at seated eye level. Empty — no people, no anchor desk in the
-centre.
+from a camera at seated eye level. Empty — no people, no desk, no consoles,
+no furniture of any kind.
 
 The back wall is one enormous curved panoramic window, gently arched,
 spanning about eighty percent of the image width and reaching from just
 below the ceiling down to roughly the middle of the frame. Slim dark
-mullions divide it into a few tall panes. It is the dominant feature of the
+mullions divide it into tall panes. It is the dominant feature of the room.
+
+A heavy dark structural column stands at each end of the window, each
+carrying a tall vertical strip of cool white light running floor to
+ceiling, its glow spilling across the panelling beside it. Above, a curved
+ceiling soffit follows the arc of the window, its underside set with
+recessed downlights that pool on the surfaces below, and behind it an
+exposed lighting truss carrying studio lamps on yokes, aimed down into the
 room.
 
-Framing it: a heavy dark structural column at each end of the window, each
-carrying a tall vertical strip of cool white light running floor to
-ceiling. Above, a curved ceiling soffit follows the arc of the window, its
-underside set with recessed downlights, and behind it exposed lighting
-trusses and rigging.
+The side walls, beyond the columns, are ribbed metal panelling with vents,
+seams, conduit runs and weathering, receding toward the back. High on each
+side wall, well above head height, a wall-mounted monitor on a bracket,
+dark and switched off.
 
-Flanking the empty centre, at desk height, an angled console wing on each
-side: banks of illuminated control panels, small readout monitors, switch
-rows and status lamps, turned inward toward the middle of the room. Warm
-amber light strips run along their front edges. Loose cable runs cross the
-floor behind them.
+The floor is dark polished composite filling the foreground, marked with
+faint inlaid guide lines, crossed by loose cable runs taped down toward the
+edges, and holding long soft reflections of the lights above.
 
-The floor is dark polished composite, reflecting the lights, and fills the
-foreground of the frame. The far wall reads as genuinely distant — this is a
-large room, not a corridor.
-
-The centre of the room, between the two console wings, is completely empty
-floor. Nothing stands there.
+The entire middle and lower middle of the room is clear empty floor. There
+is nothing standing anywhere in the room — no desk, no control panels, no
+counters, no equipment at waist or desk height on either side.
 
 Palette: charcoal and gunmetal, cool white and cyan light strips, warm amber
 accents.
@@ -61,45 +75,36 @@ Every pane of the window is a flat area of pure black, showing nothing at
 all — no stars, no planet, no nebula, no glow. Nothing else in the room may
 be pure black.
 
-Do not include: captions, headlines, tickers, labels, letters, numbers or
-writing of any kind, people, an anchor desk or any furniture in the centre
-of the room, modern logos, real-world brand names, watermarks, signatures.
+Do not include: flat untextured surfaces, large areas of a single colour,
+minimal or vector-like shapes, captions, headlines, tickers, labels,
+letters, numbers or writing of any kind, people, a desk, control consoles,
+counters or any furniture whatsoever, modern logos, real-world brand names,
+watermarks, signatures.
 ```
 
 ---
 
-## Two things about that prompt worth knowing
+## The desk, same problem
 
-**The window must come back pure black.** The reference has Earth and a
-starfield painted into it, which looks far better — but the engine keys the
-backdrop into that area, so anything drawn there becomes a permanent
-painted-on sky that no story can change. If the model insists on filling it,
-generate it anyway and say so; blacking it out afterwards is a two-minute job
-and better than fighting the prompt.
+The desk plate is flat for the same reason. When you regenerate it, put the
+same style block at the top of its prompt in `prompts.md` — or tell me and
+I will change it there so it comes out of the generator that way.
 
-**No desk in the centre.** The reference's desk is magnificent and is also
-the reason the shot works, but ours is a separate plate so the anchors can
-sit between the room and it. The side console wings are part of the room and
-should stay — they are most of what makes it look like a studio.
+## What changed from the last attempt
 
-## Variants, if the first comes back close but not right
-
-Change one line of the prompt above and regenerate:
-
-- **Too dark** — replace the palette line with: *"Palette: pale grey and
-  brushed steel, bright even studio lighting, cyan and amber accents."*
-- **Too cluttered in the centre** — add to the end: *"The middle third of
-  the image, from the floor up to the window, is clear empty space."*
-- **Window still too small** — replace the window sentence with: *"The back
-  wall is almost entirely one vast curved window, edge to edge, interrupted
-  only by two narrow columns at the far left and right."*
-- **Camera still too close** — add: *"Shot from far back with a wide lens;
-  the window is a long way from the camera and the floor runs a long way
-  toward it."*
+- **The style line asks for painterly, densely shaded work**, and the
+  negative list forbids flat fills and single-colour areas outright. That is
+  the whole fix for the quality gap.
+- **Lighting is described as doing something** — spilling across panelling,
+  pooling on surfaces, reflecting in the floor — rather than just existing.
+  Light with somewhere to land is what fills a flat surface with tones.
+- **Surfaces have materials**: scuffed, weathered, ribbed, smoked. A named
+  material gets shaded; "a wall" gets filled.
+- The console wings stay gone, said three times, and everything about the
+  window, soffit, columns and floor layout that worked is unchanged.
 
 ## Still not built
 
-The sixteen `backdrops/` prompts in `prompts.md` have never been generated,
-and the engine does not yet composite anything into the keyed window. The
-glass stays black until that is wired — say the word and it is a short job
-once one backdrop exists.
+The sixteen `backdrops/` prompts have never been generated and the engine
+does not composite anything into the keyed window yet. The glass stays
+black until that is wired — short job once one backdrop exists.
