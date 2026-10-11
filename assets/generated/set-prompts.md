@@ -1,183 +1,105 @@
-# Newsroom set — four rooms to try
+# Newsroom set — the prompt
 
-The last set of prompts were five descriptions of the room that already
-exists, which is why none of them helped. These are four different rooms.
+Written from the reference the owner generated, not invented. My previous
+attempts were wrong in two specific, measurable ways:
 
-What is wrong with the current one, concretely:
+| | mine | the reference |
+|---|---|---|
+| window width | ~50% of the frame | **~80%** — it spans nearly the whole back wall |
+| window height | ~33% | **~37%**, and it starts just under the ceiling |
+| the room | "spare and open", "almost bare" | **dense** — console wings, light columns, ceiling soffit, cable runs |
 
-- **The window is a slot.** It sits behind the anchors' heads at roughly a
-  quarter of the frame's width and a sixth of its height. There is nowhere
-  to put a planet, a fleet or a starfield and have anyone notice. It needs
-  to be the dominant feature of the back wall.
-- **It is a corridor, not a newsroom.** Instrument alcoves down both side
-  walls reads as a ship's passageway. A newsroom is a room you could put a
-  camera crew in.
-- **The camera is too close.** The anchors are composited at a fixed size,
-  so a tight room makes them look enormous in it. The back wall has to read
-  as genuinely far away.
-
-## What every one of these has to get right
-
-- **The window is pure black.** The engine keys the space backdrop into it,
-  so it must be a flat black area with nothing drawn in it — no stars, no
-  planet, no glow. Nothing else in the room may be pure black.
-- **The window is big**: roughly half the image wide and a third of it tall,
-  centred on the back wall. State it in the prompt; models under-size
-  windows otherwise.
-- **The centre of the room is empty.** Two anchors and a desk are
-  composited in afterwards. Their heads land at about 0.29 of the frame
-  height and the desk's top edge at about 0.55, so the band between is
-  going to be covered — the depth has to come from the floor in front, the
-  ceiling, and the walls out to the sides.
-- **1792x1024**, saved as `assets/generated/set/studio_wide_empty.png`, then
-  `python3 tools/condition_plates.py`.
+The second one is the real error. A television studio is not minimalist
+architecture; it is a room packed with equipment, screens, lighting rigs and
+cabling, and that clutter is what makes it read as a working newsroom rather
+than a lobby. Every prompt I wrote asked for the opposite.
 
 ---
 
-## A — Orbital observation deck
-
-A viewing gallery converted into a studio. The back wall is one enormous
-curved window and almost nothing else.
+## The prompt
 
 ```
 Create a 1792x1024 image.
 
 Highly detailed modern pixel art, rich colour, crisp clean pixels with
-careful dithering — the look of a modern pixel-art game, not a 1990s one.
+careful dithering — the look of a modern pixel-art game rather than a 1990s
+one. Cinematic, densely detailed, confident lighting.
 
-The interior of an orbital observation deck being used as a television
-studio, empty of people and furniture. A single vast curved panoramic
-window dominates the back wall, filling roughly half the width of the image
-and a third of its height, running from well above head height down to
-waist height, divided by a few slender structural ribs. The room around it
-is spare and open: a broad clear floor stretching toward the camera,
-subtle inset lighting along the floor edge, a low ceiling rail of soft
-downlights, and bare panelled side walls angling away out of frame. Seen
-from a camera at seated eye level, looking level, with the window clearly
-distant — the room should read as large and deep, not as a corridor.
-Nothing in the middle of the room.
+The set of a science-fiction television news studio, photographed head-on
+from a camera at seated eye level. Empty — no people, no anchor desk in the
+centre.
 
-Palette: cool steel and slate blue, bone white trim, warm amber floor
-lighting.
+The back wall is one enormous curved panoramic window, gently arched,
+spanning about eighty percent of the image width and reaching from just
+below the ceiling down to roughly the middle of the frame. Slim dark
+mullions divide it into a few tall panes. It is the dominant feature of the
+room.
 
-The window is a flat area of pure black, showing nothing at all.
+Framing it: a heavy dark structural column at each end of the window, each
+carrying a tall vertical strip of cool white light running floor to
+ceiling. Above, a curved ceiling soffit follows the arc of the window, its
+underside set with recessed downlights, and behind it exposed lighting
+trusses and rigging.
+
+Flanking the empty centre, at desk height, an angled console wing on each
+side: banks of illuminated control panels, small readout monitors, switch
+rows and status lamps, turned inward toward the middle of the room. Warm
+amber light strips run along their front edges. Loose cable runs cross the
+floor behind them.
+
+The floor is dark polished composite, reflecting the lights, and fills the
+foreground of the frame. The far wall reads as genuinely distant — this is a
+large room, not a corridor.
+
+The centre of the room, between the two console wings, is completely empty
+floor. Nothing stands there.
+
+Palette: charcoal and gunmetal, cool white and cyan light strips, warm amber
+accents.
+
+Every pane of the window is a flat area of pure black, showing nothing at
+all — no stars, no planet, no nebula, no glow. Nothing else in the room may
+be pure black.
 
 Do not include: captions, headlines, tickers, labels, letters, numbers or
-writing of any kind, people, desks, chairs or furniture of any sort, modern
-logos, real-world brand names, watermarks, signatures.
+writing of any kind, people, an anchor desk or any furniture in the centre
+of the room, modern logos, real-world brand names, watermarks, signatures.
 ```
 
 ---
 
-## B — Hangar gallery
+## Two things about that prompt worth knowing
 
-The newsroom overlooks a working dock. Scale and activity beyond the glass,
-which also gives the backdrop somewhere believable to live.
+**The window must come back pure black.** The reference has Earth and a
+starfield painted into it, which looks far better — but the engine keys the
+backdrop into that area, so anything drawn there becomes a permanent
+painted-on sky that no story can change. If the model insists on filling it,
+generate it anyway and say so; blacking it out afterwards is a two-minute job
+and better than fighting the prompt.
 
-```
-Create a 1792x1024 image.
+**No desk in the centre.** The reference's desk is magnificent and is also
+the reason the shot works, but ours is a separate plate so the anchors can
+sit between the room and it. The side console wings are part of the room and
+should stay — they are most of what makes it look like a studio.
 
-Highly detailed modern pixel art, rich colour, crisp clean pixels with
-careful dithering.
+## Variants, if the first comes back close but not right
 
-The interior of a television studio built on a gallery above a starship
-docking bay, empty of people and furniture. The back wall is an enormous
-angled window looking out over the bay, filling roughly half the width of
-the image and a third of its height, its frame a heavy industrial truss
-with rivets and cable runs. Inside, the room is a working gallery: a broad
-steel floor with painted deck markings in the foreground, handrails along
-the sides, heavy ceiling girders overhead with clamp lights, and equipment
-lockers set back against the side walls well out of the centre. Camera at
-seated eye level, looking level, the window clearly distant so the gallery
-reads as a large deep space. Nothing in the middle of the room.
+Change one line of the prompt above and regenerate:
 
-Palette: gunmetal and oxidised steel, hazard yellow markings, cold white
-work lights.
+- **Too dark** — replace the palette line with: *"Palette: pale grey and
+  brushed steel, bright even studio lighting, cyan and amber accents."*
+- **Too cluttered in the centre** — add to the end: *"The middle third of
+  the image, from the floor up to the window, is clear empty space."*
+- **Window still too small** — replace the window sentence with: *"The back
+  wall is almost entirely one vast curved window, edge to edge, interrupted
+  only by two narrow columns at the far left and right."*
+- **Camera still too close** — add: *"Shot from far back with a wide lens;
+  the window is a long way from the camera and the floor runs a long way
+  toward it."*
 
-The window is a flat area of pure black, showing nothing at all.
+## Still not built
 
-Do not include: captions, headlines, tickers, labels, letters, numbers or
-writing of any kind, people, desks, chairs or furniture of any sort, modern
-logos, real-world brand names, watermarks, signatures.
-```
-
----
-
-## C — Atrium
-
-A tall room rather than a wide one. The height is what makes the anchors
-look small in it.
-
-```
-Create a 1792x1024 image.
-
-Highly detailed modern pixel art, rich colour, crisp clean pixels with
-careful dithering.
-
-The interior of a tall atrium aboard a space station, set up as a
-television studio, empty of people and furniture. The back wall rises well
-above the camera and carries one huge window — roughly half the width of
-the image and a third of its height, centred, with a heavy arched frame
-and slender vertical mullions. Galleries and walkways run along both side
-walls at two levels, receding toward the back, their railings catching the
-light. A polished floor fills the foreground with soft reflections. High
-overhead, a lighting rig on a lattice. Camera low, at seated eye level,
-looking level across the space, with the far wall clearly distant so the
-room reads as tall and deep. Nothing in the middle of the room.
-
-Palette: pale stone grey and teal glass, brass railings, warm overhead
-light.
-
-The window is a flat area of pure black, showing nothing at all.
-
-Do not include: captions, headlines, tickers, labels, letters, numbers or
-writing of any kind, people, desks, chairs or furniture of any sort, modern
-logos, real-world brand names, watermarks, signatures.
-```
-
----
-
-## D — Command spire
-
-Glass wrapping the back and both sides, like a control tower. The most
-dramatic of the four and the one that makes the backdrop do the most work.
-
-```
-Create a 1792x1024 image.
-
-Highly detailed modern pixel art, rich colour, crisp clean pixels with
-careful dithering.
-
-The interior of a glass-walled command spire high above a planet, in use as
-a television studio, empty of people and furniture. Tall windows wrap the
-back wall and curve away along both sides, the central pane filling roughly
-half the width of the image and a third of its height, their frames thin
-and dark so the glass dominates. The floor is dark polished composite with
-faint inlaid light strips running toward the back, catching reflections in
-the foreground. A slim ring of ceiling lights above. The room is almost
-bare — the architecture is the set. Camera at seated eye level looking
-level out through the glass, the far wall clearly distant. Nothing in the
-middle of the room.
-
-Palette: near-black charcoal and deep blue glass, thin cyan light strips,
-a single warm accent.
-
-Every window pane is a flat area of pure black, showing nothing at all.
-
-Do not include: captions, headlines, tickers, labels, letters, numbers or
-writing of any kind, people, desks, chairs or furniture of any sort, modern
-logos, real-world brand names, watermarks, signatures.
-```
-
----
-
-## One thing worth knowing before you spend a generation
-
-The backdrops that go behind the window **do not exist yet** — the sixteen
-`backdrops/` prompts in `prompts.md` have never been generated, and the
-engine does not yet composite them into the keyed area. So whichever room
-you pick, the window will be black until that is built.
-
-If you want to see a room working with something behind the glass before
-committing to it, generate one backdrop as well — `backdrops/earth_globe_day.png`
-is the obvious one — and say so, and I will wire the keying.
+The sixteen `backdrops/` prompts in `prompts.md` have never been generated,
+and the engine does not yet composite anything into the keyed window. The
+glass stays black until that is wired — say the word and it is a short job
+once one backdrop exists.
