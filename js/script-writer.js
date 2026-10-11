@@ -62,9 +62,35 @@ const GNNScript = (() => {
         return words.sort((a, b) => b.length - a.length);
     }
 
+    // Every line this module has said lately, newest last.
+    //
+    // `pickFrom` was a bare random pick with no memory, so on a short list
+    // the same line came round every few draws — "the Commander would like
+    // us to be precise about this" four times in five minutes. Random with
+    // replacement feels repetitive long before it is statistically odd.
+    const recent = [];
+    const RECENT_LIMIT = 40;
+
+    function remember(line) {
+        recent.push(line);
+        while (recent.length > RECENT_LIMIT) recent.shift();
+        return line;
+    }
+
+    /**
+     * A line from `list` that has not been used recently.
+     *
+     * Half the list is held back as "recent" at most, so a short list still
+     * always returns something — with three lines to choose from, refusing
+     * to repeat at all would mean refusing to speak.
+     */
     function pickFrom(list, fallback) {
-        if (list && list.length) return list[(Math.random() * list.length) | 0];
-        return fallback;
+        if (!list || !list.length) return fallback;
+        const hold = Math.min(recent.length, Math.max(1, Math.floor(list.length / 2)));
+        const blocked = new Set(recent.slice(-hold));
+        const open = list.filter((l) => !blocked.has(l));
+        const pool = open.length ? open : list;
+        return remember(pool[(Math.random() * pool.length) | 0]);
     }
 
     function chance(p) { return Math.random() < p; }
@@ -273,6 +299,59 @@ const GNNScript = (() => {
      * can hand each to the right voice, or null when the pair at the desk
      * have no history worth airing.
      */
+    const ASK = [
+        'We can go to %s now, who has been following this. What are you '
+        + 'seeing?',
+        'Let us bring in %s. What is the picture from where you are?',
+        '%s is across this for us. What can you add?',
+        'Our correspondent %s is standing by. What are you hearing?',
+    ];
+    const ANSWER = [
+        'What I can tell you is that nobody here is calling it settled. '
+        + 'That is the part everyone keeps leaving out.',
+        'It is moving faster than the official line suggests. I would not '
+        + 'expect the figures to hold by this evening.',
+        'The people I have spoken to are being careful with their words, '
+        + 'which tells you something on its own.',
+        'There is a lot of confidence in the statements and very little of '
+        + 'it in the corridors. Make of that what you will.',
+        'It depends entirely on what happens in the next few hours, and '
+        + 'nobody here will say what they think that is.',
+    ];
+    const THANKS = [
+        'Thank you, %s.',
+        '%s, thank you. We will come back to you.',
+        'Our thanks to %s.',
+        'Stay with it, %s. Thank you.',
+    ];
+
+    /**
+     * A remote two-way: the anchor asks, the correspondent answers, the
+     * anchor thanks them.
+     *
+     * Three lines tagged with who says each, so the director can hand them
+     * to the right voice in order. The correspondent is anyone in the cast
+     * who is not currently at the desk.
+     */
+    function twoWay() {
+        if (typeof GNNCast === 'undefined') return null;
+        const seats = desk();
+        const seated = new Set(seats.map((p) => p.id));
+        const away = GNNCast.all().filter(
+            (p) => !seated.has(p.id) && !p.machine);
+        if (!seats.length || !away.length) return null;
+        const who = away[(Math.random() * away.length) | 0];
+        const host = seats[0];
+        return {
+            correspondent: who,
+            lines: [
+                { who: host, text: pickFrom(ASK, ASK[0]).replace('%s', who.name) },
+                { who, text: pickFrom(ANSWER, ANSWER[0]) },
+                { who: host, text: pickFrom(THANKS, THANKS[0]).replace('%s', who.name) },
+            ],
+        };
+    }
+
     function exchange() {
         const seats = desk();
         if (seats.length < 2 || typeof GNNCast === 'undefined') return null;
@@ -491,6 +570,7 @@ const GNNScript = (() => {
         sectorWire, banter, toss, hold,
         ident, signoff, commercial, promo,
         showOpen, intoBreak, outOfBreak, showClose, exchange, desk,
+        twoWay,
         tickerSegments, chyron, sponsorName,
     };
 })();

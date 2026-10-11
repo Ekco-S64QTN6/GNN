@@ -3,8 +3,8 @@
 # GNN — Galactic News Network
 
 **An unscripted live newscast simulation.**
-Real-world RSS, read by a desk of *Master of Orion 1* aliens,
-on a channel built entirely out of that game's 1993 asset library.
+Real-world RSS, read by a desk of *Master of Orion* aliens,
+in a studio that keeps the game's archive as its footage library.
 
 [![No dependencies](https://img.shields.io/badge/frontend-vanilla_JS-f7df1e?style=flat-square&logo=javascript&logoColor=black)](#)
 [![Python](https://img.shields.io/badge/server-python_3.8%2B-3776ab?style=flat-square&logo=python&logoColor=white)](#)
@@ -12,6 +12,7 @@ on a channel built entirely out of that game's 1993 asset library.
 [![Assets](https://img.shields.io/badge/assets-873_items_·_4316_frames-9c6bff?style=flat-square)](#)
 [![Audio](https://img.shields.io/badge/audio-41_SFX_·_40_tracks-54e08a?style=flat-square)](#)
 [![Voice](https://img.shields.io/badge/voice-kokoro--82M_local-ff9de2?style=flat-square)](#)
+[![Cast](https://img.shields.io/badge/cast-12_characters_·_11_generated-ffb454?style=flat-square)](#)
 
 <img src="docs/hero.png" alt="The GNN newsroom: two alien anchors at a lit desk reading a live RSS headline, story monitor over one shoulder, commodity crawl along the bottom" width="820">
 
@@ -48,12 +49,23 @@ adds a line of his own, and throws to the next item. Every few stories the desk
 goes away entirely for a commercial break that was storyboarded and voiced at
 runtime. The transmitter fails on a schedule nobody published.
 
-Everything you see and hear was decoded out of the original `.LBX` archives:
-**873 graphics items, 4,316 frames, 41 sound effects, 40 music tracks and the
-154 news bulletins the original in-game anchor read**. Nothing is drawn,
-sampled or composed from outside the game — including the freighter convoys and
-tactical plots, which are *composited at runtime* out of parts the game shipped
-separately.
+The channel is built on two sources, and it is worth being plain about which
+is which.
+
+**The archive.** Decoded out of the original `.LBX` files: **873 graphics
+items, 4,316 frames, 41 sound effects, 40 music tracks and the 154 news
+bulletins the original in-game anchor read**. It supplies the sound, the
+music, the sector-wire copy, the commercial break footage and the robot who
+still has a real 25-cel lip matrix. The freighter convoys and tactical plots
+are *composited at runtime* out of parts the game shipped separately.
+
+**The studio.** The set, the eleven generated anchors and correspondents, the
+window backdrops and the story cutaways are generated art, conditioned by
+`tools/condition_plates.py` to the resolution they are drawn at and quantised
+to 256 colours so they cut together with the decoded material rather than
+sitting on top of it looking like a different decade. Every prompt that made
+them is in [`assets/generated/prompts.md`](assets/generated/prompts.md),
+regenerated from `tools/prompt_bridge.py`.
 
 The game data itself is **not** in this repository, and is not needed to run
 it. See [Legal](#legal).
@@ -62,19 +74,20 @@ it. See [Legal](#legal).
 
 ## Screenshots
 
-| Live B-roll cutaway | Commercial break |
+| Story cutaway | Commercial break |
 | :---: | :---: |
-| <img src="docs/cutaway.png" width="400" alt="The newsroom cutting to a picture-in-picture composite of a freighter crossing a colony skyline"> | <img src="docs/commercial.png" width="400" alt="A full-frame in-universe commercial with a sponsor card and tagline"> |
-| A convoy shot assembled from a `LANDING` skyline, four `SHIPS2` hulls on independent depth tracks and a `NEBULA` wash. | A storyboarded 4–6 shot sequence with generated copy, voiced by the same anchor. |
+| <img src="docs/cutaway.png" width="400" alt="The newsroom with a picture-in-picture monitor over the anchor's shoulder showing an orbital survey plate"> | <img src="docs/commercial.png" width="400" alt="A full-frame in-universe commercial break opening on a GNN presentation card over a mining surface"> |
+| The monitor over the shoulder carries a plate matched to the story's subject, falling back to a scene composited out of archive parts. | A storyboarded 4–6 shot sequence with generated copy, read by its own announcer rather than by the anchors. |
 
-| Anchor commentary | Transmission fault |
+| Remote two-way | Transmission fault |
 | :---: | :---: |
-| <img src="docs/banter.png" width="400" alt="The anchor delivering standalone commentary between headlines"> | <img src="docs/glitch.png" width="400" alt="The picture rolling and tearing during a scheduled transmission anomaly"> |
-| Between headlines the anchors talk to each other, or read a re-pointed 1993 sector-wire bulletin. | Eight fault types seize the lip matrix, the audio bus and the picture. |
+| <img src="docs/correspondent.png" width="400" alt="A Bulrathi correspondent appearing live in the studio monitor while the two anchors listen at the desk"> | <img src="docs/glitch.png" width="400" alt="The picture tearing and shearing during a scheduled transmission anomaly"> |
+| Correspondents come in through the monitor, not a second set: the anchor asks, the reporter answers in their own voice, the anchor thanks them. | Eight fault types seize the lip matrix, the audio bus and the picture. |
 
 <div align="center">
-<img src="docs/scenes.png" width="820" alt="Contact sheet of nine synthesized B-roll scene recipes: convoy, tactical, survey, council, interview, industry, anomaly, cyber and deep field">
-<br><em>Nine scene recipes, each assembled from a different set of source items.</em>
+<img src="docs/banter.png" width="820" alt="The two anchors at the desk between headlines, one delivering a line of commentary with the station window behind them">
+<br><em>Between headlines the desk talks — to each other, to a correspondent,
+or over a re-pointed 1993 sector-wire bulletin.</em>
 </div>
 
 ---
@@ -144,28 +157,40 @@ stateDiagram-v2
     BANTER --> HOLD
     WIRE --> HOLD
     BANTER --> WIRE : 35% of beats
+    BANTER --> TWO_WAY : 22% of beats
+    TWO_WAY --> HOLD
     TOSS --> READ
     READ --> BREAK : every 4–7 stories
     READ --> IDENT : every 9–14 stories
     BREAK --> READ
     IDENT --> READ
+    READ --> SHOW_CLOSE : every 9–14 stories
+    SHOW_CLOSE --> COLD_OPEN
     READ --> DRY : rundown empty
     DRY --> READ : feed returns
 ```
 
 | Segment | What actually happens |
 | :--- | :--- |
-| **READ** | A live RSS story. The teleprompter types at whatever rate lands the last character as the voice stops. A B-roll cutaway fires a third of the way in. |
+| **READ** | A live RSS story. The teleprompter types to the *audio element's own playback position*, so the words appear as they are said rather than to an estimate that drifts. A cutaway fires a third of the way in. |
 | **HOLD** | **Real dead air.** Voice silent, prompter holding the last line, the anchor's mouth shut, room tone carrying it. 1.5–3.6 s. This is the single biggest difference between a page reading RSS and a channel that is on. |
-| **BANTER** | Standalone commentary generated for the story just read — a robot aside, an analyst line, a filing note. |
+| **BANTER** | Commentary on the story just read, or the two anchors talking to each other — a jab and a reply drawn from an asymmetric relationship table, each in its own voice. |
+| **TWO_WAY** | A remote. A correspondent appears live in the studio monitor; the anchor asks, the reporter answers in their own voice, the anchor thanks them. One portrait rather than a second set. |
 | **WIRE** | One of the **actual 154 `EVENTMSG.LBX` bulletins** the original GNN anchor read, with its placeholders re-pointed at proper nouns and figures mined out of the live story. |
 | **TOSS** | The one-line handoff into the next item. |
 | **BREAK** | A full commercial sequence — see below. |
 | **IDENT** | Station identification. |
+| **SHOW_CLOSE** | End of a block. The lead signs off and names whoever sat with them, and the channel opens a new show rather than reading on forever. |
 | **DRY** | The feed went quiet. The anchor notices, and says so. |
 
 Breaking-news keywords pre-empt the rundown, sound the klaxon and flash the
 CRT border.
+
+**Every spoken line goes through one queue.** Synthesis pre-empts itself —
+asking for a new clip cuts off the one playing — so any line fired while
+someone was talking used to kill it, and which line survived was a race. The
+director queues instead: one line at a time, a 420 ms beat of air between
+them, and the caption raised at the moment its own line starts.
 
 ---
 
@@ -176,9 +201,13 @@ CRT border.
 
 - The window is the broadcast, edge to edge. A 320×180 design grid rendered
   at 4× and fitted to the window, nearest-neighbour, with CRT scanlines.
-- Twelve anchors with their own voices, faces and opinions of one another;
-  the MOO1 robot keyed out of his original scene with his 25-cel lip matrix
-  intact. 22 over-the-shoulder icons.
+- A generated studio with the desk built into it, and the back window
+  **keyed out of the plate** so a backdrop can be composited behind the
+  glass and changed per show block.
+- Twelve characters with their own voices, faces and opinions of one
+  another: eleven generated species plus the MOO1 robot, keyed out of his
+  original scene with his 25-cel lip matrix intact. Anchors sit at the
+  desk; everyone else arrives through the monitor as a remote.
 - Everything inside the studio monitor is drawn to a **single viewport buffer**
   before being blitted, so faults roll, tear and desaturate the whole signal at
   once — the way a failing CRT would — rather than per element.
@@ -186,12 +215,21 @@ CRT border.
 </details>
 
 <details open>
-<summary><b>Waveform lip-sync</b></summary>
+<summary><b>Lip-sync gated on the voice</b></summary>
 
-The mouth used to flap on a random timer. Now an `AnalyserNode` taps the voice
-bus, and the anchor's 25 cels — bucketed into five visemes by jaw opening — are
-selected by the live low-frequency energy of the speech. Louder syllables hold
-longer. During dead air he blinks.
+An `AnalyserNode` taps the voice bus. The robot has a real 25-cel matrix and
+indexes it directly off the envelope, bucketed into five visemes by jaw
+opening. The generated cast have two mouth states, so they flap on a syllable
+clock — but the clock is **gated on the measured level**, which runs 0.002 to
+1.000 with pauses between sentences showing as runs below 0.10. Measured in
+the running app: the mouth is open **1–2% of samples during silence and 56%
+during speech**, so it moves while a word is being said and not otherwise.
+
+Each `_speaking` plate is built as its hero with **only the mouth swapped
+in** — 1.4–3.1% of the plate differs, one blob on the mouth — so a flap
+cannot move anything else. Two separate generations never agree everywhere,
+and swapping whole plates five times a second showed every disagreement at
+once. During dead air they blink.
 
 </details>
 
@@ -208,7 +246,8 @@ running.
 Every clip is **level-matched and delivered lossless**. Voices arrive at very
 different levels — through a compressor the hot ones get squashed and the quiet
 ones do not, which is what made one voice sound clean and the next harsh. Each
-clip is matched to -19 LUFS / -3 dBTP by a single linear gain (no dynamics, so
+clip is matched to -21 LUFS / -3 dBTP, with gentle compression ahead of the
+gain so the limiter never has to do the levelling (it removes 1.8 dB, not
 no pumping) and served as PCM rather than re-encoded.
 `python3 tools/voice_audition.py` renders every voice the running engine offers
 back to back, so the selector can be chosen by ear.
@@ -464,8 +503,14 @@ Full tool list and testing discipline: [`CLAUDE.md`](CLAUDE.md).
   remain as a fallback.
 - **Music rendering** — FluidSynth with the FluidR3 GM soundfont.
 - **Type** — *Press Start 2P* and *Outfit* via Google Fonts.
-- **RSS** — Ars Technica, NASA, ESA, Spaceflight Now, Space.com, BBC,
-  Al Jazeera, MIT Technology Review, Nature, Hacker News and others.
+- **RSS** — 25 feeds tagged by show block (world, tech, fleet, sport,
+  markets, diplomacy, anomaly, science): Ars Technica, NASA, ESA,
+  Spaceflight Now, BBC, Al Jazeera, UN News, MarketWatch, ESPN,
+  ScienceDaily, Phys.org, Nature, Hacker News and others, fetched through
+  rss2json.
+- **Local fallback** — rss2json has a daily cap, and when it is reached
+  every feed errors at once. `/api/localnews` parses the newest daily
+  digest off disk so the channel still has a rundown.
 
 ---
 

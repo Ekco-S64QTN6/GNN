@@ -48,26 +48,58 @@ No Web3 / crypto / NFT.
 
 ---
 
+## Landed
+
+Kept short, with what to run to see it. Full evidence is in `CLAUDE.md`.
+
+| | Verified by |
+| :--- | :--- |
+| **Anchor art** — 11 species at the desk, the robot keyed out of his own scene. `_speaking` built as the hero with only the mouth swapped in, so a flap cannot move the body. | `python3 tools/condition_plates.py` prints the per-state alignment and how many pixels differ from the hero |
+| **Lip-sync** gated on the measured envelope, teleprompter typed from the audio element's playback position | measured live: mouth open 1–2% during silence, 56% during speech; text/audio drift 0.008–0.051 across a read |
+| **One speech queue.** Nothing speaks directly; lines play one at a time with a 420 ms gap and the caption is raised when its own line starts | the ident, the break throw and the two-way no longer cut each other off |
+| **Show shape** — `showOpen`, `intoBreak`, `outOfBreak`, `showClose` and the two-anchor `exchange` are wired. A block ends and a new show opens | all five existed unused before; states now reach `SHOW_CLOSE` → `COLD_OPEN` |
+| **Exterior window backdrop** (was §8) — the eight panes are keyed out of the room plate by connected components and recorded in `layout.json`; backdrops are conditioned to the opening and drawn behind the glass | `condition_plates.py` prints `window keyed: ...`; two plates in |
+| **PIP scene mapping** (was §6) — the 14 generated cutaway plates are routed by subject; archive composites are the fallback | `GENERATED` in `cutscene-manager.js` |
+| **Correspondents through the monitor** — 22 plates conditioned from the chest-cropped generation; a two-way beat asks, answers in the reporter's own voice, and thanks | `docs/correspondent.png` |
+| **Commercial announcers** — breaks pick a voice that is not an anchor's, and keep it for the whole spot | `AD_VOICES` in `cutscene-manager.js` |
+| **Feeds by show block** — 25 feeds tagged, subject-level dedupe, and a local digest fallback for when rss2json's daily cap is hit | 12 stories in the rundown in 22 s with the wire capped |
+| **Ticker** (was §7) — resource crawl with slow drift | visible along the bottom of every screenshot |
+
+---
+
 ## Order of work
 
-Each step is independently testable. The first two are the critical path and
-do not depend on the rest.
+Each step is independently testable.
 
-### 1. Generate the anchor art — blocks everything else
+### 1. Finish the cast — the remaining variants
 
-`assets/generated/prompts.md` already contains 60 ready-to-paste prompts
-(regenerate with `python3 tools/prompt_bridge.py`). Nothing has been generated
-from them yet, so **every anchor portrait path the registry will want is
-currently absent.**
+All eleven species have a `desk_hero`. The human, the Klackon and the
+Mrrshan matriarch have the full set; **the other eight need `speaking` and
+`listening`**, which is what stops the roster rotating.
 
-Needed first: the 30 anchor portraits (10 species × hero / speaking /
-listening) and `desk/desk_three_up_empty.png`.
+Generate each variant as an **edit of that species' own hero**, not as a
+fresh generation. Two independent generations never agree everywhere, and
+the pipeline can only register them — it cannot make them contain the same
+drawing. Where they disagree it shows:
 
-The three states per species must share pose, scale, eye-line and lighting —
-the engine crossfades hero→speaking on the active anchor and holds listening on
-the others, so any drift between them reads as a glitch.
+- `register()` scales and shifts a variant onto the hero's body, and that
+  is all it can do. Two attempts at a cleverer fit were tried and reverted
+  (see `CLAUDE.md`).
+- `_speaking` is rebuilt as the hero with only the mouth swapped in, found
+  by measuring where the two differ. A variant drawn at a different scale
+  still works, but the swapped region carries its softness.
+- `_listening` cannot get the same treatment: those plates differ from the
+  hero across the whole body, so there is no row where a cut is invisible.
+  They stay whole, and `renderer.js` crossfades the turn over 180 ms.
 
-Save to the exact paths the prompts name, then `python3 tools/verify_assets.py`.
+`listening_flip` is **not** derived any more. Three cut rules were tried
+and each one cut a face. Supply one, or let the renderer fall back to
+`listening`. Never produce one by flipping the whole picture — that mirrors
+the GNN badge, which is how two plates came to read ИИƆ.
+
+Save to the paths in `assets/generated/prompts.md`, drop them in
+`assets/generated/_inbox/`, then `python3 tools/condition_plates.py` and
+`python3 tools/verify_assets.py`.
 
 ### 2. Character registry — `js/characters.js`
 
@@ -122,9 +154,22 @@ Each block declares `name`, `activeAnchor`, `correspondentPool`,
 **Time-aware**: a viewer at 08:00 local sees *Morning Index*, not a random
 block. Local clock, UTC fallback.
 
-### 5. RSS → MOO-lore translation
+### 5. Separate the lore from the news — **owner's standing request**
 
-A formatting layer in front of `feed-manager.js`:
+Right now a real headline and a 1993 sector-wire bulletin can land in the
+same beat, and the owner does not want them mixed. The two have to be kept
+apart before anything below is built:
+
+- `PACE.wireShare` still interleaves sector bulletins with real stories.
+- The banter templates have not been audited for in-universe terms applied
+  to a real headline.
+
+Decide the shape first — a lore-only segment, or a lore-only show block —
+and then the translation layer below becomes an option rather than a
+default. **Translating a real story into lore is the opposite of what was
+asked for, so this table is on hold.**
+
+A formatting layer in front of `feed-manager.js`, if it is ever wanted:
 
 | real | in-universe |
 |---|---|
@@ -138,36 +183,6 @@ A formatting layer in front of `feed-manager.js`:
 - Never emit real brands, tickers, politicians or handles.
 - Tag each story with `category`, `suggestedAnchorId`, `mooLocation`,
   `pipSceneId`.
-
-### 6. PIP scene mapping
-
-Route the twelve subjects in `assets/generated/prompts.md` (each prompt already
-lists its keywords):
-
-- Starship Battle → fleet / war / invasion
-- Council Vote, Council Summit → diplomacy / treaty / politics
-- Hacker Code, Spy Infiltration → cyber / espionage / leaks
-- Space Vortex, Black Hole → physics / astronomy / anomalies
-- Asteroid Mining, Station Trade → economy / industry
-- Solar Flare, Virus Outbreak → disaster / emergency
-
-### 7. Ticker overhaul
-
-Replace the generic crawl with a MOO resource feed:
-
-```
-ENERGY CREDITS: +2.4%  |  MINERALS: 142.55 ▲  |  RESEARCH POINTS: +0.8%
-ORION ARTIFACTS: 8,450 ▼  |  SOLAR WIND INDEX: SEVERE  |  COLONY SHIP: LAUNCH READY
-```
-
-Rates drift slowly — tenths of a percent per second at most, no per-frame
-jitter. Stays inside the CRT bounds (constraint 3).
-
-### 8. Exterior window backdrop
-
-Rotate per show block so the set feels alive: Fleet Briefs → shipyard or colony
-domes; Anomaly Log → black hole or nebula. Sixteen plates (four moods × four
-times of day) are in the prompt file.
 
 ---
 

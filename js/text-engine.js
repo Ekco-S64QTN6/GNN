@@ -53,7 +53,12 @@ const GNNTextEngine = (() => {
     // someone who is not saying it.
     const STATION_KINDS = new Set(['ad', 'ident', 'wire', 'promo']);
     const STATION_BOX = { y: 0.845, w: 0.56 };
-    const TAIL = 11;
+    // Gap between the bottom of the speech bubble and the speaker's head.
+    //
+    // At 11 the box sat on the commander's hair. The anchors were resized
+    // and reseated after this number was chosen, which moved their heads
+    // up the frame; the bubble followed and ran out of room.
+    const TAIL = 26;
     let BOX = { x: 0, y: 0, w: 0, h: 0 };
 
     // Type sizes scale with the frame too; at 1280x720 these land close to
@@ -134,6 +139,33 @@ const GNNTextEngine = (() => {
     function update(now) {
         if (paused || !fullText) return;
         if (visible >= fullText.length) { holding = true; return; }
+        // Follow the voice when there is one.
+        //
+        // The clock below paces the type-out from an *estimate* of how long
+        // the line will take. The estimate is close, which is worse than
+        // being wrong: the two drift apart over a long read and the words
+        // land a beat off the mouth saying them. The audio element knows
+        // exactly where it is, so the teleprompter is driven from that and
+        // the clock is only the fallback for a line with no audio.
+        const heard = (typeof GNNTTS !== 'undefined' && GNNTTS.playbackProgress)
+            ? GNNTTS.playbackProgress() : null;
+        if (heard !== null) {
+            // A little ahead of the voice, the way a prompter runs: the word
+            // is on screen as it is spoken, not after it.
+            const target = Math.min(fullText.length,
+                Math.ceil(heard * 1.06 * fullText.length));
+            if (target <= visible) return;
+            let spoke = false;
+            while (visible < target) {
+                visible++;
+                if (fullText[visible - 1] !== ' ') spoke = true;
+            }
+            if (spoke && typeof GNNAudio !== 'undefined') GNNAudio.playTypingBlip();
+            lastTick = now;
+            if (visible >= fullText.length) holding = true;
+            return;
+        }
+
         if (!lastTick) lastTick = now;
         if (now - lastTick < charDelay) return;
 

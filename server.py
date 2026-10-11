@@ -448,7 +448,71 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self.handle_status()
         if parsed.path.rstrip('/') == '/api/voices':
             return self.handle_voices()
+        if parsed.path.rstrip('/') == '/api/localnews':
+            return self.handle_localnews()
         return super().do_GET()
+
+    # rss2json has a daily cap, and when it is reached every feed returns an
+    # error and the channel has nothing to read. The Kaiacord project drops a
+    # Gemini-summarised digest into knowledge_base/news/daily every day, which
+    # is a local file and cannot rate-limit. Served here as a fallback the
+    # feed manager can fall back on.
+    NEWS_DIRS = [
+        os.path.expanduser('~/github/Kaiacord/knowledge_base/news/daily'),
+        os.path.expanduser('~/github/Kaiacord/knowledge_base/news'),
+    ]
+    # The digest's own section headings, mapped onto the show blocks in
+    # docs/ROADMAP.md so the scheduler can target them like any other feed.
+    NEWS_SECTIONS = {
+        'GENERAL NEWS': 'world', 'WORLD': 'world', 'INTERNATIONAL': 'world',
+        'US POLITICS': 'diplomacy', 'POLITICS': 'diplomacy',
+        'BUSINESS': 'markets', 'ECONOMY': 'markets', 'MARKETS': 'markets',
+        'TECH': 'tech', 'TECHNOLOGY': 'tech', 'SCIENCE': 'science',
+        'SPORTS': 'sport', 'SPORT': 'sport', 'HEALTH': 'science',
+        'ENTERTAINMENT': 'world',
+    }
+
+    def handle_localnews(self):
+        """The newest local digest, as items the feed manager understands."""
+        path = None
+        for d in self.NEWS_DIRS:
+            if not os.path.isdir(d):
+                continue
+            files = [os.path.join(d, f) for f in os.listdir(d)
+                     if f.endswith('.md')]
+            if files:
+                path = max(files, key=os.path.getmtime)
+                break
+        if not path:
+            return self.send_bytes(json.dumps({'items': []}).encode(),
+                                   'application/json')
+        items, section = [], 'world'
+        try:
+            with open(path, encoding='utf-8') as fh:
+                for raw in fh:
+                    line = raw.rstrip()
+                    if line.startswith('#'):
+                        head = line.lstrip('#').strip().upper()
+                        section = self.NEWS_SECTIONS.get(head, 'world')
+                        continue
+                    if not line.startswith('- '):
+                        continue
+                    text = line[2:].strip()
+                    # The digest writes "&" and "/" as shorthand; the anchor
+                    # has to say words.
+                    text = text.replace(' & ', ' and ').replace('/', ', ')
+                    if len(text) < 25:
+                        continue
+                    # One sentence: it is a headline, not a story, so the
+                    # title carries it and there is no summary to echo.
+                    items.append({'title': text.rstrip('.'),
+                                  'description': '',
+                                  'category': section})
+        except OSError:
+            pass
+        body = json.dumps({'source': os.path.basename(path),
+                           'items': items}).encode()
+        return self.send_bytes(body, 'application/json')
 
     def send_bytes(self, payload, ctype, code=200):
         self.send_response(code)

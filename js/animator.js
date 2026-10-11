@@ -51,6 +51,9 @@ const GNNAnimator = (() => {
         // --- Mouth ---
         const level = (typeof GNNTTS !== 'undefined' && GNNTTS.isSpeaking())
             ? GNNTTS.getLevel() : 0;
+        // Light smoothing only. Heavier than this and the gaps between
+        // words smear shut, which is the thing the gate below exists to
+        // catch.
         smoothed += (level - smoothed) * 0.7;
 
         // Two-state art flaps on a syllable clock, not on the waveform.
@@ -67,7 +70,23 @@ const GNNAnimator = (() => {
         // shut half shorter than the open half, and the loudness only
         // nudging the timing. It is not lip-sync. At two frames it was
         // never going to be, and it reads as talking, which is the job.
-        if (speaking || smoothed > 0.04) {
+        // ...but it is GATED on the voice, so it runs only while a word is
+        // actually being said.
+        //
+        // When this was written the envelope was useless — the server
+        // compressed the voice to about a decibel of variation, so there
+        // was nothing to read and the clock had to free-run. That is no
+        // longer true: measured live through the analyser during a read,
+        // the level runs 0.002 to 1.000 with a median of 0.628, and the
+        // pauses between sentences show up as runs of 400 ms or more below
+        // 0.10. A gate at 0.15 has the mouth active for 83% of a read,
+        // which is about what a person's is.
+        //
+        // The hangover keeps it from chattering shut inside a word, where
+        // a consonant can drop the level for a frame or two.
+        const GATE = 0.15;
+        if (smoothed > GATE) voiceUntil = now + 90;
+        if (now < voiceUntil) {
             if (now >= jawUntil) {
                 jawOpen = !jawOpen;
                 const hurry = 1 - Math.min(0.5, smoothed);
@@ -120,11 +139,16 @@ const GNNAnimator = (() => {
 
     function setSpeaking(v) {
         speaking = !!v;
-        if (!v) { anchorFrame = 0; smoothed = 0; jawOpen = false; jawUntil = 0; }
+        if (!v) {
+            anchorFrame = 0; smoothed = 0;
+            jawOpen = false; jawUntil = 0; voiceUntil = 0;
+        }
     }
 
     let jawOpen = false;
     let jawUntil = 0;
+    // How long the mouth keeps moving after the level drops.
+    let voiceUntil = 0;
 
     let lastFrames = { anchor: 0, globe: 0 };
     function tick(now) { lastFrames = update(now); return lastFrames; }

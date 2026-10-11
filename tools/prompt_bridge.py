@@ -26,10 +26,23 @@ MANIFEST = os.path.join(ROOT, 'assets', 'gfx-manifest.json')
 LANDSCAPE = '1792x1024'
 SQUARE = '1024x1024'
 
-STYLE = ('1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 '
-         'aesthetic, chunky visible pixels as if drawn for a 320x200 DOS '
-         'screen, painterly pixel dithering, hand-placed pixels, no '
-         'photographic detail')
+# Settled by the owner after five rounds of rejected returns, and written
+# out in full in `assets/generated/set-prompts.md`. Every earlier version of
+# this asked for pixel art under some name — "1993 VGA", "crisp clean
+# pixels", "painterly pixel art" — and every one of them produced pixel art,
+# which reads as a cheaper asset from a different project beside the cast
+# plates. The reference is Master of Orion 2 or 3, not 1: the pre-rendered
+# look of a space strategy game made a decade later.
+#
+# Pixel art is excluded here *and* in the exclusion list, because saying it
+# once only sets a tone.
+STYLE = ('detailed digital illustration in the manner of pre-rendered art '
+         'from an early-2000s space strategy game, the generation after '
+         'Master of Orion 1 and not that game, smooth rich shading with real '
+         'gradients, volumetric light, specular highlights on metal, high '
+         'fidelity and finely detailed, not pixel art, no visible pixel '
+         'grid, no dithering, no chunky blocks, no retro or 8-bit or 16-bit '
+         'styling')
 
 # All runtime text — headlines, chyrons, the ticker — is drawn by the engine,
 # so a plate with lettering baked into it is a plate with a frozen headline.
@@ -40,10 +53,11 @@ STYLE = ('1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 '
 #
 # Written as a list of things rather than a list of "no X", because these now
 # follow "Do not include:" rather than sitting in a negative-prompt field.
-_NEG_BASE = ('modern logos, real-world brand names, photorealistic faces or '
-             'photographic texture, anti-aliasing, smooth gradients beyond '
-             '1993 VGA dithering, watermarks, signatures, 3D renders, '
-             'airbrushed shading')
+_NEG_BASE = ('pixel art, dithering, visible pixels, retro 8-bit or 16-bit '
+             'styling, flat untextured surfaces, large areas of a single '
+             'colour, modern logos, real-world brand names, photographic '
+             'texture, rust, grime, weathering, decay, watermarks, '
+             'signatures')
 NEGATIVE = ('captions, headlines, tickers, labels, letters, numbers or '
             'writing of any kind anywhere in the image, ' + _NEG_BASE)
 NEGATIVE_UNIFORM = ('captions, headlines, tickers, labels or lettering '
@@ -51,6 +65,16 @@ NEGATIVE_UNIFORM = ('captions, headlines, tickers, labels or lettering '
                     + _NEG_BASE)
 # A news desk carries its station's name; that is furniture, not a headline,
 # and it never changes, so baking it in costs nothing.
+# A backdrop is the one plate where a window, a room or a person is not a
+# small mistake but the whole picture being wrong: the engine composites it
+# *into* a window in a room with two people already in it.
+NEGATIVE_BACKDROP = ('people, figures, silhouettes, astronauts, crew, any '
+                     'window frame, glass, mullions, struts or railings, any '
+                     'interior, room, cockpit, bridge or space-station '
+                     'module, any foreground object or framing device, '
+                     'captions, headlines, tickers, labels, letters, numbers '
+                     'or writing of any kind anywhere in the image, '
+                     + _NEG_BASE)
 NEGATIVE_DESK = ('captions, headlines, tickers or lettering anywhere other '
                  'than the station name on the front of the desk, '
                  + _NEG_BASE)
@@ -156,21 +180,44 @@ CUTAWAYS = [
 ]
 
 # Exterior window moods across a day cycle.
+# What the window LOOKS OUT ON — not a picture of a window.
+#
+# These said "seen through a studio window", and the model drew the studio:
+# `earth_globe_dusk` came back as a shot from inside a space station with a
+# man standing in it, which is a room, not a backdrop. The engine keys these
+# into the window opening itself, so anything resembling glass, a frame, a
+# mullion or an interior arrives twice.
 BACKDROPS = [
-    ('earth_globe', 'a blue-green homeworld seen from high orbit through a wide '
-     'studio window, terminator line crossing it', 'station'),
-    ('asteroid_field', 'a working asteroid mining field seen through a studio '
-     'window, rigs and running lights among tumbling rock', 'industry'),
-    ('colony_domes', 'a colony of geodesic domes on a dusty plain seen through '
-     'a studio window, distant ridgeline beyond', 'station'),
+    ('earth_globe', 'a blue-green homeworld filling most of the frame, seen '
+     'from high orbit, the terminator line crossing it and city lights on '
+     'the night side', 'station', True),
+    ('asteroid_field', 'a working asteroid mining field in open space, rigs '
+     'and running lights among slowly tumbling rock', 'industry', True),
+    # The only one with an atmosphere, and so the only one with a sky.
+    ('colony_domes', 'a colony of geodesic domes on a dusty plain under an '
+     'alien sky, a distant ridgeline beyond', 'station', False),
     ('orion_shipyard', 'an orbital shipyard with a half-built capital ship in '
-     'its scaffold, work lights and tugs around it', 'military'),
+     'its scaffold, work lights and tugs around it', 'military', True),
 ]
+# Two cycles, because three of the four backdrops are in vacuum and there
+# is no sky out there to go violet. Asked for one anyway, the model supplies
+# an atmosphere, and the quickest way for it to justify one is to put the
+# camera somewhere with a window.
 DAY_CYCLE = [
     ('dawn', 'low warm light raking across the scene, long shadows'),
     ('day', 'flat bright illumination, crisp detail, pale sky'),
     ('dusk', 'deep orange and violet sky, rim-lit edges'),
     ('night', 'near-black with artificial lights and starfield dominant'),
+]
+ORBIT_CYCLE = [
+    ('dawn', 'the sun low and just clearing the limb, long raking light '
+     'across the subject, deep black space behind'),
+    ('day', 'full harsh sunlight from one side, crisp unfiltered detail, '
+     'hard shadows, deep black space behind'),
+    ('dusk', 'the sun almost gone behind the subject, a warm rim of light '
+     'along its edge and the rest falling into shadow'),
+    ('night', 'unlit by the sun, near-black, picked out only by its own '
+     'running lights and a dense starfield behind'),
 ]
 
 # The newsroom itself. The desk prompts below dress a room that was never
@@ -416,19 +463,23 @@ def main():
                    % '`, `'.join(keywords))
 
     w('## Exterior Window Backdrops\n')
-    w('What is seen through the window in the back wall. Four moods across '
-      'four times of day; the scheduler picks a mood per show block and the '
-      'time of day from the clock. The engine fits these into the window '
-      'opening and crops the overflow, so keep the subject centred and clear '
-      'of the edges.\n')
-    for bid, subject, palette in BACKDROPS:
-        for phase, light in DAY_CYCLE:
+    w('What is seen **through** the window in the back wall — the view '
+      'itself, not a picture of a window. The engine keys these into the '
+      'window opening, so the glass, the mullions and the room are already '
+      'there; a plate that draws them again arrives with two sets. Four '
+      'moods across four times of day; the scheduler picks a mood per show '
+      'block and the time of day from the clock. The plate is cropped to the '
+      'opening, so keep the subject centred and clear of the edges.\n')
+    for bid, subject, palette, vacuum in BACKDROPS:
+        for phase, light in (ORBIT_CYCLE if vacuum else DAY_CYCLE):
             asset('backdrops/%s_%s.png' % (bid, phase),
                   prompt('%s, %s' % (subject, light),
-                         'wide backdrop plate, full bleed, horizon in the '
-                         'lower third, the subject centred and clear of the '
-                         'edges', palette,
-                         'full-bleed scene, no transparency', size=LANDSCAPE))
+                         'an unobstructed exterior view with nothing in the '
+                         'foreground, as if the camera were outside; wide '
+                         'plate, full bleed, the subject centred and clear '
+                         'of the edges', palette,
+                         'full-bleed scene, no transparency',
+                         negative=NEGATIVE_BACKDROP, size=LANDSCAPE))
 
     w('---\n')
     w('**%d prompts.** Save each one to the path under its filename, then run '

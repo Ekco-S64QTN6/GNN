@@ -14,23 +14,12 @@
       "role": "room",
       "x": 0,
       "y": 0
-    },
-    "desk_oval_front.png": {
-      "w": 845,
-      "h": 165,
-      "role": "desk",
-      "x": 217,
-      "y": 555
-    },
-    "console_left.png": {
-      "w": 282,
-      "h": 273,
-      "role": "prop"
-    },
-    "console_right.png": {
-      "w": 282,
-      "h": 273,
-      "role": "prop"
     }
+  },
+  "window": {
+    "x0": 0.1508,
+    "y0": 0.1194,
+    "x1": 0.8484,
+    "y1": 0.4389
   }
 }

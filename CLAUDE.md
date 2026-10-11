@@ -47,6 +47,7 @@ the metric is the thing to doubt.
 | Spoken lines | 22 consecutive, 0 truncated |
 | Broadcast | runs the full rundown with zero exceptions over 90 s+ |
 | Frame | 320×180 design grid, 1280×720 canvas, follows the window, full-bleed |
+| Cast placement | `CAST.h` 0.300 of frame height, seated at `DESK_LINE` 0.468 — the back of the desk surface |
 | Plates | conditioned at canvas resolution, not the design grid |
 | Cast | 11 generated species + the MOO1 robot, keyed out of his own scene |
 | Characters | `js/cast.js` — 12 profiles, voices and an asymmetric relationship table |
@@ -202,6 +203,150 @@ almost no dynamics here because the crest is isolated plosives, not expression.
 → **A limiter is a safety net, not a leveller. If it is removing more than a
 decibel or two, the stage in front of it is wrong.**
 
+### The rundown read the same storm four times
+Owner: *"every time I fire it up it's doing the duplicate reading of
+hurricane Isaias."* The BBC science feed served **four separate Hurricane
+Isaias stories in one pull** — different headlines, different summaries,
+and all dated that morning despite being from 2020, so no staleness filter
+catches them. `feed-manager.js` deduplicated on the exact title string, so
+all four went into the rundown and were read back to back.
+
+Two headlines are now treated as one story when they share a word that
+almost nothing else in the pool uses. One shared rare word is enough —
+some of those four shared only "isaias" — but it has to be rare, measured
+as document frequency across the live pool (`DISTINCTIVE_DF = 5`), or
+every story mentioning "space" collapses into one. The losers stay in the
+pool for a later block rather than being dropped, which is what a channel
+does with a running story.
+
+Replayed against the live feeds: 69 headlines, 4 Isaias, one admitted and
+the rest held. Confirmed in the running app — 12 in the rundown, one storm.
+
+→ **Deduplicate on subject, not on string.** A wire runs the same story all
+day under four headlines, and that is normal behaviour, not a feed fault.
+
+### The asset prompts still asked for pixel art
+`prompt_bridge.py` generates all of `prompts.md` from one `STYLE` constant,
+and that constant was still the 1993 VGA line the owner had rejected five
+times — so every regeneration of the document reinstated it. It now carries
+the settled style from `set-prompts.md`, and pixel art is in the exclusion
+list as well as denied in the style line, because saying it once only sets
+a tone.
+
+The backdrop prompts asked for their subject *"seen through a studio
+window"*, and the model drew the studio: `earth_globe_dusk` came back as a
+shot from inside a space station with a man standing in it. The engine keys
+these into the window opening, so the glass and the room are already there.
+They now describe the exterior view alone and exclude figures, frames,
+glass, interiors and foreground objects outright.
+
+The day cycle also asked for a *"violet sky"* on three backdrops that are
+in vacuum. Asked for a sky, the model supplies an atmosphere, and the
+quickest way to justify one is to put the camera somewhere with a window.
+`ORBIT_CYCLE` lights those three by the sun and the starfield instead.
+
+→ **A generated document cannot be fixed by editing the document.**
+
+### The mouth ran on a free clock and the prompter ran on an estimate
+Owner: *"the TTS and the mouth animation aren't perfectly lined up"* and
+*"text should be written out as the TTS is saying the words... the mouth
+animation only happening while a word is being spoken."*
+
+Both were true, and the note elsewhere in this file saying the envelope was
+unusable had gone stale. Measured live through the analyser during a read:
+level runs **0.002 to 1.000, median 0.628**, with pauses between sentences
+showing as runs of 400 ms or more below 0.10. The compression change
+earlier gave the envelope back; the lip-sync was still working around its
+absence.
+
+The syllable clock is kept — it sets the flap *rate* — but it is now gated
+on the envelope, with a 90 ms hangover so a consonant does not chatter it
+shut mid-word. Measured after: **mouth open 1–2% of samples during silence,
+56–57% during speech.**
+
+The teleprompter typed from `durationMs`, an estimate of how long the line
+ought to take. Close, which is worse than wrong: the two drift apart over a
+long read. `GNNTTS.playbackProgress()` exposes the audio element's real
+position and `text-engine.js` types to it, a few percent ahead the way a
+prompter runs. Measured drift across a read: **0.008 → 0.051**, landing
+together at 1.000.
+
+→ **A workaround outlives the fault it was written for.** Re-measure before
+trusting a note that says a signal is not there.
+
+### Six faults, one cause: nothing waited its turn
+Owner's list after a watch: the station ident interrupted, the commander
+cut off mid-line by the other anchor, a line written for one character
+spoken in the other's voice, the throw to the break stepping on the story,
+the break returning over the last advert, and every cutaway talking over
+itself.
+
+One cause. `GNNTTS.speak()` bumps its own request id and **cuts off whatever
+is already playing**, and every `say()` in the director was fire-and-forget.
+Any line fired while someone was talking killed the line in progress, and
+which line won was a race — which is why the owner saw it behave differently
+on two consecutive runs of the same build.
+
+There is a single speech queue now. Nothing speaks directly; lines are
+queued and a pump plays them one at a time with a 420 ms beat of air
+between them, and **the caption is presented when its own line starts**
+rather than when it was scheduled, which is why the text box used to appear
+before the voice. `cancelSpeech()` clears the queue; the break awaits
+`drainSpeech()` before the commercials roll and polls `isBreakActive()`
+before coming back.
+
+→ **A fire-and-forget call into something that pre-empts itself is a race,
+not a sequence.**
+
+### The same line four times in five minutes
+`pickFrom()` was a bare random pick with no memory, so on a list of four the
+same line came round constantly — "the Commander would like us to be precise
+about this" four times in five minutes. Random with replacement feels
+repetitive long before it is statistically odd. It now holds back the recent
+half of each list, which still always returns something on a short list.
+
+### The wire ran dry and the channel had nothing to say
+rss2json's **daily** cap (see Known open items) leaves every feed erroring at
+once. `server.py` serves `/api/localnews`, which parses the newest Gemini
+digest out of `~/github/Kaiacord/knowledge_base/news/daily` — section
+headings mapped onto the show blocks — and `feed-manager.js` falls back to it
+when a poll returns nothing. Verified with the wire capped: **12 stories in
+the rundown after 22 s, from the local digest.**
+
+### The tool fed its own output back in and the mouth rotted
+Owner: *"human_speaking.png's mouth is weird now... this is a critical
+issue."* Correct, and it had been getting worse on every run.
+
+`swap_region()` blends two 256-colour plates and invents colours, and the
+result was saved **without quantising** — 1,044 colours on the human.
+`conditioned_already()` tests exactly that: size, and palette ≤ 256. So the
+tool's own output failed its own "is this finished?" test, `find_source()`
+picked it up as **source art** on the next run, `register()` scaled a 216px
+plate up by 5.5 to match the hero, and the whole pipeline ran again on a
+picture that had already been through it. Every run cost another generation
+of quality, and the mouth region was being computed from a blurred 5.5×
+upscale.
+
+Found by printing what was actually in the source directory:
+
+```
+_inbox/human_speaking.png      222x216   1044 colours
+_inbox/klackon_speaking.png    218x216   1046 colours
+_inbox/mrrshan_f_speaking.png  214x216   1421 colours
+```
+
+All three should have been 1254×1254. Fixed by quantising both rebuilt
+states, refusing to archive a rebuilt state into `_inbox` at all, and
+restoring the raws. Checked after: **no plate over 256 colours.**
+
+This is the third time the same shape of bug has bitten — the Klackon's
+flip shrank to a thumbnail the same way, and before that a damaged flip was
+archived as if it were a hand-made source.
+
+→ **Never write a tool's output where it looks for its input.** If that
+cannot be avoided, the "already done" test must be something the output
+passes by construction, not by luck.
+
 ### The anchor spelled words out
 Wire headlines arrive in capitals, and every engine reads an all-capital word
 as an initialism, so PUTIN came out "P, U, T, I, N" on roughly one read in ten.
@@ -330,6 +475,108 @@ under 0.11 — and both faults draw from it, falling back to `broll`.
 → **Constraint 11 is not advice.** An asset consumer that names no pool is
 reading the unadmitted set.
 
+### The conditioner was grafting one plate onto another
+`graft_body()` pasted the hero's body onto every variant, cut at a row
+measured off the *hero's* silhouette and blended as raw RGBA. Two kinds of
+damage, both obvious the moment a raw drop and the output were put side by
+side: on the Klackon the cut fell through the mandibles and took the jaw
+off, and on the Mrrshan the blend mixed in the colour behind transparent
+pixels, giving her ghosted shoulders and **two GNN badges on one chest**.
+
+It is gone. Variants are whole coherent drawings when they arrive; they are
+registered and conditioned, nothing is pasted. The badge problem it was
+written to solve is a regeneration, not a repair.
+
+Deriving `listening_flip` by mirroring the head went the same way — three
+cut rules, three cut faces — and is also gone. A supplied flip is
+conditioned like any other state.
+
+→ **A plate that is only ever scaled and translated cannot come out
+damaged.** Anything that cuts one picture and pastes another onto it can,
+and eventually will.
+
+### Separate generations do not come back at the same size
+`mrrshan_f_speaking` arrived 8.5% smaller than her hero and shifted up and
+left, so she changed size the moment she opened her mouth. The graft had
+been hiding it by replacing her body with the hero's.
+
+`register()` scales and shifts each variant onto the hero, lining up the
+lower body — the torso and folded hands are the same in every state.
+
+Two refinements on top of that were tried and both reverted. A best fit
+over the whole silhouette halved the total mismatch and moved the face to
+do it (head drift 10px → 17px while the metric improved). A best fit over
+the head alone held the face still and moved the body, which is just as
+visible: the viewer sees the plate jump, not which part of it jumped.
+
+→ **Registering two whole plates cannot fix this**, because two
+generations never agree everywhere. See the entry below: the answer was to
+stop swapping whole plates.
+
+### The whole body moved when only the mouth should have
+Owner, watching a read: *"only the mouth should move, not their entire
+body — it's like each image is pegged to a slightly different x y coord."*
+Correct, and no registration fixes it: swapping two whole plates swaps
+every disagreement between two generations at once, five times a second.
+
+`condition_plates.py` now builds `_speaking` as the **finished hero with
+its mouth swapped in**, so outside the mouth the two plates are byte-
+identical and the flap physically cannot move anything else. 2.2% of the
+human's plate differs, 1.4% of the Klackon's, 3.1% of the Mrrshan's, all
+of it one blob on the mouth.
+
+Where the mouth is comes from measuring, not guessing: the blurred
+difference between hero and variant peaks on the thing that changed — 65
+against a median of 6 on the human, 106 against 18 on the Mrrshan. The
+*peak* is trusted and the *extent* is not; a first version took everything
+above half the peak and covered two thirds of the Mrrshan, whose noise
+floor is that high. The size is a fraction of the head instead.
+
+It must be done on the **conditioned** plates. Quantised separately the two
+get their own 256-colour palettes and 5% of every pixel flips by a palette
+step, so the whole figure shimmers on each flap.
+
+The same was attempted for the listening states with the head as the
+region. It declines: those plates differ from the hero across the entire
+body (row difference 10–30 everywhere, never collapsing), so there is no
+row where a cut would be invisible. They stay whole and `renderer.js`
+crossfades the turn over 180 ms instead. The mouth flap is explicitly
+excluded from that fade — there is nothing to smooth, and fading at five
+flaps a second would only smear the mouth.
+
+→ **Change only what changed.** Registration makes two pictures agree
+about where they are; it cannot make them agree about what they contain.
+
+### The caption outran the voice and the mouth stopped mid-sentence
+Owner: *"the female's mouth stops moving mid read."* `GNNTextEngine` was
+handed the full story and timed the segment from it, while `tts.js` capped
+synthesis at 900 characters inside `speak()`. On a long story the voice
+finished, the animator's `speaking` flag went false, and the teleprompter
+scrolled on with the anchor sitting there mouth shut.
+
+`trimForSynthesis` is exported now and `broadcast-director.js` trims once,
+before the text reaches either the caption, the clock or the voice.
+
+→ **One text, trimmed once.** Two stages trimming independently is two
+stages disagreeing.
+
+### The anchors stood behind the desk instead of sitting at it
+`DESK_LINE` was 0.455 — the desk's *back* edge. The anchors put their hands
+down at the far side of the surface and their bodies floated clear of it,
+which reads as two people standing behind a table. It was diagnosed from
+the screen as the anchors being 25–30% too wide; the fault was vertical.
+
+Placing them at the front lip (0.520) fixed the floating and introduced the
+opposite fault: forearms on the near edge of the desk, right at the camera,
+which made the pair look oversized for the room. The owner marked the plate
+to settle it — the desk's top surface runs 0.435 to 0.497, and the anchors
+belong in the **far third** of it. `DESK_LINE` is **0.468** and `CAST.h`
+**0.300**, which puts the pair at 83% of the desk's seating width. `condition_plates.py` reads `CAST.h` out of
+`renderer.js` rather than repeating it, which it had been doing wrong.
+
+→ **Size a figure against the thing it has to meet, after placing it there.**
+Placement first: a wrong seat line looks exactly like a wrong scale.
+
 ### Easter eggs pointed at a layout that no longer existed
 Two of the six secrets were hit-tested against literal pixel rects measured
 off the old 960×600 canvas: a globe that is no longer drawn, and an "anchor
@@ -423,12 +670,19 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
 
 ## 7. Known open items
 
-- **The set plate and the cast are not generated yet.** `renderer.js` takes
-  `assets.set`, `assets.desk` and `assets.cast` and builds the room in layers;
-  with none of them it falls back to the MOO1 newscast frame, which is a
-  finished picture rather than a set. The existing `set/studio_wide_empty.png`
-  is 2.77:1 from before the frame went 16:9, so it is cover-fitted and loses
-  its top and bottom — it wants regenerating at the new shape.
+- **The set and eleven anchors are generated.** One scene with the desk in
+  it (`set/studio_wide_empty.png`, 16:9), and `anchors/` holds a
+  `desk_hero` for all eleven species plus `speaking`/`listening`/
+  `listening_flip` for the human and the Klackon and `speaking` for
+  mrrshan_f. The rest still need their variants; without them the renderer
+  holds the hero, which is a still face rather than broken art.
+- **Two source plates were whole-image mirrors of their sibling**, which
+  flips the GNN badge with the picture — `human_listening` and
+  `klackon_listening_flip` both read ИИƆ. Both were rebuilt by mirroring
+  only the head of the good sibling, with the cut row picked by eye (510
+  and 580 of 1254) rather than detected. The originals are in
+  `_inbox/rejected/`. **When a variant needs to face the other way, turn
+  the head; do not flip the picture.**
 - `capture_docs.py` **waits for live wire states and hangs** when the feeds
   return 429 to back-to-back harness runs, because the director never reaches
   the state it is waiting on. The screenshots in `docs/` were re-shot by
@@ -443,6 +697,42 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   `listening` band reporting 8.7% changed looked healthy and was the hero
   untouched; measuring whether the *pupils moved* found nine of eleven had no
   eye turn at all. Measure the feature, not the pixels.
+- **MediaPipe will not rig this cast.** Tested against all eleven heroes
+  with `face_landmarker.task`: **3 of 11 detect** (human, Bulrathi,
+  mrrshan_f), and on two of those the points bunch in the middle of the
+  face rather than landing on features. Only the human is usable. The
+  Kaiagotchi rig (`tools/kaia_portrait/build_portrait.py`, one portrait
+  plus a 29-point `kaia_rig.json` driven by a GLSL warp) is still the right
+  architecture — one plate, nothing swaps, and brows/eyes/smile/head-turn
+  become parameters the mood table in `js/cast.js` can drive — but the
+  points have to be placed by hand, not detected.
+- **rss2json has a DAILY cap, not just a per-burst one.** Hit it and every
+  feed returns `{"status":"error","message":"Daily rate limit exceeded,
+  please try again after 11 hours"}`, the pool stays empty and the channel
+  sits in `DRY` with nothing to read. It looks exactly like a broken feed
+  list. **Check this before debugging the feed code:**
+  `curl -s 'https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Ffeeds.bbci.co.uk%2Fnews%2Fworld%2Frss.xml' | head -c 200`
+  A survey of two dozen candidate feeds burned the day's allowance in one
+  session. `POLL_BATCH = 8` in `feed-manager.js` now fetches a rotating
+  slice per poll instead of all 25 at once, which helps with bursts but
+  does nothing about the daily cap. An API key would lift it.
+- **The window, the cutaways and the correspondents are wired.**
+  `condition_plates.py` keys the eight window panes out of the room plate by
+  connected components (the two wall monitors are near-black too and are
+  rejected by position), records the opening in `layout.json`, and
+  conditions backdrops to that opening. The 14 generated cutaway plates are
+  routed by `GENERATED` in `cutscene-manager.js` and the MOO1 composites are
+  now only the fallback. Field correspondents appear in the PIP as a LIVE
+  window — 22 plates conditioned out of `_inbox/field/`, which is the
+  chest-cropped generation and the right framing for a monitor.
+- **Commercials are not read by the anchors.** `voiceOptsFor` never named a
+  voice, so synthesis fell through to whoever had the chair. A break now
+  picks an announcer from `AD_VOICES` and keeps it for every beat; the small
+  print gets `bm_fable`. Update that list if the desk cast changes.
+- **Still mixed: MOO lore and real news.** The owner wants them completely
+  separate and this is NOT done. `PACE.wireShare` still interleaves sector
+  bulletins with real stories, and the banter templates have not been
+  audited for lore terms applied to real headlines.
 - **Listen by ear before declaring audio done.** Every metric here has at some
   point said "clean" while the owner could hear a problem.
 - **Voice choice is subjective.** Owner's standing judgement: the edge-tts

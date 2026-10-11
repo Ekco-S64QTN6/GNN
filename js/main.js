@@ -113,6 +113,22 @@
                             listeningFlip: flip || listening || hero } : null;
         }))).filter(Boolean);
 
+        // What is seen through the studio window. `condition_plates.py`
+        // cuts the glass out of the room plate and records where it was in
+        // layout.json; without a backdrop the hole simply shows black,
+        // which is what it did before any of these existed.
+        let setWindow = null;
+        let backdrop = null;
+        try {
+            const layout = await fetch(`${GEN}/set/layout.json`).then((r) => r.json());
+            setWindow = layout.window || null;
+        } catch (err) { /* no layout, no window */ }
+        if (setWindow) {
+            const views = ['earth_globe_dawn', 'orion_shipyard_night'];
+            const pick = views[(Math.random() * views.length) | 0];
+            backdrop = await GNNAssets.loadImage(`${GEN}/backdrops/${pick}.png`);
+        }
+
         // The robot, cut out of his old newscast scene by tools/key_robot.py.
         // He keeps his 25-cel lip matrix, which is more than the generated
         // cast have, so he is loaded as frames rather than as three states.
@@ -132,7 +148,7 @@
         }
         statusText.textContent = 'Studio ready';
         return {
-            set, desk, seated,
+            set, desk, seated, backdrop, window: setWindow,
             deskVoice: seated.length ? seated[0].voice : null,
             robot: robotFrames.length
                 ? { sid: 'robot', voice: 'vox_unit', frames: robotFrames }

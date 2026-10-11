@@ -7,25 +7,59 @@ const GNNFeedManager = (() => {
     const POLL_INTERVAL_MS = 2 * 60 * 1000; // Poll every 2 minutes
 
     // Curated high-quality world, tech, space & science feeds (zero ads / sponsored junk)
-    const DEFAULT_FEEDS = [
-        'https://feeds.arstechnica.com/arstechnica/index',
-        'https://feeds.arstechnica.com/arstechnica/science',
-        'https://www.nasa.gov/rss/dyn/breaking_news.rss',
-        'https://www.space.com/feeds/all',
-        'https://spaceflightnow.com/feed/',
-        'https://www.esa.int/rssfeed/Our_Activities/Space_News',
-        'https://feeds.bbci.co.uk/news/world/rss.xml',
-        'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
-        'https://feeds.bbci.co.uk/news/technology/rss.xml',
-        'https://www.aljazeera.com/xml/rss/all.xml',
-        'https://www.technologyreview.com/feed/',
-        'https://news.ycombinator.com/rss',
-        'https://www.wired.com/feed/rss',
-        'https://techcrunch.com/feed/',
-        'https://www.theverge.com/rss/index.xml',
-        'https://search.cnbc.com/rs/search/combinednewsletter/rss?partnerId=wrss01&id=100003114',
-        'https://www.nature.com/nature.rss'
+    // Tagged by the show block that wants them, per docs/ROADMAP.md §4:
+    // Morning Index, Main News Desk, Sports / Fleet Briefs, Diplomatic Hour,
+    // Late Night Anomaly Log. Nothing reads the tag yet — the scheduler is
+    // still to build — but the categories are the reason a feed is on the
+    // list, and an untagged list is how it ended up seventeen tech feeds
+    // deep with no sport, no markets and no oddities for four of the five
+    // blocks to draw on.
+    //
+    // Verified through rss2json, which is the only path the app has: a feed
+    // can answer 200 directly and still come back empty here.
+    // `space.com/feeds/all` does exactly that — 0 items on every probe —
+    // and is dropped. `nasa.gov/rss/dyn/breaking_news.rss` 301s directly but
+    // resolves fine through rss2json, so it stays.
+    const FEEDS = [
+        // --- Main News Desk: world and general ---
+        { url: 'https://feeds.bbci.co.uk/news/world/rss.xml', cat: 'world' },
+        { url: 'https://www.aljazeera.com/xml/rss/all.xml', cat: 'world' },
+        { url: 'https://feeds.arstechnica.com/arstechnica/index', cat: 'tech' },
+        { url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', cat: 'tech' },
+        { url: 'https://techcrunch.com/feed/', cat: 'tech' },
+        { url: 'https://www.theverge.com/rss/index.xml', cat: 'tech' },
+        { url: 'https://www.wired.com/feed/rss', cat: 'tech' },
+        { url: 'https://news.ycombinator.com/rss', cat: 'tech' },
+        { url: 'https://www.technologyreview.com/feed/', cat: 'tech' },
+
+        // --- Sports / Fleet Briefs: launches, missions, and actual sport ---
+        { url: 'https://spaceflightnow.com/feed/', cat: 'fleet' },
+        { url: 'https://www.nasa.gov/rss/dyn/breaking_news.rss', cat: 'fleet' },
+        { url: 'https://www.esa.int/rssfeed/Our_Activities/Space_News', cat: 'fleet' },
+        { url: 'https://feeds.bbci.co.uk/sport/rss.xml', cat: 'sport' },
+        { url: 'https://www.espn.com/espn/rss/news', cat: 'sport' },
+
+        // --- Morning Index: markets and money ---
+        { url: 'https://feeds.bbci.co.uk/news/business/rss.xml', cat: 'markets' },
+        { url: 'https://search.cnbc.com/rs/search/combinednewsletter/rss?partnerId=wrss01&id=100003114', cat: 'markets' },
+        { url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', cat: 'markets' },
+
+        // --- Diplomatic Hour ---
+        { url: 'https://news.un.org/feed/subscribe/en/news/all/rss.xml', cat: 'diplomacy' },
+        { url: 'https://feeds.bbci.co.uk/news/politics/rss.xml', cat: 'diplomacy' },
+
+        // --- Late Night Anomaly Log: odd science, deep space, the weird ---
+        { url: 'https://www.sciencedaily.com/rss/strange_offbeat.xml', cat: 'anomaly' },
+        { url: 'https://phys.org/rss-feed/', cat: 'anomaly' },
+        { url: 'https://www.livescience.com/feeds/all', cat: 'anomaly' },
+        { url: 'https://feeds.arstechnica.com/arstechnica/science', cat: 'science' },
+        { url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', cat: 'science' },
+        { url: 'https://www.nature.com/nature.rss', cat: 'science' },
     ];
+
+    const DEFAULT_FEEDS = FEEDS.map((f) => f.url);
+    const FEED_CATEGORY = new Map(FEEDS.map((f) => [f.url, f.cat]));
+
 
     // Filter out sponsored ads, deals, shopping links, and podcasts
     const AD_KEYWORDS = [
@@ -40,6 +74,10 @@ const GNNFeedManager = (() => {
     const POOL_LIMIT = 400;
     const SEEN_LIMIT = 2000;
 
+    // How many feeds one poll may ask rss2json for, and where the
+    // next poll picks up.
+    const POLL_BATCH = 8;
+    let pollCursor = 0;
     let feeds = [...DEFAULT_FEEDS];
     let rssPool = [];           // Array of clean RSS stories fetched
     let seenTitles = new Set();
@@ -223,7 +261,10 @@ const GNNFeedManager = (() => {
                         pubDate: item.pubDate || new Date().toISOString(),
                         timestamp: timestamp,
                         importance: importance,
-                        topic: topic
+                        topic: topic,
+                        // Which show block wants this story. Nothing reads
+                        // it yet; the scheduler in ROADMAP.md §4 will.
+                        category: FEED_CATEGORY.get(url) || 'world'
                     });
                 }
                 return validItems;
@@ -240,13 +281,57 @@ const GNNFeedManager = (() => {
         let fetchedItems = [];
         let successCount = 0;
 
-        for (const url of feeds) {
+        // A rotating slice, not the whole list.
+        //
+        // rss2json's free tier rate-limits a burst: asking for all
+        // twenty-five at once returned 429 for most of them and the
+        // rundown came up empty, which is how the channel sat in DRY with
+        // nothing to read. Eight per poll stays under it, and the window
+        // advances so every feed is reached within a few polls — which is
+        // fine for a channel that runs for days.
+        const slice = [];
+        for (let i = 0; i < Math.min(POLL_BATCH, feeds.length); i++) {
+            slice.push(feeds[(pollCursor + i) % feeds.length]);
+        }
+        pollCursor = (pollCursor + slice.length) % Math.max(1, feeds.length);
+
+        for (const url of slice) {
             try {
                 const items = await fetchFeed(url);
                 fetchedItems = fetchedItems.concat(items);
                 successCount++;
             } catch (err) {
                 console.warn(`[GNN Feed] Feed error (${url}):`, err.message);
+            }
+        }
+
+        // rss2json has a daily cap. Reached, every feed errors at once and
+        // the channel has nothing to read — which looks exactly like a
+        // broken feed list and is not. The server serves the Kaiacord daily
+        // digest off disk, which cannot rate-limit.
+        if (fetchedItems.length === 0) {
+            try {
+                const local = await fetch('/api/localnews').then((r) => r.json());
+                const now = Date.now();
+                for (const it of (local.items || [])) {
+                    if (!isValidStory(it.title, it.description)) continue;
+                    fetchedItems.push({
+                        title: it.title,
+                        description: it.description || '',
+                        icon: GNNIconManager.matchIcon(it.title, ''),
+                        link: '',
+                        pubDate: new Date(now).toISOString(),
+                        timestamp: now,
+                        importance: calculateImportance(it.title, ''),
+                        topic: extractTopic(it.title, ''),
+                        category: it.category || 'world',
+                    });
+                }
+                if (fetchedItems.length) {
+                    setStatus(`Wire unavailable — local digest (${local.source})`, false);
+                }
+            } catch (err) {
+                console.warn('[GNN Feed] local digest unavailable:', err.message);
             }
         }
 
@@ -297,6 +382,69 @@ const GNNFeedManager = (() => {
         }
     }
 
+    // Words too common to tell two stories apart. Deliberately short: the
+    // test below leans on how rare a word is in the pool rather than on a
+    // list somebody has to maintain.
+    const STOPWORDS = new Set([
+        'after', 'about', 'above', 'again', 'their', 'there', 'these',
+        'those', 'where', 'which', 'while', 'with', 'from', 'into', 'over',
+        'under', 'before', 'during', 'between', 'first', 'could', 'would',
+        'should', 'says', 'said', 'will', 'more', 'most', 'than', 'that',
+        'this', 'they', 'them', 'been', 'being', 'have', 'what', 'when',
+        'your', 'news', 'report', 'reports', 'update',
+    ]);
+
+    /** Significant words in a headline: long enough and not furniture. */
+    function keywords(title) {
+        return new Set(String(title || '').toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .split(/\s+/)
+            .filter((w) => w.length >= 4 && !STOPWORDS.has(w)));
+    }
+
+    /**
+     * How many items in the pool use each significant word.
+     *
+     * A word used by two or three headlines out of two hundred is naming
+     * something — a storm, a company, a spacecraft. A word used by forty is
+     * naming a category. Rarity is what separates them, and it costs nothing
+     * to measure, where a hand-written list of topics would need feeding.
+     */
+    function documentFrequency() {
+        const df = new Map();
+        rssPool.forEach((item) => {
+            keywords(item.title).forEach((w) => df.set(w, (df.get(w) || 0) + 1));
+        });
+        return df;
+    }
+
+    // A word this rare in the pool is a name, not a topic.
+    const DISTINCTIVE_DF = 5;
+
+    /**
+     * Is this story about the same thing as one already in the rundown?
+     *
+     * Exact-title matching does not catch it. The BBC science feed served
+     * four separate Hurricane Isaias stories in one pull — different
+     * headlines, different summaries, all dated that morning, and the
+     * rundown read them back to back, which is heard as the anchor saying
+     * the same thing twice.
+     *
+     * Two headlines are the same story when they share a word that almost
+     * nothing else in the pool uses. One shared rare word is enough — these
+     * four shared only "isaias" between some pairs — but it has to be rare,
+     * or every story mentioning "space" collapses into one.
+     */
+    function sameSubject(title, others, df) {
+        const mine = keywords(title);
+        for (const other of others) {
+            for (const w of keywords(other)) {
+                if (mine.has(w) && (df.get(w) || 0) <= DISTINCTIVE_DF) return true;
+            }
+        }
+        return false;
+    }
+
     /** Top the director's rundown back up from the deduplicated RSS pool. */
     function replenishQueue() {
         if (!onNewItems || rssPool.length === 0) return;
@@ -312,7 +460,19 @@ const GNNFeedManager = (() => {
         const fresh = rssPool.filter((item) => !queued.has(item.title) && !broadcast.has(item.title));
         if (fresh.length) {
             fresh.sort((a, b) => b.timestamp - a.timestamp);
-            const batch = fresh.slice(0, 6);
+            // One story per subject in a batch, and none repeating what is
+            // already in the rundown. The rest stay in the pool for a later
+            // block, which is what a channel does with a running story.
+            const df = documentFrequency();
+            const taken = Array.from(queued);
+            const batch = [];
+            for (const item of fresh) {
+                if (batch.length >= 6) break;
+                if (sameSubject(item.title, taken, df)) continue;
+                batch.push(item);
+                taken.push(item.title);
+            }
+            if (!batch.length) batch.push(fresh[0]);
             batch.forEach((i) => broadcast.add(i.title));
             onNewItems(batch);
             return;

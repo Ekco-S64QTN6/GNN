@@ -198,6 +198,21 @@ const GNNTTS = (() => {
      * "Iaea" — and that is the deliberate trade: a wrong pronunciation
      * passes, a spelled-out word does not.
      */
+    // Ordinary words that arrive capitalised for emphasis. Every engine
+    // reads a short all-capital word as an initialism, and the owner's
+    // standing rule is that a wrong pronunciation passes where a
+    // spelled-out word does not.
+    const COMMON_SHORT = new Set([
+        'ON', 'IN', 'AT', 'IS', 'AS', 'IT', 'BY', 'OR', 'AN', 'UP', 'TO',
+        'OF', 'NO', 'SO', 'WE', 'HE', 'DO', 'IF', 'BE', 'ME', 'MY', 'AM',
+        'ALL', 'AND', 'THE', 'FOR', 'NOT', 'BUT', 'OUT', 'NEW', 'TWO',
+        'ONE', 'SIX', 'TEN', 'HAS', 'HAD', 'WAS', 'ARE', 'WHO', 'HOW',
+        'WHY', 'ITS', 'HIS', 'HER', 'OFF', 'OWN', 'SAY', 'SEE', 'NOW',
+        'END', 'TOP', 'WAR', 'LAW', 'BIG', 'OLD', 'MAY', 'CAN', 'GET',
+        'GOT', 'PUT', 'SET', 'RUN', 'DAY', 'MAN', 'MEN', 'WIN', 'DIE',
+        'HIT', 'CUT', 'ASK', 'YET', 'FAR', 'BAD', 'LOW', 'KEY', 'JOB',
+    ]);
+
     function unshout(text) {
         const str = String(text);
         const words = str.match(/\b[A-Za-z][A-Za-z'’.-]*\b/g) || [];
@@ -210,6 +225,12 @@ const GNNTTS = (() => {
             const letters = word.replace(/[^A-Z]/g, '');
             if (letters.length < 2) return word;
             if (SPELLED_OUT.has(letters)) return word;
+            // A short capitalised word that is an ordinary English word is
+            // emphasis, never an initialism — "ON" came out "O N". The
+            // allowlist above is checked first, so US and EU still spell.
+            if (COMMON_SHORT.has(letters)) {
+                return word.charAt(0) + word.slice(1).toLowerCase();
+            }
             if (!headline) {
                 // Deliberate capitals in ordinary prose: only unshout what is
                 // too long and too vowel-rich to be an initialism.
@@ -222,13 +243,35 @@ const GNNTTS = (() => {
         });
     }
 
+    /**
+     * Names the phonemiser gets wrong, respelled so it gets them right.
+     *
+     * Kokoro reads plain text, so the fix for a mispronounced name is to
+     * write it the way it sounds rather than the way it is spelled. Nothing
+     * here changes what is shown on screen — `sanitize()` runs on the way
+     * to synthesis only, so the teleprompter still reads "Houthis".
+     *
+     * Keep it short and only for names heard to be wrong. A long table of
+     * guesses is a long table of new mistakes.
+     */
+    const PRONOUNCE = [
+        [/\bHouthis\b/gi, 'Hoothees'],
+        [/\bHouthi\b/gi, 'Hoothee'],
+    ];
+
+    function respell(text) {
+        let out = text;
+        for (const [re, to] of PRONOUNCE) out = out.replace(re, to);
+        return out;
+    }
+
     function sanitize(text) {
-        return unshout(String(text || '')
+        return respell(unshout(String(text || '')
             .replace(/\s*—\s*/g, ', ')
             .replace(/[«»"“”]/g, '')
             .replace(/&[a-z]+;/gi, ' ')
             .replace(/\s+/g, ' ')
-            .trim());
+            .trim()));
     }
 
     /**
@@ -603,6 +646,25 @@ const GNNTTS = (() => {
 
     return {
         VOICES, speak, prefetch, stop, unlock, getLevel, estimateMs,
+        /**
+         * How far through the current clip the audio actually is, 0..1, or
+         * null when there is nothing playing or the duration is not known
+         * yet. The teleprompter types to this instead of to an estimate of
+         * how long the line ought to take, so the words appear as they are
+         * said rather than drifting against them over a long read.
+         */
+        playbackProgress: () => {
+            if (!speaking || !audioEl) return null;
+            const d = audioEl.duration;
+            if (!isFinite(d) || d <= 0) return null;
+            return Math.max(0, Math.min(1, audioEl.currentTime / d));
+        },
+        // Exported so a caller can show exactly what will be spoken.
+        // The teleprompter used to be handed the whole story while
+        // synthesis quietly trimmed it, so on a long read the voice
+        // stopped while the caption carried on and the anchor's mouth
+        // went still halfway through.
+        trimForSynthesis,
         loadCatalogue, getEngine: () => engine, isCloud: () => cloud,
         setVoice, getVoice, getVoiceName, setEnabled, isEnabled, isSpeaking,
         setPitch, setRate, nudgePlaybackRate,

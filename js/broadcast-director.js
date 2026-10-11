@@ -42,6 +42,9 @@ const GNNDirector = (() => {
         storiesPerIdent: [9, 14],
         banterChance: 0.55,
         wireShare: 0.35,          // of banter beats, how many are sector-wire
+        exchangeShare: 0.33,      // ...and how many are the two anchors
+        twoWayShare: 0.22,        // ...and how many go to a correspondent
+        storiesPerShow: [9, 14],  // before the lead signs the block off
         tossChance: 0.42,
         cutawayChance: 0.62,
         cutawayAt: 0.34,          // fraction through the read
@@ -118,27 +121,96 @@ const GNNDirector = (() => {
         if (n > 1) seatIndex = (seatIndex + 1) % n;
     }
 
+    // One line at a time, in order, with a beat of air between them.
+    //
+    // `GNNTTS.speak()` bumps its own request id and cuts off whatever is
+    // already playing, and every `say()` was fire-and-forget — so any line
+    // fired while someone was talking killed the line in progress. That is
+    // one fault wearing six costumes: the station ident interrupted, the
+    // commander cut off mid-sentence by the other anchor, a line written
+    // for one character coming out in the other's voice, the throw to the
+    // break stepping on the story, and every cutaway talking over itself.
+    //
+    // Nothing speaks directly any more. Lines are queued and a pump plays
+    // them one at a time, and the caption goes up at the moment its own
+    // line starts rather than when it was scheduled — which is why the
+    // text box used to appear before the voice.
+    const speechQueue = [];
+    let pumping = false;
+    // Dead air between lines. Without it the next line begins on the same
+    // frame the last one ends and the desk sounds like a machine reading.
+    const LINE_GAP_MS = 420;
+
+    /**
+     * Queue a line.
+     *
+     * `opts.caption` is the teleprompter payload; it is presented when the
+     * line actually begins. Returns the estimated duration, which callers
+     * use for pacing, not for display timing.
+     */
     function say(text, opts = {}) {
-        const token = ++speechToken;
-        speaking = true;
-        // The reader's own voice, unless the caller named one — an exchange
-        // hands each line to the character who says it.
-        if (!opts.voice) {
-            const who = speaker();
-            if (who && who.voice) opts = Object.assign({}, opts, { voice: who.voice });
-        }
+        if (!text) return 0;
         const est = GNNTTS.estimateMs(text);
+        speechQueue.push({ text, opts, est, token: speechToken });
+        speaking = true;
         speechDeadline = performance.now() + est * 2.4 + 8000;
-        GNNTTS.speak(text, opts).then(() => {
-            if (token === speechToken) speaking = false;
-        });
+        pump();
         return est;
+    }
+
+    async function pump() {
+        if (pumping) return;
+        pumping = true;
+        try {
+            while (speechQueue.length) {
+                const job = speechQueue[0];
+                // Dropped if the rundown moved on while it waited.
+                if (job.token !== speechToken) { speechQueue.shift(); continue; }
+                speechQueue.shift();
+                const opts = Object.assign({}, job.opts);
+                delete opts.caption;
+                if (!opts.voice) {
+                    const who = speaker();
+                    if (who && who.voice) opts.voice = who.voice;
+                }
+                if (job.opts.caption) {
+                    GNNTextEngine.present(job.text, Object.assign(
+                        { durationMs: job.est }, job.opts.caption));
+                }
+                speechDeadline = performance.now() + job.est * 2.4 + 8000;
+                try {
+                    await GNNTTS.speak(job.text, opts);
+                } catch (e) { /* the rundown outranks the voice */ }
+                if (speechQueue.length) {
+                    await new Promise((r) => setTimeout(r, LINE_GAP_MS));
+                }
+            }
+        } finally {
+            pumping = false;
+            if (!speechQueue.length) {
+                speaking = false;
+                speechDeadline = 0;
+            }
+        }
+    }
+
+    /** Resolves when the queue has emptied, or after a hard ceiling. */
+    function drainSpeech(limitMs = 20000) {
+        const until = performance.now() + limitMs;
+        return new Promise((resolve) => {
+            const check = () => {
+                if (!speaking || performance.now() > until) return resolve();
+                setTimeout(check, 120);
+            };
+            check();
+        });
     }
 
     /** Second line of defence: the rundown outranks the voice. */
     function checkSpeechWatchdog(now) {
         if (speaking && speechDeadline && now > speechDeadline) {
             speechToken++;
+            speechQueue.length = 0;
             speaking = false;
             speechDeadline = 0;
         }
@@ -146,6 +218,7 @@ const GNNDirector = (() => {
 
     function cancelSpeech() {
         speechToken++;
+        speechQueue.length = 0;
         speaking = false;
         GNNTTS.stop();
     }
@@ -231,6 +304,25 @@ const GNNDirector = (() => {
             .replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
+    /**
+     * Does this sentence just say the headline again?
+     *
+     * The prefix test below catches a description that opens with the
+     * headline verbatim. It does not catch one that *restates* it — the
+     * BBC's hurricane coverage led with a reworded version of its own
+     * headline, so the anchor read the story, then read it again. Word
+     * overlap catches that where string matching cannot.
+     */
+    function restatesHeadline(sentence, title) {
+        const tw = new Set(norm(title).split(' ').filter((w) => w.length > 3));
+        if (tw.size < 3) return false;
+        const sw = new Set(norm(sentence).split(' ').filter((w) => w.length > 3));
+        if (!sw.size) return false;
+        let shared = 0;
+        tw.forEach((w) => { if (sw.has(w)) shared++; });
+        return shared / tw.size >= 0.7;
+    }
+
     function storyText(item) {
         const title = (item.title || '').trim();
         let desc = (item.description || '').trim();
@@ -265,6 +357,17 @@ const GNNDirector = (() => {
                     break;
                 }
             }
+        }
+        // Drop leading sentences that only restate the headline in other
+        // words. The echo-stripping above is a string match and cannot see
+        // a paraphrase; this is what made the anchor read the hurricane
+        // story and then read it again.
+        let guard = 0;
+        while (desc && guard++ < 3) {
+            const m = desc.match(/^[^.!?]+[.!?]/);
+            const first = m ? m[0] : desc;
+            if (!restatesHeadline(first, title)) break;
+            desc = desc.slice(first.length).replace(/^[\s\-–—:.,]+/, '');
         }
         if (!desc) return title.replace(/[.!?]?$/, '.');
         // What is left of the summary now starts mid-sentence, so it needs
@@ -302,17 +405,21 @@ const GNNDirector = (() => {
 
     function beginColdOpen(now) {
         setState(S.COLD_OPEN, now);
-        GNNTextEngine.present('GNN SECTOR RELAY — SIGNAL ACQUIRED', {
-            kind: 'ident', cue: 'STATION IDENT', chyron: 'GALACTIC NEWS NETWORK',
-            durationMs: 2200,
-        });
+        // The lead anchor opens the show and says who they are. Without
+        // this the channel came up mid-rundown with two strangers at a
+        // desk already reading a wire story.
+        const open = GNNScript.showOpen();
+        const openMs = say(open, { caption: {
+            kind: 'ident', cue: 'STATION IDENT',
+            chyron: 'GALACTIC NEWS NETWORK' } });
         GNNAudio.play('intro_sfx_02', { gain: 0.6 });
         const beds = GNNAssets.musicTracks();
         if (beds.length) {
             GNNAudio.playMusic(beds[8 % beds.length].id, { gain: 0.55, loop: false, fadeIn: 0.4 });
         }
-        const est = say(GNNScript.ident());
-        holdUntil = now + Math.max(3200, est + 900);
+        // The show open above is the spoken line. Saying the ident too
+        // queued a second utterance straight over it.
+        holdUntil = now + Math.max(3200, openMs + 900);
     }
 
     function beginRead(now, item) {
@@ -325,15 +432,22 @@ const GNNDirector = (() => {
         banterStreak = 0;
 
         const breaking = isBreaking(item);
-        const text = storyText(item);
+        // Trim once, here, so the caption, the segment's clock and the
+        // voice are all reading the same words. Synthesis caps a line at
+        // 900 characters; when the teleprompter was handed the untrimmed
+        // story it kept scrolling after the audio had finished and the
+        // anchor sat there with her mouth shut mid-sentence.
+        const text = GNNTTS.trimForSynthesis
+            ? GNNTTS.trimForSynthesis(storyText(item))
+            : storyText(item);
         readEstimate = GNNTTS.estimateMs(text);
 
-        GNNTextEngine.present(text, {
+        const caption = {
             kind: breaking ? 'breaking' : 'headline',
             cue: breaking ? '⚡ BREAKING TRANSMISSION' : 'SECTOR DESK',
-            chyron: breaking ? 'BREAKING — ' + GNNScript.chyron(item) : GNNScript.chyron(item),
-            durationMs: readEstimate,
-        });
+            chyron: breaking ? 'BREAKING — ' + GNNScript.chyron(item)
+                : GNNScript.chyron(item),
+        };
 
         if (breaking) {
             GNNAudio.playKlaxon();
@@ -343,7 +457,7 @@ const GNNDirector = (() => {
         }
 
         GNNCutsceneManager.prefetch(item);
-        say(text);
+        say(text, { caption });
 
         // Warm the next story while this one reads. Synthesis takes a fifth
         // of a second to a second and a half depending on length, and the
@@ -362,26 +476,108 @@ const GNNDirector = (() => {
     }
     let holdNext = null;
 
+    /**
+     * Two anchors talking to each other instead of at the camera.
+     *
+     * `GNNScript.exchange()` returns a jab and a reply drawn from the
+     * asymmetric relationship table in `js/cast.js`, each tagged with who
+     * says it, so each line goes out in that character's own voice. This
+     * was written and then never called, which is why the desk only ever
+     * talked about the wire.
+     */
+    function beginExchange(now) {
+        const lines = GNNScript.exchange();
+        if (!lines || lines.length < 2) return false;
+        banterStreak++;
+        setState(S.BANTER, now);
+        const jab = lines[0];
+        const reply = lines[1];
+        const estA = say(jab.text, {
+            voice: jab.who.voice, pitch: -3,
+            caption: { kind: 'banter', cue: jab.who.name.toUpperCase() } });
+        // The reply waits for the jab to finish, then speaks in the other
+        // anchor's voice. Both lines through `say()` at once would talk
+        // over each other — one voice path, one speaker at a time.
+        // Guarded by the speech token, not just by the state.
+        //
+        // The state can be BANTER again for a different beat by the time
+        // this fires, and then the stale reply speaks over whatever is
+        // being said — which is how the commander's intro got cut off by
+        // the other anchor. `speechToken` changes on every new line, so
+        // comparing it catches exactly the case the state check misses.
+        const myToken = speechToken;
+        setTimeout(() => {
+            if (state !== S.BANTER || speechToken !== myToken || speaking) return;
+            const estB = say(reply.text, {
+                voice: reply.who.voice, pitch: -3,
+                caption: { kind: 'banter',
+                           cue: reply.who.name.toUpperCase() } });
+            holdUntil = performance.now() + estB + 600;
+        }, estA + 350);
+        holdUntil = now + estA + 1200;
+        return true;
+    }
+
+    /**
+     * A remote two-way. The correspondent appears in the monitor and the
+     * three lines go out in order through the speech queue, so the anchor
+     * finishes asking before the reporter starts answering — which is the
+     * whole reason the queue exists.
+     */
+    async function beginTwoWay(now) {
+        const tw = GNNScript.twoWay();
+        if (!tw) return false;
+        const kind = current ? GNNCutsceneManager.routeFor(current) : null;
+        const ok = await GNNCutsceneManager.openTwoWay(
+            tw.correspondent.id, kind, performance.now(),
+            tw.correspondent.name.toUpperCase());
+        if (!ok) return false;
+        banterStreak++;
+        setState(S.BANTER, now);
+        let total = 0;
+        for (const line of tw.lines) {
+            total += say(line.text, {
+                voice: line.who.voice,
+                pitch: line.who.id === tw.correspondent.id ? -1 : -3,
+                caption: { kind: 'banter',
+                           cue: line.who.name.toUpperCase() },
+            });
+        }
+        // Drop the monitor once the exchange is over, not on a timer.
+        drainSpeech(total * 3 + 15000).then(() => {
+            if (GNNCutsceneManager.isTwoWay()) GNNCutsceneManager.endCutaway();
+        });
+        holdUntil = now + total + 1200;
+        return true;
+    }
+
     function beginBanter(now) {
+        // Some anchor beats are a remote two-way, some are the pair
+        // talking to each other, the rest a comment on the story.
+        if (Math.random() < PACE.twoWayShare) {
+            beginTwoWay(now).then((ok) => { if (!ok) beginPlainBanter(now); });
+            return;
+        }
+        if (Math.random() < PACE.exchangeShare && beginExchange(now)) return;
+        beginPlainBanter(now);
+    }
+
+    function beginPlainBanter(now) {
         const wire = Math.random() < PACE.wireShare;
         const line = wire ? GNNScript.sectorWire(current)
             : GNNScript.banter(current, speaker());
         if (!line) { beginHold(now, PACE.holdAfterBanter, S.READ); return; }
         banterStreak++;
-        const est = say(line, { pitch: wire ? -6 : -3 });
-        GNNTextEngine.present(line, {
+        const est = say(line, { pitch: wire ? -6 : -3, caption: {
             kind: wire ? 'wire' : 'banter',
-            cue: wire ? 'SECTOR WIRE' : 'ANCHOR COMMENT',
-            durationMs: est,
-        });
+            cue: wire ? 'SECTOR WIRE' : 'ANCHOR COMMENT' } });
         if (wire) GNNAudio.playRole('chirp', { gain: 0.3 });
         setState(wire ? S.WIRE : S.BANTER, now);
     }
 
     function beginToss(now) {
         const line = GNNScript.toss();
-        const est = say(line);
-        GNNTextEngine.present(line, { kind: 'banter', cue: '', durationMs: est });
+        const est = say(line, { caption: { kind: 'banter', cue: '' } });
         setState(S.TOSS, now);
     }
 
@@ -408,9 +604,14 @@ const GNNDirector = (() => {
         // air underneath the commercial.
         breakArming = true;
         cancelSpeech();
-        GNNTextEngine.present('WE WILL RETURN AFTER THESE MESSAGES.', {
-            kind: 'ad', cue: 'COMMERCIAL BREAK', chyron: '', instant: true,
-        });
+        // Thrown to the break by whoever has the chair, rather than cutting
+        // from a story straight into an advert.
+        const toss = GNNScript.intoBreak();
+        // Through the queue like everything else, and *awaited* — the
+        // commercials must not start underneath the throw to them.
+        say(toss, { caption: { kind: 'ad', cue: 'COMMERCIAL BREAK',
+                               chyron: '' } });
+        await drainSpeech();
         GNNCutsceneManager.endCutaway();
         let total = 0;
         try {
@@ -418,13 +619,24 @@ const GNNDirector = (() => {
         } finally {
             breakArming = false;
         }
-        if (!total) beginHold(performance.now(), [200, 400], S.READ);
+        if (!total) { beginHold(performance.now(), [200, 400], S.READ); return; }
+        // Wait for the last commercial to actually leave the screen. The
+        // assembly promise resolves when the break is *built*, not when it
+        // has finished playing, so coming back on it put the anchor's
+        // voice over the final advert.
+        for (let i = 0; i < 400 && GNNCutsceneManager.isBreakActive(); i++) {
+            await new Promise((r) => setTimeout(r, 150));
+        }
+        // Coming back: the anchor says so. A break that ends by simply
+        // reappearing reads as a dropped signal rather than a return.
+        const back = GNNScript.outOfBreak();
+        const est = say(back, { caption: { kind: 'hold', cue: 'SECTOR DESK' } });
+        beginHold(performance.now(), [est, est + 400], S.READ);
     }
 
     function beginDry(now) {
         const line = GNNScript.hold();
-        const est = say(line);
-        GNNTextEngine.present(line, { kind: 'hold', cue: 'STANDING BY', durationMs: est });
+        const est = say(line, { caption: { kind: 'hold', cue: 'STANDING BY' } });
         holdUntil = now + rand(PACE.dryLoop);
         setState(S.DRY, now);
     }
@@ -494,6 +706,7 @@ const GNNDirector = (() => {
                     else if (next === S.BANTER) beginBanter(now);
                     else if (next === S.TOSS) beginToss(now);
                     else if (next === S.IDENT) beginIdent(now);
+                    else if (next === S.COLD_OPEN) beginColdOpen(now);
                     else nextStory(now);
                 }
                 break;
@@ -522,10 +735,8 @@ const GNNDirector = (() => {
                 if (!breakArming && !GNNCutsceneManager.isBreakActive()) {
                     // One line, spoken and displayed. These used to differ.
                     const backLive = GNNScript.signoff();
-                    const est = say(backLive);
-                    GNNTextEngine.present(backLive, {
-                        kind: 'ident', cue: 'BACK LIVE', durationMs: est,
-                    });
+                    say(backLive, {
+                        caption: { kind: 'ident', cue: 'BACK LIVE' } });
                     beginHold(now, [1600, 2400], S.READ);
                 }
                 break;
@@ -540,8 +751,31 @@ const GNNDirector = (() => {
         }
     }
 
+    let nextCloseAt = randInt(PACE.storiesPerShow);
+
+    /**
+     * End of a block: the lead signs off and names whoever sat with them,
+     * then the channel opens a new show rather than reading on forever.
+     *
+     * A rundown with no end is a feed, not a broadcast. `showClose()` and
+     * `showOpen()` were both written for this and neither was ever called.
+     */
+    function beginShowClose(now) {
+        const line = GNNScript.showClose();
+        const est = say(line, { caption: {
+            kind: 'ident', cue: 'SECTOR DESK',
+            chyron: 'GALACTIC NEWS NETWORK' } });
+        storiesRead = 0;
+        nextCloseAt = randInt(PACE.storiesPerShow);
+        // Through HOLD, which waits for the sign-off to actually finish
+        // before the next show opens over the top of it.
+        beginHold(now, [est + 600, est + 1200], S.COLD_OPEN);
+    }
+
     function decideAfterRead(now) {
-        if (sinceBreak >= nextBreakAt) {
+        if (storiesRead >= nextCloseAt) {
+            beginShowClose(now);
+        } else if (sinceBreak >= nextBreakAt) {
             beginHold(now, PACE.holdBeforeBreak, S.BREAK);
         } else if (sinceIdent >= nextIdentAt) {
             beginHold(now, PACE.holdAfterRead, S.IDENT);

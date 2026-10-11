@@ -60,6 +60,9 @@ const GNNRenderer = (() => {
     let vctx = null;
 
     let setPlate = null;
+    // What is seen through the window, and where the glass is.
+    let backdrop = null;
+    let setWindow = null;
     let deskPlate = null;
     let seated = [];
     let robot = null;
@@ -105,6 +108,8 @@ const GNNRenderer = (() => {
         // comparisons and cannot get this wrong.
 
         setPlate = assets.set || null;
+        backdrop = assets.backdrop || null;
+        setWindow = assets.window || null;
         deskPlate = assets.desk || null;
         seated = assets.seated || [];
         robot = assets.robot || null;
@@ -139,6 +144,23 @@ const GNNRenderer = (() => {
             // set, anchor, desk in front. Without it the MOO1 newscast frame
             // is a finished picture of its own, so drawing a set behind it
             // would only be painting something nothing can see.
+            // Backdrop first, then the room over it. The room's window
+            // panes are cut out by condition_plates.py, so this is the only
+            // place it shows — and it has to be drawn in the window's own
+            // rectangle, mapped through the same cover transform the room
+            // gets, or it slides against the glass when the frame resizes.
+            if (setPlate && backdrop && setWindow) {
+                const sc = Math.max(VIEW.w / setPlate.width,
+                                    VIEW.h / setPlate.height);
+                const dw = setPlate.width * sc;
+                const dh = setPlate.height * sc;
+                const ox = (VIEW.w - dw) / 2;
+                const oy = (VIEW.h - dh) / 2;
+                c.drawImage(backdrop,
+                            ox + setWindow.x0 * dw, oy + setWindow.y0 * dh,
+                            (setWindow.x1 - setWindow.x0) * dw,
+                            (setWindow.y1 - setWindow.y0) * dh);
+            }
             if (setPlate) drawCover(c, setPlate, VIEW.w, VIEW.h);
             drawCast(c, frames.anchor);
             // Only when the desk is its own plate. With the desk drawn into
@@ -233,7 +255,7 @@ const GNNRenderer = (() => {
     // on the desk. Ours had the heads starting at 0.38 behind a desk that
     // began at 0.665 — the camera too close and the desk too low, so they
     // read as standing behind a counter rather than sitting at one.
-    const CAST = { h: 0.315, seat: 0.60 };
+    const CAST = { h: 0.300, seat: 0.60 };
     const SEATS = {
         1: [0.50],
         2: [0.37, 0.63],
@@ -277,7 +299,22 @@ const GNNRenderer = (() => {
     // below them, so there is no body for a desk to need to hide. The
     // anchors are simply drawn on top, with their hands landing on the
     // surface.
-    const DESK_LINE = 0.60;
+    // Measured off the set plate, and off the owner's own markup of it:
+    // the desk's top surface runs from its back edge at 0.435 to its
+    // front lip at 0.497, and the anchors belong at the BACK of that
+    // surface — the far third, where someone seated at a desk actually
+    // puts their forearms. Resting them on the front lip put the pair
+    // right at the camera and made them look oversized for the room.
+    //
+    // The anchors meet the *front* lip, not the back edge. Seated at the
+    // back edge they put their hands down at the far side of the desk and
+    // their bodies floated clear of it — read as two people standing
+    // behind a table rather than sitting at one, and no amount of
+    // resizing fixes that, because the fault is where the bottom of the
+    // plate lands, not how wide it is. Meeting the front lip, the torso
+    // covers the desk's top surface, which is what a person sitting at a
+    // desk does to it from a head-on camera.
+    const DESK_LINE = 0.468;
     const deskTop = () => CAST.seat - DESK.overlap;
 
     /**
@@ -321,9 +358,58 @@ const GNNRenderer = (() => {
             }
             if (!img) return;
             const w = img.width * (h / img.height);
-            c.drawImage(img, seats[i] * VIEW.w - w / 2,
-                        seatY * VIEW.h - h, w, h);
+            const x = seats[i] * VIEW.w - w / 2;
+            const y = seatY * VIEW.h - h;
+            const prev = crossfade(i, person, img);
+            if (prev) {
+                const pw = prev.img.width * (h / prev.img.height);
+                c.drawImage(prev.img, seats[i] * VIEW.w - pw / 2, y, pw, h);
+                const a = c.globalAlpha;
+                c.globalAlpha = a * prev.t;
+                c.drawImage(img, x, y, w, h);
+                c.globalAlpha = a;
+                return;
+            }
+            c.drawImage(img, x, y, w, h);
         });
+    }
+
+    // Per seat: which plate was last drawn, and when it changed.
+    const fades = [];
+    const FADE_MS = 180;
+
+    /**
+     * A turn of the head is a change of plate, and swapping one picture
+     * for another in a single frame reads as a jump however well the two
+     * are registered — two generations never agree everywhere.
+     *
+     * So a change of plate fades. The mouth flap does not: `speaking`
+     * differs from `hero` only inside the mouth (condition_plates.py
+     * builds it that way), so there is nothing to smooth and fading at
+     * five flaps a second would only smear the mouth.
+     *
+     * Returns the outgoing plate and how far the fade has run, or null
+     * when there is nothing to fade.
+     */
+    function crossfade(seat, person, img) {
+        const now = (typeof performance !== 'undefined')
+            ? performance.now() : Date.now();
+        let f = fades[seat];
+        if (!f || f.person !== person) {
+            fades[seat] = { person, img, prev: null, since: now };
+            return null;
+        }
+        if (f.img !== img) {
+            const mouth = (img === person.hero && f.img === person.speaking)
+                || (img === person.speaking && f.img === person.hero);
+            f.prev = mouth ? null : f.img;
+            f.img = img;
+            f.since = now;
+        }
+        if (!f.prev) return null;
+        const t = (now - f.since) / FADE_MS;
+        if (t >= 1) { f.prev = null; return null; }
+        return { img: f.prev, t };
     }
 
     function drawDesk(c, img) {
@@ -533,6 +619,8 @@ const GNNRenderer = (() => {
         VIEW, SCALE, BASE_W, BASE_H, bottomStack, fit, hitRegions,
         /** Who is at the desk, left to right, for the script writer. */
         seatedIds: () => seated.map((p) => p.sid),
+        /** Swap what is outside the window. */
+        setBackdrop: (img) => { if (img) backdrop = img; },
         get CANVAS_W() { return CANVAS_W; },
         get CANVAS_H() { return CANVAS_H; },
     };

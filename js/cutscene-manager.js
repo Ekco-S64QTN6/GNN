@@ -68,6 +68,122 @@ const GNNCutsceneManager = (() => {
         return best;
     }
 
+    // The generated cutaway plates, by the route they illustrate.
+    //
+    // Fourteen of these were conditioned into assets/generated/cutaways/
+    // and nothing referenced them, which is why every cut still landed on
+    // a MOO1 screen. They are full-bleed pictures of the thing being
+    // reported, which is what a cutaway is for; the composited MOO1 scenes
+    // stay as the fallback for a route with no plate.
+    const GENERATED = {
+        convoy: ['station_trade', 'starship_battle', 'starship_battle_02'],
+        tactical: ['starship_battle', 'starship_battle_02', 'planet_invasion',
+                   'planet_invasion_02'],
+        council: ['council_vote'],
+        cyber: ['hacker_code', 'spy_infiltration'],
+        anomaly: ['space_vortex', 'space_vortex_02', 'black_hole',
+                  'solar_flare'],
+        survey: ['black_hole', 'solar_flare', 'asteroid_mining'],
+        industry: ['asteroid_mining', 'station_trade'],
+        deepfield: ['black_hole', 'space_vortex'],
+    };
+    const GEN_DIR = 'assets/generated/cutaways/';
+    const genCache = new Map();
+
+    function loadGenerated(name) {
+        if (genCache.has(name)) return genCache.get(name);
+        const p = (typeof GNNAssets !== 'undefined' && GNNAssets.loadImage)
+            ? GNNAssets.loadImage(GEN_DIR + name + '.png')
+            : Promise.resolve(null);
+        genCache.set(name, p);
+        return p;
+    }
+
+    /**
+     * A generated plate for this route, as a scene the renderer can show.
+     *
+     * Returns null when the route has no plate or the file is missing, and
+     * the caller falls back to the composited MOO1 scene — so dropping a
+     * better picture in later is the whole of the change needed.
+     */
+    async function generatedScene(kind) {
+        const names = GENERATED[kind];
+        if (!names || !names.length) return null;
+        const name = names[(Math.random() * names.length) | 0];
+        const img = await loadGenerated(name);
+        if (!img) return null;
+        // Same shape `GNNSceneCompositor.makeLayer` produces, so the
+        // renderer draws it with no special case: a layer is a list of
+        // frames, not an image.
+        return {
+            kind,
+            layers: [{
+                entry: null, frames: [img], fps: 0, motion: 'still',
+                params: {}, blend: 'source-over', alpha: 1,
+                fit: 'cover', rect: null, offset: 0,
+            }],
+            duration: PIP_MS, label: null, generated: true,
+        };
+    }
+
+    // Field correspondents, per docs/ROADMAP.md: they come in through the
+    // monitor, not through a second set. One portrait each instead of a
+    // room, framed by the PIP that already exists for cutaway footage.
+    const CORR_DIR = 'assets/generated/correspondents/';
+    const corrCache = new Map();
+
+    function loadCorrespondent(sid, state) {
+        const key = sid + '_' + state;
+        if (corrCache.has(key)) return corrCache.get(key);
+        const p = (typeof GNNAssets !== 'undefined' && GNNAssets.loadImage)
+            ? GNNAssets.loadImage(CORR_DIR + key + '.png')
+            : Promise.resolve(null);
+        corrCache.set(key, p);
+        return p;
+    }
+
+    /**
+     * A remote two-way: the correspondent in the monitor over a location
+     * plate, the way a channel carries a reporter on the ground.
+     *
+     * Returns a scene or null. Null means no plate for that character, and
+     * the caller simply does not throw to them.
+     */
+    async function correspondentScene(sid, kind) {
+        const face = await loadCorrespondent(sid, 'speaking')
+            || await loadCorrespondent(sid, 'hero');
+        if (!face) return null;
+        const layers = [];
+        const back = (kind && await generatedScene(kind));
+        if (back && back.layers[0]) {
+            // Dimmed, so the reporter reads against it rather than
+            // competing with it.
+            layers.push(Object.assign({}, back.layers[0], { alpha: 0.55 }));
+        }
+        layers.push({
+            entry: null, frames: [face], fps: 0, motion: 'still',
+            params: {}, blend: 'source-over', alpha: 1,
+            fit: 'contain', rect: null, offset: 0,
+        });
+        return { kind: kind || 'interview', layers,
+                 duration: PIP_MS, label: null, correspondent: sid };
+    }
+
+    /** Put a correspondent in the monitor and leave them there. */
+    async function openTwoWay(sid, kind, now, label) {
+        if (breakState) return false;
+        const scene = await correspondentScene(sid, kind);
+        if (!scene) return false;
+        cutaway = { scene, startedAt: now, duration: 1e9, mode: 'pip',
+                    label: label || null, twoWay: true };
+        if (typeof GNNAudio !== 'undefined') {
+            GNNAudio.playChord(SCENE_AUDIO.interview);
+        }
+        return true;
+    }
+
+    function isTwoWay() { return !!(cutaway && cutaway.twoWay); }
+
     /** Sound design that matches the visual recipe. */
     const SCENE_AUDIO = {
         convoy: [{ role: 'rumble', gain: 0.5 }, { role: 'servo', gain: 0.35, delay: 0.6 }],
@@ -89,13 +205,17 @@ const GNNCutsceneManager = (() => {
     /** Warm a scene for the current story so the cut is instant. */
     async function prefetch(story) {
         const kind = routeFor(story);
-        pendingScene = await GNNSceneCompositor.synthesize(kind || undefined);
+        // Prefer a generated plate; fall back to a composited MOO1 scene.
+        pendingScene = (kind && await generatedScene(kind))
+            || await GNNSceneCompositor.synthesize(kind || undefined);
         return pendingScene;
     }
 
     async function triggerCutaway(story, now, opts = {}) {
         if (breakState) return false;
-        const scene = pendingScene || await GNNSceneCompositor.synthesize(routeFor(story) || undefined);
+        const kind = routeFor(story);
+        const scene = pendingScene || (kind && await generatedScene(kind))
+            || await GNNSceneCompositor.synthesize(kind || undefined);
         pendingScene = null;
         if (!scene) return false;
         cutaway = {
@@ -169,13 +289,36 @@ const GNNCutsceneManager = (() => {
     }
 
     /** Prosody per beat kind, shared by the warm-up and the actual read. */
+    // Commercials are not read by the anchors.
+    //
+    // They were, because `voiceOptsFor` never named a voice and synthesis
+    // fell through to whoever had the chair — so the commander sold you a
+    // hull cleaner between stories. A break now picks an announcer of its
+    // own and keeps it for every beat, so one advert is one person, and
+    // the small print is a different, faster voice the way it is on air.
+    //
+    // Deliberately excludes am_michael and af_bella, which are Hale and
+    // Varr. If the desk cast changes, this list is the thing to update.
+    const AD_VOICES = ['bm_george', 'bm_daniel', 'bm_lewis', 'af_heart',
+                       'bf_emma', 'bf_isabella'];
+    const LEGAL_VOICE = 'bm_fable';
+    let breakVoice = AD_VOICES[0];
+
+    function pickBreakVoice() {
+        const other = AD_VOICES.filter((v) => v !== breakVoice);
+        breakVoice = other[(Math.random() * other.length) | 0];
+        return breakVoice;
+    }
+
     function voiceOptsFor(beat) {
         // Spots keep their stings closer to the voice than a news read does —
         // a commercial that ducks its own effects hard stops sounding like a
         // commercial.
         return beat.kind === 'legal'
-            ? { rate: 38, pitch: -4, duck: 0.5, duckSfx: 0.55 }
-            : { rate: 0, pitch: beat.kind === 'tag' ? -4 : -2,
+            ? { voice: LEGAL_VOICE, rate: 38, pitch: -4,
+                duck: 0.5, duckSfx: 0.55 }
+            : { voice: breakVoice, rate: 0,
+                pitch: beat.kind === 'tag' ? -4 : -2,
                 duck: 0.45, duckSfx: 0.55 };
     }
 
@@ -197,6 +340,7 @@ const GNNCutsceneManager = (() => {
      */
     async function startCommercialBreak(now, opts = {}) {
         if (breakState) return 0;
+        pickBreakVoice();
         const script = (opts.kind === 'promo' || Math.random() < 0.3)
             ? GNNScript.promo() : GNNScript.commercial();
         const beats = [{ kind: 'ident', text: GNNScript.ident() }].concat(script.beats);
@@ -480,7 +624,7 @@ const GNNCutsceneManager = (() => {
     return {
         PIP,
         prefetch, triggerCutaway, endCutaway, isCutawayActive,
-        isFullCutaway, voiceOptsFor,
+        isFullCutaway, voiceOptsFor, openTwoWay, isTwoWay,
         startCommercialBreak, abortBreak, isBreakActive,
         update, render,
         routeFor,
