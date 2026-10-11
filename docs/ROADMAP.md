@@ -320,3 +320,77 @@ quantised 7B to 12B model. The shape:
 input channel this project does not have, and would want the same
 pre-written fallback. It sits behind all of the above.
 
+---
+
+# Rigging the anchors, after the Kaiagotchi system
+
+Reviewed `Kaiagotchi/kaiagotchi/ui/web/static/js/kaia/` and
+`tools/kaia_portrait/`. It solves exactly the problem that has cost the most
+here — getting many expressions out of one picture without going back to the
+image model — and it is worth adopting. Not unchanged.
+
+## What it is
+
+One image plus thirty-one named landmarks (`kaia_rig.json`): eye corners,
+lids, irises, brow inner/mid/outer, mouth corners, lips, nose, chin,
+forehead, cheeks. A WebGL2 fragment shader walks every output pixel, sums a
+displacement from Gaussian falloffs around the landmarks it should respond
+to, and samples the source at `q - d`. Lids and lashes are drawn
+procedurally rather than warped, so a blink is real rather than a squash.
+
+Expressions are a continuous parameter space — `browRaise`, `lid`, `gazeX`,
+`smile`, `smileAsym`, `mouthOpen`, `yaw`, `pitch`, `roll` and so on — with
+twelve named points in it (`neutral, awake, happy, curious, bored, sad,
+frustrated, sleepy, confident, broken, angry, debug`). Anything between two
+moods is a blend, so it moves rather than cutting.
+
+Everything scales off a measured face size, so the same numbers work at any
+resolution.
+
+## Why it fits
+
+It would retire a whole class of failure. Nine of eleven `listening` plates
+came back with the eyes never leaving the camera, and the only fix available
+was to ask the image model again and hope. A rig makes a glance a number.
+`mood` already exists on every entry in `js/cast.js` and currently does
+nothing; this is what it would drive. Head yaw also gives the two anchors
+turning to face each other, which is otherwise a generation per species.
+
+## What does not come across
+
+**The landmarks are found by MediaPipe FaceLandmarker**, which is trained on
+human faces. It will almost certainly take the Human Commander, probably
+struggle with Mrrshan and Psilon, and will not find a face on a bear, a
+bird, a lizard, an insect, a crystal, a cyborg faceplate or a hood with two
+points of light in it. Nine or so of the cast need their thirty-one points
+placed by hand. That is perhaps twenty minutes each and there is no editor
+for it — `build_portrait.py` writes a debug overlay to check a rig, not to
+author one. A small point-placing page would pay for itself.
+
+**It is WebGL2 and GNN draws to a 2D canvas.** The cleanest join is a second
+canvas behind the existing one, rendering only the anchors, with the 2D
+overlay — caption, ticker, monitor, clock — composited on top as now. The
+alternative, porting the displacement to CPU, throws away the part that is
+actually hard and well made.
+
+**It samples with LINEAR filtering on smooth source art**, 610x560 and
+916x840. Ours is deliberately quantised 256-colour pixel art. A displacement
+field through a linear sampler will interpolate exactly the chunky pixels
+that were just recovered by conditioning plates at their native size. Two
+mitigations, both cheap: sample NEAREST, and warp at the source resolution
+in `_inbox/` (1254px) rather than at the 244px draw size.
+
+**Half the build pipeline is irrelevant.** Swin2SR super-resolution and a
+BiRefNet alpha matte exist to clean photographic source; our plates arrive
+cut out, hard-alpha and quantised already. Only the landmark step and the
+rig JSON matter.
+
+## How to find out cheaply
+
+Rig the Human Commander alone, where MediaPipe should work unassisted, and
+put him on a WebGL layer with nearest sampling at source resolution. One
+character answers both open questions: whether the warp survives pixel art,
+and whether the two-canvas join is as clean as it looks. If it holds, hand
+rig the rest and the expression problem is closed for good. If the warp
+mushes the art, that is one afternoon spent rather than twelve rigs.
+
