@@ -253,8 +253,11 @@ const GNNRenderer = (() => {
         if (!list.length) return;
         const seats = SEATS[list.length] || SEATS[1];
         const h = CAST.h * VIEW.h;
+        // Whoever has the chair, not whoever is sitting on the left.
+        const chair = (typeof GNNDirector !== 'undefined' && GNNDirector.activeSeat)
+            ? GNNDirector.activeSeat() % list.length : 0;
         list.forEach((person, i) => {
-            const active = i === 0;
+            const active = i === chair;
             let img;
             if (person.frames && person.frames.length) {
                 // A cast member with a real lip matrix — the MOO1 robot has
@@ -264,13 +267,16 @@ const GNNRenderer = (() => {
                     ? (person.frames[lipFrame] || person.frames[0])
                     : person.frames[0];
             } else {
-                // Two mouth states, driven by how loud the syllable is
-                // rather than by whether a syllable is happening at all.
-                const jaw = (typeof GNNAnimator !== 'undefined'
-                    && GNNAnimator.mouthLevel) ? GNNAnimator.mouthLevel() : 0;
+                // Two mouth states, opened by the animator's jaw rather
+                // than by a threshold guessed at here.
+                const open = (typeof GNNAnimator !== 'undefined'
+                    && GNNAnimator.mouthOpen) ? GNNAnimator.mouthOpen() : false;
+                // Listeners turn toward the speaker: the plate as drawn
+                // looks one way, so a seat on the speaker's right wants it
+                // mirrored or it is looking off the side of the set.
                 img = active
-                    ? (jaw > 0.09 ? person.speaking : person.hero)
-                    : person.listening;
+                    ? (open ? person.speaking : person.hero)
+                    : (i > chair ? person.listeningFlip : person.listening);
             }
             if (!img) return;
             const w = img.width * (h / img.height);

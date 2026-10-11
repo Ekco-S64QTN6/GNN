@@ -203,6 +203,12 @@ def quantise(im, colours=256):
     return Image.composite(out, flat, a)
 
 
+def content_box(im):
+    """The bounding box of everything not fully transparent."""
+    return im.convert('RGBA').split()[3].point(
+        lambda v: 255 if v > 8 else 0).getbbox()
+
+
 def crop_to_content(im):
     """Drop fully transparent margin.
 
@@ -213,8 +219,7 @@ def crop_to_content(im):
     its front panel below the bottom of the frame while its invisible top
     margin sat in shot.
     """
-    box = im.convert('RGBA').split()[3].point(lambda v: 255 if v > 8 else 0) \
-            .getbbox()
+    box = content_box(im)
     return im.crop(box) if box else im
 
 
@@ -234,7 +239,11 @@ def condition(src, frac=None):
 CUTAWAY_OUT = os.path.join(ROOT, 'assets', 'generated', 'cutaways')
 ANCHOR_OUT = os.path.join(ROOT, 'assets', 'generated', 'anchors')
 RAW_KEEP = os.path.join(ROOT, 'assets', 'generated', '_inbox')
-STATES = ('desk_hero', 'speaking', 'listening')
+# `listening_flip` is the listening plate mirrored, for an anchor sitting to
+# the right of whoever is talking. It is made by hand — flip horizontal in
+# an image editor — because mirroring it here from a plate whose eyes never
+# left the camera just produced another copy of the hero.
+STATES = ('desk_hero', 'speaking', 'listening', 'listening_flip')
 
 # The cast is drawn at CAST.h of the frame height in renderer.js. Matching
 # it here means the plate is blitted close to 1:1 instead of being scaled
@@ -273,22 +282,43 @@ def subject_metrics(im):
 
 
 def neck_row(im):
-    """The narrowest row between head and shoulders.
+    """The row where the head ends and the shoulders begin.
 
-    Opaque width per row widens through the head, pinches at the neck and
-    widens again at the shoulders, so the minimum in the middle half of the
-    figure is the neck. Measured across eight species it lands at 52-59% of
-    the frame, including on the ones without much of a neck to speak of.
+    Usually the narrowest row between the two: width widens through the
+    head, pinches at the neck, widens again at the shoulders.
+
+    Not every character has a neck to pinch. A Bulrathi's mane and a
+    Mrrshan's hair run straight into the shoulders, so the profile only
+    ever widens and the minimum lands wherever the search happens to
+    start — 392 on a plate where every other species gave about 700. The
+    graft line then fell above the mouth and the speaking plate came out
+    with the hero's mouth shut on it.
+
+    So the pinch has to be a real one: meaningfully narrower than the band
+    around it, and not pressed against either end of the search. Failing
+    that, fall back to a fixed fraction, which is roughly where a neck is
+    on art framed this way.
     """
     a = np.asarray(im.convert('RGBA'))[:, :, 3] > 128
     w = a.sum(axis=1)
     nz = np.nonzero(w > 0)[0]
     if not len(nz):
         return len(w) // 2
-    top = nz[0]
-    lo = top + int((len(w) - top) * 0.25)
-    hi = top + int((len(w) - top) * 0.75)
-    return lo + int(np.argmin(w[lo:hi]))
+    top = int(nz[0])
+    span = len(w) - top
+    lo = top + int(span * 0.25)
+    hi = top + int(span * 0.75)
+    fallback = top + int(span * 0.62)
+    if hi - lo < 8:
+        return fallback
+    band = w[lo:hi]
+    idx = int(np.argmin(band))
+    edge = max(1, int(len(band) * 0.12))
+    if idx < edge or idx > len(band) - edge:
+        return fallback                       # no pinch, just a slope
+    if band[idx] > np.median(band) * 0.88:
+        return fallback                       # a dip too shallow to trust
+    return lo + idx
 
 
 def graft_body(hero, variant, feather=14):
@@ -330,6 +360,103 @@ def palette_size(im):
     return len(got) if got is not None else (1 << 16)
 
 
+def head_bands(hero):
+    """Where the eyes and the mouth are, as row ranges.
+
+    Measured off the silhouette rather than guessed: the head runs from the
+    first opaque row to the neck pinch, and within that the eyes sit a
+    little under a third of the way down and the mouth around two thirds.
+    Close enough for a band graft on art this size, and it holds across a
+    bear, a cat, a lizard, a bird and a rock.
+    """
+    a = np.asarray(hero.convert('RGBA'))[:, :, 3] > 128
+    rows = a.sum(axis=1)
+    nz = np.nonzero(rows)[0]
+    top = int(nz[0]) if len(nz) else 0
+    neck = neck_row(hero)
+    span = max(1, neck - top)
+    return {
+        'top': top, 'neck': neck,
+        'eyes': (int(top + span * 0.28), int(top + span * 0.58)),
+        'mouth': (int(top + span * 0.58), int(top + span * 0.92)),
+    }
+
+
+def band_graft(hero, variant, y0, y1, feather=6, mirror=False):
+    """Hero everywhere, variant only between y0 and y1.
+
+    The brief asks each variant to change one thing, and the image model
+    changes several: a `listening` plate came back with its mouth hanging
+    open, which on a silent anchor reads as a fault. Taking only the band
+    that was meant to change makes the instruction true after the fact.
+
+    With `mirror`, the band is flipped left-to-right about the subject's own
+    centre, which turns a glance one way into a glance the other. Only the
+    band moves, so the uniform and the station badge — which would read
+    backwards — are untouched.
+    """
+    h = np.asarray(hero.convert('RGBA'), dtype=float)
+    v = np.asarray(variant.convert('RGBA'), dtype=float)
+    if h.shape != v.shape:
+        return hero
+    if mirror:
+        band = v[y0:y1, ::-1, :].copy()
+        v = v.copy()
+        v[y0:y1] = band
+    rows = h.shape[0]
+    m = np.zeros((rows, 1, 1))
+    for i in range(max(0, y0), min(rows, y1)):
+        m[i] = 1.0
+    for k in range(feather):
+        w = (k + 1) / float(feather + 1)
+        if y0 - 1 - k >= 0:
+            m[y0 - 1 - k] = 1.0 - w
+        if y1 + k < rows:
+            m[y1 + k] = 1.0 - w
+    return Image.fromarray((v * m + h * (1 - m)).astype(np.uint8), 'RGBA')
+
+
+def pupil_x(img, band):
+    """Horizontal centre of the darkest pixels in the eye band.
+
+    Returned as a fraction of the subject's own width, so it is comparable
+    between a bear and a grey alien. Pupils and sockets are the dark things
+    in a face; if the eyes move, this moves.
+    """
+    a = np.asarray(img.convert('RGBA'))
+    y0, y1 = band
+    reg = a[y0:y1]
+    alpha = reg[:, :, 3] > 128
+    if alpha.sum() < 50:
+        return None
+    lum = reg[:, :, :3].astype(int).sum(axis=2)
+    lum = np.where(alpha, lum, 9999)
+    thr = np.percentile(lum[alpha], 8)
+    mask = (lum <= thr) & alpha
+    if mask.sum() < 10:
+        return None
+    xs = np.nonzero(mask)[1]
+    cols = np.nonzero(alpha.any(axis=0))[0]
+    width = (cols.max() - cols.min()) or 1
+    return (xs.mean() - cols.min()) / float(width)
+
+
+def band_changed(hero, variant, band):
+    """Whether a variant actually altered the region it was asked to.
+
+    Counting changed pixels does not answer this. The model redraws the
+    whole plate — 5 to 27% of every band differs as dithering noise — so a
+    band that was never touched still reports a healthy-looking percentage,
+    and nine `listening` plates passed that way with the eyes exactly where
+    the hero left them. This looks for the feature moving instead.
+    """
+    ph = pupil_x(hero, band)
+    pv = pupil_x(variant, band)
+    if ph is None or pv is None:
+        return None
+    return (pv - ph) * 100.0
+
+
 def conditioned_already(im):
     """Whether this is output rather than something freshly dropped in."""
     return (im.width <= VIEW_W * 2 and im.height <= VIEW_H * 2
@@ -368,15 +495,31 @@ def do_anchors():
         metrics = {st: subject_metrics(Image.open(p)) for st, p in found.items()}
         hero_src = found.get('desk_hero')
         hero_im = Image.open(hero_src).convert('RGBA') if hero_src else None
+        bands = head_bands(hero_im) if hero_im is not None else None
         grafted = 0
+        # One crop box for the whole species, taken from the hero. Cropping
+        # each state to its own content un-registers them — a turned head
+        # has a different bounding box, so the plates came out different
+        # sizes and could not be compared, let alone crossfaded.
+        hero_box = content_box(hero_im) if hero_im is not None else None
         for st, src in found.items():
             im = Image.open(src).convert('RGBA')
             if hero_im is not None and st != 'desk_hero':
+                # Body from the hero, head from the variant.
+                #
+                # Nothing finer than that. Grafting individual bands — the
+                # mouth from one plate, the eyes from another — needs the
+                # mouth and the eyes located, and neither can be: neck_row
+                # lands near 700 on most of these and near 360 on two, and
+                # the diff between hero and variant cannot isolate a feature
+                # because the model redraws the whole plate. Trying it made
+                # every speaking plate a copy of the hero with its mouth
+                # shut, which is worse than the problem it was aimed at.
                 im = graft_body(hero_im, im)
                 grafted += 1
-            # Cropped after the graft, so all three states are cut from the
-            # same geometry and stay registered with one another.
-            im = defringe(crop_to_content(im))
+            if hero_box:
+                im = im.crop(hero_box)
+            im = defringe(im)
             h = CAST_H
             w = max(1, round(im.width * h / im.height))
             im = quantise(resize_premultiplied(im, (w, h)))
@@ -391,7 +534,7 @@ def do_anchors():
         heads = [m['head'] for m in metrics.values() if m['head']]
         drift = max(tops) - min(tops)
         scale = (max(heads) / float(min(heads)) - 1) * 100 if heads else 0
-        print('%s: %d of 3 states conditioned to %dpx tall%s'
+        print('%s: %d of 4 states conditioned to %dpx tall%s'
               % (sid, len(found), CAST_H,
                  ', %d grafted onto the hero body' % grafted if grafted else ''))
         for st in STATES:
@@ -399,8 +542,19 @@ def do_anchors():
             if m:
                 print('   %-10s head top %4d   head width %4d'
                       % (st, m['top'], m['head']))
-        if len(found) < 3:
-            print('   INCOMPLETE: %d of 3 states' % len(found))
+        # Did the variants change what they were asked to change?
+        if hero_im is not None and bands:
+            if 'listening' in found:
+                shift = band_changed(
+                    hero_im, Image.open(found['listening']).convert('RGBA'),
+                    bands['eyes'])
+                if shift is not None and abs(shift) < 1.2:
+                    print('   listening: eyeline unchanged (%.1f%%) — worth a '
+                          'look; it may be the hero with noise on it' % shift)
+            if 'listening_flip' not in found:
+                print('   listening_flip: absent (mirror the listening plate)')
+        if 'desk_hero' not in found or 'speaking' not in found:
+            print('   INCOMPLETE: needs at least desk_hero and speaking')
         elif drift > 20 or scale > 8:
             print('   REJECT: head top drifts %d px, head size varies %.0f%% '
                   '— the states are not the same drawing' % (drift, scale))

@@ -57,7 +57,7 @@ const GNNCast = (() => {
             tic: 'And that is before freight.',
         },
         robot: {
-            id: 'robot', name: 'Unit 7', role: 'Station Automation',
+            id: 'robot', machine: true, name: 'Unit 7', role: 'Station Automation',
             voice: 'vox_unit', register: 'flat', mood: 'unbothered',
             fixation: 'the exact figure, to four decimal places',
             tic: 'That is not what the record says.',
@@ -93,7 +93,7 @@ const GNNCast = (() => {
             tic: 'What interests me is the omission.',
         },
         meklar: {
-            id: 'meklar', name: 'Foundry-Nine', role: 'Industry Desk',
+            id: 'meklar', machine: true, name: 'Foundry-Nine', role: 'Industry Desk',
             voice: 'vox_unit', register: 'clipped', mood: 'literal',
             fixation: 'throughput and failure rates',
             tic: 'Output is output.',

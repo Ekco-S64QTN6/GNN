@@ -247,6 +247,38 @@ syllable and shut on the last. It follows `GNNAnimator.mouthLevel()` now — the
 smoothed envelope, which moves at the speed of speech. The MOO1 robot is
 unaffected: he has a real 25-cel matrix and indexes it directly.
 
+### The mouth never shut, and the cause was the audio fix
+Two-state cast art opened on the first syllable and shut on the last. Measured
+in the running app: **248 consecutive samples of speech, zero open/shut
+transitions.**
+
+Three attempts missed because each assumed the envelope was there to read. It
+is not, and the reason is upstream: the voice is compressed to about a
+decibel of variation on the way out of the server, which is what makes the
+station sit at an even level. The level fix removed the signal the lip-sync
+was reading.
+
+Two-state art now flaps on a syllable clock — roughly five a second, shut
+half shorter than open, loudness only nudging the timing. **0 → 71
+transitions in ten seconds of speech.** The MOO1 robot still indexes his real
+25-cel matrix off the envelope, because with 25 frames there is something to
+index.
+
+→ **A fix in one stage can remove the input another stage depends on.**
+
+### `neck_row` assumed every head has a neck
+A Bulrathi's mane and a Mrrshan's hair run straight into the shoulders, so the
+silhouette only ever widens and `argmin` returned wherever the search started
+— 392 on a plate where every other species gave about 700. `graft_body` then
+cut above the mouth and the speaking plate came out with the hero's mouth shut
+on it. The pinch now has to be a real one, narrower than the band around it
+and not against either end of the search, or a fixed fraction is used.
+
+### Cropping each state to its own content un-registered them
+`crop_to_content` per plate gives a turned head a different bounding box, so
+the three states came out different sizes and could not be compared, let alone
+crossfaded. One box, taken from the hero, for the whole species.
+
 ### Easter eggs pointed at a layout that no longer existed
 Two of the six secrets were hit-tested against literal pixel rects measured
 off the old 960×600 canvas: a globe that is no longer drawn, and an "anchor
@@ -351,6 +383,11 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   the state it is waiting on. The screenshots in `docs/` were re-shot by
   driving it instead — enqueue stories, then force the states rather than
   wait for them. Worth folding back into the tool.
+- **A diff percentage cannot tell you whether an edit happened.** The image
+  model redraws the whole plate, so 5–27% of every band differs as noise. A
+  `listening` band reporting 8.7% changed looked healthy and was the hero
+  untouched; measuring whether the *pupils moved* found nine of eleven had no
+  eye turn at all. Measure the feature, not the pixels.
 - **Listen by ear before declaring audio done.** Every metric here has at some
   point said "clean" while the owner could hear a problem.
 - **Voice choice is subjective.** Owner's standing judgement: the edge-tts

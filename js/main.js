@@ -98,14 +98,19 @@
         // show-block work in docs/ROADMAP.md, which is where it belongs.
         const lineup = [ROSTER[0], ROSTER[1]];
         const seated = (await Promise.all(lineup.map(async (who) => {
-            const [hero, speaking, listening] = await Promise.all([
+            const [hero, speaking, listening, flip] = await Promise.all([
                 GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_desk_hero.png`),
                 GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_speaking.png`),
                 GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_listening.png`),
+                GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_listening_flip.png`),
             ]);
             return hero ? { sid: who.sid, voice: who.voice, hero,
                             speaking: speaking || hero,
-                            listening: listening || hero } : null;
+                            listening: listening || hero,
+                            // Mirrored, for a seat to the right of whoever
+                            // is talking. Falls back to the unmirrored
+                            // plate, which is better than facing away.
+                            listeningFlip: flip || listening || hero } : null;
         }))).filter(Boolean);
 
         // The robot, cut out of his old newscast scene by tools/key_robot.py.

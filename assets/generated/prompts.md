@@ -57,7 +57,7 @@ Save the result as `assets/generated/anchors/bulrathi_listening.png`.
 **Upload `bulrathi_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
-EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+EDIT: turn the head about twenty degrees to the figure's left, so they are looking at someone seated beside them rather than at the camera. The eyes follow the head. Mouth stays closed. This must be clearly visible — if the head still faces the camera the edit has failed. Same framing, same distance, same lighting; only the head turns.
 
 Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
@@ -95,7 +95,7 @@ Save the result as `assets/generated/anchors/psilon_listening.png`.
 **Upload `psilon_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
-EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+EDIT: turn the head about twenty degrees to the figure's left, so they are looking at someone seated beside them rather than at the camera. The eyes follow the head. Mouth stays closed. This must be clearly visible — if the head still faces the camera the edit has failed. Same framing, same distance, same lighting; only the head turns.
 
 Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
@@ -133,7 +133,7 @@ Save the result as `assets/generated/anchors/mrrshan_listening.png`.
 **Upload `mrrshan_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
-EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+EDIT: turn the head about twenty degrees to the figure's left, so they are looking at someone seated beside them rather than at the camera. The eyes follow the head. Mouth stays closed. This must be clearly visible — if the head still faces the camera the edit has failed. Same framing, same distance, same lighting; only the head turns.
 
 Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
@@ -171,7 +171,7 @@ Save the result as `assets/generated/anchors/meklar_listening.png`.
 **Upload `meklar_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
-EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+EDIT: turn the head about twenty degrees to the figure's left, so they are looking at someone seated beside them rather than at the camera. The eyes follow the head. Mouth stays closed. This must be clearly visible — if the head still faces the camera the edit has failed. Same framing, same distance, same lighting; only the head turns.
 
 Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
@@ -209,7 +209,7 @@ Save the result as `assets/generated/anchors/sakkra_listening.png`.
 **Upload `sakkra_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
-EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+EDIT: turn the head about twenty degrees to the figure's left, so they are looking at someone seated beside them rather than at the camera. The eyes follow the head. Mouth stays closed. This must be clearly visible — if the head still faces the camera the edit has failed. Same framing, same distance, same lighting; only the head turns.
 
 Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
@@ -247,7 +247,7 @@ Save the result as `assets/generated/anchors/alkari_listening.png`.
 **Upload `alkari_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
-EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+EDIT: turn the head about twenty degrees to the figure's left, so they are looking at someone seated beside them rather than at the camera. The eyes follow the head. Mouth stays closed. This must be clearly visible — if the head still faces the camera the edit has failed. Same framing, same distance, same lighting; only the head turns.
 
 Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
@@ -285,7 +285,7 @@ Save the result as `assets/generated/anchors/darlok_listening.png`.
 **Upload `darlok_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
-EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+EDIT: turn the head about twenty degrees to the figure's left, so they are looking at someone seated beside them rather than at the camera. The eyes follow the head. Mouth stays closed. This must be clearly visible — if the head still faces the camera the edit has failed. Same framing, same distance, same lighting; only the head turns.
 
 Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
@@ -323,7 +323,7 @@ Save the result as `assets/generated/anchors/silicoid_listening.png`.
 **Upload `silicoid_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
-EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+EDIT: turn the head about twenty degrees to the figure's left, so they are looking at someone seated beside them rather than at the camera. The eyes follow the head. Mouth stays closed. This must be clearly visible — if the head still faces the camera the edit has failed. Same framing, same distance, same lighting; only the head turns.
 
 Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
@@ -361,7 +361,7 @@ Save the result as `assets/generated/anchors/mrrshan_f_listening.png`.
 **Upload `mrrshan_f_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
-EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+EDIT: turn the head about twenty degrees to the figure's left, so they are looking at someone seated beside them rather than at the camera. The eyes follow the head. Mouth stays closed. This must be clearly visible — if the head still faces the camera the edit has failed. Same framing, same distance, same lighting; only the head turns.
 
 Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
@@ -399,7 +399,7 @@ Save the result as `assets/generated/anchors/klackon_listening.png`.
 **Upload `klackon_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
-EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+EDIT: turn the head about twenty degrees to the figure's left, so they are looking at someone seated beside them rather than at the camera. The eyes follow the head. Mouth stays closed. This must be clearly visible — if the head still faces the camera the edit has failed. Same framing, same distance, same lighting; only the head turns.
 
 Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
@@ -437,7 +437,7 @@ Save the result as `assets/generated/anchors/human_listening.png`.
 **Upload `human_desk_hero.png` first**, then paste this. It is an edit of that image, not a new one.
 
 ```
-EDIT: turn the eyes slightly off-camera, as if attending to a co-anchor. Change nothing else. Do not re-pose, re-scale, re-frame, re-light or redraw any other part.
+EDIT: turn the head about twenty degrees to the figure's left, so they are looking at someone seated beside them rather than at the camera. The eyes follow the head. Mouth stays closed. This must be clearly visible — if the head still faces the camera the edit has failed. Same framing, same distance, same lighting; only the head turns.
 
 Keep the image exactly 1024x1024 with the same fully transparent background. Keep the GNN badge on the uniform exactly as it is, lettering and all — do not blank it or redraw it. Add no other text.
 ```
@@ -455,7 +455,7 @@ Save the result as `assets/generated/set/studio_wide_empty.png`.
 ```
 Create a 1792x1024 image.
 
-1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. the interior of a starship television studio seen in deep perspective: the side walls running away from the camera with their bevelled hull panels foreshortened, a large octagonal viewport set in the far back wall, angled instrument consoles built into the side walls with rows of lit indicator buttons, a raised circular floor dais with an inlaid trim ring receding toward the back. Strong sense of depth, the back wall clearly distant. No desk, no furniture in the centre, no figures. Framing: wide empty set plate, one-point perspective with the vanishing point at the centre of the back wall, the window centred on that wall, floor occupying the lower third and leading the eye back, the centre of the room completely empty. Palette: muted teal and bone white, warning-stripe yellow. Background: the window opening is a flat area of pure black, showing nothing at all — no stars, no planet, no light.
+1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. the interior of a starship television studio photographed from a seated camera at desk height, looking level across the room rather than down into it. A long shot: the back wall is far away, the side walls run steeply off toward it, and there is a clear stretch of empty floor between the camera and the back of the room. Bevelled hull panelling, a wide viewport set low in the far back wall at the height of a seated person, instrument consoles recessed into the side walls, overhead lighting rigs catching the tops of the walls, a shallow step in the floor partway back. No desk, no furniture in the centre, no figures. Framing: wide empty set plate, camera at seated eye level and perfectly level — no downward tilt, no view across a table top. One-point perspective with the vanishing point low and central. Deep: foreground floor in the bottom quarter, mid-ground empty, back wall small and distant. Palette: muted teal and bone white, warning-stripe yellow. Background: the viewport opening is a flat area of pure black, showing nothing at all — no stars, no planet, no light.
 
 Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
@@ -467,7 +467,7 @@ Save the result as `assets/generated/set/desk_oval_front.png`.
 ```
 Create a 1792x1024 image with a fully transparent background.
 
-1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. an oval television news desk seen straight on, brushed metal top, curved front panel with a lit strip running around it and a blank recessed plate in the centre for a station emblem. The desk only, nothing behind it. Framing: foreground layer, the desk filling the lower half of the frame, drawn as it would be seen from a camera at seated eye level. Palette: muted teal and bone white, warning-stripe yellow. Background: transparent background, the desk cleanly cut out.
+1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a television news desk seen dead level from the front at seated eye height, so that only its front face is visible and none of its top surface. A broad shallow slab: a dark front panel with a lit strip along its upper edge, a recessed blank plate in the centre for a station emblem, and a narrow lip of brushed metal along the very top. Much wider than it is tall. The desk only, nothing behind or on it. Framing: front elevation, filling the width of the frame and only the lower third of its height, seen straight on with no perspective on the top surface. Palette: muted teal and bone white, warning-stripe yellow. Background: transparent background, the desk cleanly cut out.
 
 Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```

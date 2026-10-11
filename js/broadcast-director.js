@@ -92,9 +92,41 @@ const GNNDirector = (() => {
     // Speech
     // ---------------------------------------------------------
 
+    // ---------------------------------------------------------
+    // Who is reading
+    // ---------------------------------------------------------
+    //
+    // A desk with two people at it where one of them reads everything is
+    // one person and a bystander. The chair passes on each story, and the
+    // voice and the moving mouth follow it, so the station sounds like two
+    // anchors rather than one anchor and a decoration.
+
+    let seatIndex = 0;
+
+    /** The cast entry currently reading, or null before the set has loaded. */
+    function speaker() {
+        if (typeof GNNRenderer === 'undefined' || !GNNRenderer.seatedIds) return null;
+        const ids = GNNRenderer.seatedIds();
+        if (!ids.length || typeof GNNCast === 'undefined') return null;
+        return GNNCast.get(ids[seatIndex % ids.length]);
+    }
+
+    /** Pass the chair. Called once per story, not once per line. */
+    function passChair() {
+        if (typeof GNNRenderer === 'undefined' || !GNNRenderer.seatedIds) return;
+        const n = GNNRenderer.seatedIds().length;
+        if (n > 1) seatIndex = (seatIndex + 1) % n;
+    }
+
     function say(text, opts = {}) {
         const token = ++speechToken;
         speaking = true;
+        // The reader's own voice, unless the caller named one — an exchange
+        // hands each line to the character who says it.
+        if (!opts.voice) {
+            const who = speaker();
+            if (who && who.voice) opts = Object.assign({}, opts, { voice: who.voice });
+        }
         const est = GNNTTS.estimateMs(text);
         speechDeadline = performance.now() + est * 2.4 + 8000;
         GNNTTS.speak(text, opts).then(() => {
@@ -229,6 +261,7 @@ const GNNDirector = (() => {
 
     function beginRead(now, item) {
         current = item;
+        passChair();
         storiesRead++;
         sinceBreak++;
         sinceIdent++;
@@ -275,7 +308,8 @@ const GNNDirector = (() => {
 
     function beginBanter(now) {
         const wire = Math.random() < PACE.wireShare;
-        const line = wire ? GNNScript.sectorWire(current) : GNNScript.banter(current);
+        const line = wire ? GNNScript.sectorWire(current)
+            : GNNScript.banter(current, speaker());
         if (!line) { beginHold(now, PACE.holdAfterBanter, S.READ); return; }
         banterStreak++;
         const est = say(line, { pitch: wire ? -6 : -3 });
@@ -514,6 +548,9 @@ const GNNDirector = (() => {
     return {
         STATES: S, PACE,
         update, enqueueAll, injectBreaking, skip, pause, resume, forceBreak,
+        /** Which seat is reading, for the renderer's lip-sync. */
+        activeSeat: () => seatIndex,
+        speaker,
         isRunning: () => running,
         getState: () => state,
         getCurrent: () => current,

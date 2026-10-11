@@ -51,7 +51,32 @@ const GNNAnimator = (() => {
         // --- Mouth ---
         const level = (typeof GNNTTS !== 'undefined' && GNNTTS.isSpeaking())
             ? GNNTTS.getLevel() : 0;
-        smoothed += (level - smoothed) * 0.45;
+        smoothed += (level - smoothed) * 0.7;
+
+        // Two-state art flaps on a syllable clock, not on the waveform.
+        //
+        // Reading the envelope is the right way to drive a 25-cel matrix and
+        // the wrong way to drive two pictures, because there is almost no
+        // envelope left to read: the voice is compressed to about a
+        // decibel of variation on the way out of the server, which is what
+        // makes the station sit at an even level. Measured against it, the
+        // jaw was open for 248 consecutive samples and never once shut.
+        //
+        // So the mouth opens and closes at the rate a mouth does — roughly
+        // five times a second — for as long as there is speech, with the
+        // shut half shorter than the open half, and the loudness only
+        // nudging the timing. It is not lip-sync. At two frames it was
+        // never going to be, and it reads as talking, which is the job.
+        if (speaking || smoothed > 0.04) {
+            if (now >= jawUntil) {
+                jawOpen = !jawOpen;
+                const hurry = 1 - Math.min(0.5, smoothed);
+                jawUntil = now + (jawOpen ? 70 + hurry * 70 : 50 + hurry * 50);
+            }
+        } else {
+            jawOpen = false;
+            jawUntil = 0;
+        }
 
         if (now - lastMouthTick >= mouthHold) {
             lastMouthTick = now;
@@ -84,6 +109,7 @@ const GNNAnimator = (() => {
         // Without this, desync and flicker reached the MOO1 robot alone.
         if (aOverride !== null && aOverride !== undefined) {
             smoothed = aOverride ? 0.5 : 0;
+            jawOpen = !!aOverride;
         }
 
         return {
@@ -94,8 +120,11 @@ const GNNAnimator = (() => {
 
     function setSpeaking(v) {
         speaking = !!v;
-        if (!v) { anchorFrame = 0; smoothed = 0; }
+        if (!v) { anchorFrame = 0; smoothed = 0; jawOpen = false; jawUntil = 0; }
     }
+
+    let jawOpen = false;
+    let jawUntil = 0;
 
     let lastFrames = { anchor: 0, globe: 0 };
     function tick(now) { lastFrames = update(now); return lastFrames; }
@@ -112,6 +141,8 @@ const GNNAnimator = (() => {
          * moves at the speed of speech.
          */
         mouthLevel: () => smoothed,
+        /** Whether the jaw is open this instant. Two-state art draws this. */
+        mouthOpen: () => jawOpen,
         getAnchorFrame: () => lastFrames.anchor,
         getGlobeFrame: () => lastFrames.globe,
         VISEMES, TOTAL_FRAMES,

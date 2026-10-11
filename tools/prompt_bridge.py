@@ -96,9 +96,15 @@ POSES = [
      'the head occupying the upper middle'),
     ('speaking', 'EDIT: open the mouth as if mid-word. Change nothing else',
      'do not re-pose, re-scale, re-frame, re-light or redraw any other part'),
-    ('listening', 'EDIT: turn the eyes slightly off-camera, as if attending '
-     'to a co-anchor. Change nothing else',
-     'do not re-pose, re-scale, re-frame, re-light or redraw any other part'),
+    # "Turn the eyes slightly" was below what the model will act on: nine of
+    # eleven came back with the pupils exactly where the hero left them.
+    # A head turn is a change it cannot miss, and reads better anyway.
+    ('listening', 'EDIT: turn the head about twenty degrees to the figure\'s '
+     'left, so they are looking at someone seated beside them rather than '
+     'at the camera. The eyes follow the head. Mouth stays closed. This '
+     'must be clearly visible — if the head still faces the camera the '
+     'edit has failed',
+     'same framing, same distance, same lighting; only the head turns'),
 ]
 
 # The twelve cutaway subjects the scene catalogue maps stories onto, with the
@@ -168,27 +174,33 @@ DAY_CYCLE = [
 # single baked image of the whole scene cannot have anyone sit at it.
 SET = [
     ('studio_wide_empty',
-     'the interior of a starship television studio seen in deep perspective: '
-     'the side walls running away from the camera with their bevelled hull '
-     'panels foreshortened, a large octagonal viewport set in the far back '
-     'wall, angled instrument consoles built into the side walls with rows of '
-     'lit indicator buttons, a raised circular floor dais with an inlaid trim '
-     'ring receding toward the back. Strong sense of depth, the back wall '
-     'clearly distant. No desk, no furniture in the centre, no figures',
+     'the interior of a starship television studio photographed from a seated '
+     'camera at desk height, looking level across the room rather than down '
+     'into it. A long shot: the back wall is far away, the side walls run '
+     'steeply off toward it, and there is a clear stretch of empty floor '
+     'between the camera and the back of the room. Bevelled hull panelling, '
+     'a wide viewport set low in the far back wall at the height of a seated '
+     'person, instrument consoles recessed into the side walls, overhead '
+     'lighting rigs catching the tops of the walls, a shallow step in the '
+     'floor partway back. No desk, no furniture in the centre, no figures',
      'station',
-     'wide empty set plate, one-point perspective with the vanishing point '
-     'at the centre of the back wall, the window centred on that wall, floor '
-     'occupying the lower third and leading the eye back, the centre of the '
-     'room completely empty',
-     'the window opening is a flat area of pure black, showing nothing at '
+     'wide empty set plate, camera at seated eye level and perfectly level — '
+     'no downward tilt, no view across a table top. One-point perspective '
+     'with the vanishing point low and central. Deep: foreground floor in '
+     'the bottom quarter, mid-ground empty, back wall small and distant',
+     'the viewport opening is a flat area of pure black, showing nothing at '
      'all — no stars, no planet, no light'),
     ('desk_oval_front',
-     'an oval television news desk seen straight on, brushed metal top, curved '
-     'front panel with a lit strip running around it and a blank recessed plate '
-     'in the centre for a station emblem. The desk only, nothing behind it',
+     'a television news desk seen dead level from the front at seated eye '
+     'height, so that only its front face is visible and none of its top '
+     'surface. A broad shallow slab: a dark front panel with a lit strip '
+     'along its upper edge, a recessed blank plate in the centre for a '
+     'station emblem, and a narrow lip of brushed metal along the very top. '
+     'Much wider than it is tall. The desk only, nothing behind or on it',
      'station',
-     'foreground layer, the desk filling the lower half of the frame, drawn as '
-     'it would be seen from a camera at seated eye level',
+     'front elevation, filling the width of the frame and only the lower '
+     'third of its height, seen straight on with no perspective on the top '
+     'surface',
      'transparent background, the desk cleanly cut out'),
     ('console_left',
      'an angled wall-mounted instrument console with rows of small lit square '

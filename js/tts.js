@@ -120,7 +120,11 @@ const GNNTTS = (() => {
             mediaSource = ctx.createMediaElementSource(element());
             analyser = ctx.createAnalyser();
             analyser.fftSize = 512;
-            analyser.smoothingTimeConstant = 0.55;
+            // Low, because the animator smooths this again downstream and
+            // two filters in series turn syllables into one long vowel. At
+            // 0.55 the level never fell between words and the mouth hung
+            // open for the whole read.
+            analyser.smoothingTimeConstant = 0.15;
             levelData = new Uint8Array(analyser.frequencyBinCount);
             // Own gain stage so a line can be faded rather than guillotined.
             voiceGain = ctx.createGain();

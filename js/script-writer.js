@@ -130,6 +130,10 @@ const GNNScript = (() => {
         'That confirms the earlier relay from the beacon net.',
     ];
 
+    // Machine asides. These are Unit 7's and Foundry-Nine's; in a human
+    // mouth they are nonsense, and banter() used to hand them to whoever
+    // happened to be reading, so the Commander announced that this unit had
+    // no opinion.
     const ROBOT_ASIDES = [
         'Processing probability of human survival: {PCT} percent.',
         'Sentiment analysis returns: {MOOD}. Confidence, {PCT} percent.',
@@ -143,6 +147,21 @@ const GNNScript = (() => {
         'My predecessor unit filed the same story in {YEAR}. It was also inconclusive.',
         'Human colleagues would insert a pause here. Inserting pause.',
         'Correction: the previous statement was correct. Retracting correction.',
+    ];
+
+    // Asides for the people. Same job as the machine ones — fill the beat
+    // after a story — in a register a person can plausibly use.
+    const CREW_ASIDES = [
+        'We will stay with that one as it develops.',
+        'There will be more on that, and probably worse.',
+        'Nobody has put a number on it yet. Somebody will.',
+        'That is the second time this month, for anyone counting.',
+        'I would not want to be the one explaining that.',
+        'The statement says very little, at some length.',
+        'We asked. We are told there will be a briefing.',
+        'Make of that what you will.',
+        'The figure is disputed. The event is not.',
+        'Somebody signed off on that, and we would all like to know who.',
     ];
 
     const CONTEXT_LINES = [
@@ -274,11 +293,24 @@ const GNNScript = (() => {
         ];
     }
 
-    function banter(story) {
+    /**
+     * A line to fill the beat after a story, in the mouth of whoever is
+     * actually going to say it.
+     *
+     * `who` is a cast entry. Without one the line has no owner and the
+     * machine pool is left alone, because a line that only a robot can say
+     * is worse than a bland one when a person says it.
+     */
+    function banter(story, who) {
+        const machine = !!(who && who.machine);
         const roll = Math.random();
-        if (roll < 0.34) return fillGeneric(pickFrom(ROBOT_ASIDES, ''), story);
+        if (roll < 0.34) {
+            return fillGeneric(
+                pickFrom(machine ? ROBOT_ASIDES : CREW_ASIDES, ''), story);
+        }
         if (roll < 0.62) return fillGeneric(pickFrom(CONTEXT_LINES, ''), story);
-        if (roll < 0.78) return pickFrom(OPENERS, '');
+        if (roll < 0.74) return pickFrom(OPENERS, '');
+        if (roll < 0.82 && who && who.tic) return who.tic;
         const wire = sectorWire(story);
         return wire ? 'From the sector wire. ' + wire : pickFrom(OPENERS, '');
     }
