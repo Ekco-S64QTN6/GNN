@@ -112,6 +112,8 @@ const GNNCutsceneManager = (() => {
 
     function endCutaway() { cutaway = null; }
     function isCutawayActive() { return !!cutaway; }
+    /** A cutaway filling the frame, as opposed to the corner box. */
+    function isFullCutaway() { return !!(cutaway && cutaway.mode === 'full'); }
 
     // ---------------------------------------------------------
     // Commercial breaks
@@ -477,7 +479,8 @@ const GNNCutsceneManager = (() => {
 
     return {
         PIP,
-        prefetch, triggerCutaway, endCutaway, isCutawayActive, voiceOptsFor,
+        prefetch, triggerCutaway, endCutaway, isCutawayActive,
+        isFullCutaway, voiceOptsFor,
         startCommercialBreak, abortBreak, isBreakActive,
         update, render,
         routeFor,

@@ -234,7 +234,14 @@ const GNNTextEngine = (() => {
         BOX.w = Math.round(PANEL.w * ctx.canvas.width);
 
 
-        const station = STATION_KINDS.has(kind);
+        // A full-bleed cutaway has no anchor on screen to point at and no
+        // monitor to dodge, so the bubble sat in the middle of the footage.
+        // Treat it like a station message: a bar along the bottom, out of
+        // the picture's way.
+        const overFeed = (typeof GNNCutsceneManager !== 'undefined'
+            && GNNCutsceneManager.isFullCutaway
+            && GNNCutsceneManager.isFullCutaway());
+        const station = STATION_KINDS.has(kind) || overFeed;
 
         // Place it over the speaker, point it at them, and keep it clear of
         // both the edges and the story monitor — the bubble ran under the

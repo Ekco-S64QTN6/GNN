@@ -273,7 +273,12 @@ const GNNSceneCompositor = (() => {
             const bg = GNNAssets.pick(GNNAssets.find({
                 dirs: ['STARVIEW', 'SPACE'], minW: 200, maxNoise: 140,
             })) || GNNAssets.pick(backdrops());
-            const plates = GNNAssets.pickMany(schematics(), 3);
+            // No overlay plates. The chrome ones were the game's own
+            // interface; the TECHNO schematics that replaced them are only
+            // 21% transparent with a mean luminance of 38, so pasted over a
+            // scene they are muddy dark slabs with visible edges. A
+            // starfield and a drifting hull carry the shot on their own.
+            const plates = [];
             const target = GNNAssets.pick(GNNAssets.find({ dirs: ['SHIPS'], roles: ['sprite'], minW: 24 }));
             const layers = [await makeLayer(bg, { fit: 'cover', alpha: 0.9 })];
             layers.push(await makeLayer(target, {
@@ -332,11 +337,19 @@ const GNNSceneCompositor = (() => {
 
         /** Council floor with delegate cut-ins. */
         async council() {
-            const hall = GNNAssets.pick(GNNAssets.find({
-                dir: 'COUNCIL', roles: ['fullscreen'], minCoverage: 0.3, maxNoise: CLEAN_BACKDROP,
-            })) || GNNAssets.pick(GNNAssets.find({ dirs: ['INTRO', 'BACKGRND'], roles: ['fullscreen'], maxNoise: CLEAN_BACKDROP }));
+            // Both of these named no pool and so read the unadmitted set,
+            // and the delegates allowed noise up to 150 — which is the
+            // chromatically scrambled decode. The result was a council
+            // chamber full of rainbow-speckled figures going out as live
+            // footage. Nothing in COUNCIL survives admission except as
+            // interference, so the hall comes from elsewhere and there are
+            // no cut-ins rather than broken ones.
+            const hall = GNNAssets.pick(backdrops({
+                dirs: ['EMBASSY', 'INTRO', 'LANDING'], roles: ['fullscreen'],
+                minCoverage: 0.3,
+            })) || GNNAssets.pick(backdrops());
             const delegates = GNNAssets.pickMany(GNNAssets.find({
-                dir: 'COUNCIL', roles: ['portrait'], maxCoverage: 0.5, maxNoise: 150,
+                pool: 'portrait', dirs: ['EMBASSY'], maxCoverage: 0.5,
             }), 2);
             const layers = [await makeLayer(hall, { fit: 'cover', fps: 8 })];
             const at = [{ x: 0.02, y: 0.18 }, { x: 0.62, y: 0.18 }];
@@ -418,9 +431,7 @@ const GNNSceneCompositor = (() => {
         /** Data-centre / cyber: espionage plates behind scrolling chrome. */
         async cyber() {
             const room = GNNAssets.pick(GNNAssets.find({ dir: 'SPIES', roles: ['fullscreen'] }));
-            const rack = GNNAssets.pickMany(schematics({
-                minW: 40, minH: 30, maxNoise: CLEAN_PLATE,
-            }), 4);
+            const rack = [];
             const layers = [await makeLayer(room, { fit: 'cover', fps: 10, alpha: 0.9 })];
             for (let i = 0; i < rack.length; i++) {
                 layers.push(await makeLayer(rack[i], {

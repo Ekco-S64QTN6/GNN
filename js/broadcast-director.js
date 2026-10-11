@@ -225,10 +225,51 @@ const GNNDirector = (() => {
         };
     }
 
+    /** Loose comparison: case, punctuation and spacing are not the story. */
+    function norm(t) {
+        return String(t || '').toLowerCase()
+            .replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
     function storyText(item) {
         const title = (item.title || '').trim();
-        const desc = (item.description || '').trim();
+        let desc = (item.description || '').trim();
         if (!desc) return title.replace(/[.!?]?$/, '.');
+
+        // Wires repeat themselves. A great many feeds put the headline at
+        // the top of the summary, so reading title and description straight
+        // through says the same sentence twice, and some truncate it part
+        // way so the anchor trails off into a fragment of what they just
+        // read. Drop whatever the description opens with that the headline
+        // already said.
+        const nt = norm(title);
+        const nd = norm(desc);
+        if (nd === nt || nd.startsWith(nt)) {
+            desc = desc.slice(title.length).replace(/^[\s\-–—:.,]+/, '');
+        } else {
+            // A truncated echo: the description begins with a prefix of the
+            // headline long enough that it cannot be coincidence.
+            const words = nt.split(' ');
+            for (let n = words.length; n >= 4; n--) {
+                const head = words.slice(0, n).join(' ');
+                if (nd.startsWith(head)) {
+                    // Walk the raw string forward by the same word count.
+                    let seen = 0;
+                    let i = 0;
+                    while (i < desc.length && seen < n) {
+                        while (i < desc.length && !/[a-z0-9]/i.test(desc[i])) i++;
+                        while (i < desc.length && /[a-z0-9]/i.test(desc[i])) i++;
+                        seen++;
+                    }
+                    desc = desc.slice(i).replace(/^[\s\-–—:.,]+/, '');
+                    break;
+                }
+            }
+        }
+        if (!desc) return title.replace(/[.!?]?$/, '.');
+        // What is left of the summary now starts mid-sentence, so it needs
+        // its capital back before it follows a full stop.
+        desc = desc.charAt(0).toUpperCase() + desc.slice(1);
         const joiner = /[.!?]$/.test(title) ? ' ' : '. ';
         return (title + joiner + desc).replace(/\s+/g, ' ');
     }
