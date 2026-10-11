@@ -222,3 +222,101 @@ line-up by show block. The desk is pinned to the human commander and the
 Mrrshan matriarch because a channel has anchors rather than a rota. The
 rotation belongs to the show-block work above: different blocks, different
 desks, with these two as the main daytime pair.
+
+---
+
+# The newsroom as a simulation
+
+The station reads real headlines competently. What it does not yet do is
+feel inhabited, and that is a writing problem wearing an engineering
+costume. A newsroom is watchable because of the people at the desk, not
+because of the rundown.
+
+## What exists now
+
+`js/cast.js` is the cast registry: twelve characters, each with a name, a
+billing, a voice, a register, a fixation and a verbal tic, plus a table of
+what they think of one another. `js/script-writer.js` reads it and can
+already produce:
+
+| call | what it is |
+|---|---|
+| `showOpen()` | the station names itself, then the lead anchor names themselves |
+| `intoBreak()` | the toss into a commercial |
+| `outOfBreak()` | the return, sometimes carrying the lead's tic |
+| `showClose()` | the sign-off, naming everyone who sat that block |
+| `exchange()` | two anchors talking to each other, in character |
+
+The relationship table is deliberately **asymmetrical**. Rell is quietly in
+love with Varr; Varr has not noticed and treats him as the freight desk.
+Hale does not trust Unit 7 because it has never been outside; Unit 7 keeps
+correcting Hale from the record. One-way entries are funnier and truer than
+mutual ones, and the table is the right place to say so.
+
+## What to build next, in order
+
+**1. Wire the show shape into the director.** The scripts exist and nothing
+calls them yet. The director needs a block structure — open, stories with
+exchanges between them, a break with a toss in and a return, a close — and
+it should run `showOpen()` on the first block of an hour rather than on
+every cold open.
+
+**2. Give every line an owner.** `exchange()` already returns lines tagged
+with the character who says them. The director must hand each to that
+character's voice and make that character's mouth move, which means the
+active seat is per-line rather than per-block. This is the single change
+that makes the desk read as two people instead of one voice and a
+decoration.
+
+**3. Mood that moves.** Each character starts with a disposition and nothing
+changes it. A run of bad news should sour the desk; a long quiet stretch
+should bore it. Mood then selects between line variants, so the same story
+lands differently at the top of the hour than at the end of a grim block.
+
+**4. Reactions to the actual story.** Right now banter is generic and sits
+*next to* the news. A character with a fixation should react to the story in
+front of them: the trade desk wants the tonnage, the intelligence desk wants
+what was left out of the statement. The cheap version is keyword matching
+against each character's `fixation` and a bank of lines per fixation. The
+good version is below.
+
+**5. Correspondents through the monitor.** Covered earlier in this document:
+the rest of the cast appear in the over-the-shoulder box as remote
+two-ways rather than on sets of their own.
+
+## A local model writing the reactions
+
+The pre-written approach gets a long way and should be built first, because
+it is deterministic, costs nothing per line and is what makes the structure
+testable. It has one ceiling: the lines cannot be *about* the story. A fixed
+bank can say the trade desk cares about freight; it cannot say that this
+particular tariff ruling is going to hurt this particular lane.
+
+A local model closes that, and the machine is already set up for it — there
+is an RTX 3060 with 12GB here and Ollama is installed, which is enough for a
+quantised 7B to 12B model. The shape:
+
+- **Prompt from the sheet, not from scratch.** The character's name, role,
+  register, fixation and tic go in the system prompt; the story headline and
+  summary go in the user turn. Ask for one sentence in that character's
+  voice. The sheet is already the right shape for this, which is why it is
+  written as prose attributes rather than as flags.
+- **Ask off the critical path.** Generation takes a second or two, and the
+  anchor cannot wait mid-read. Request the reaction when the story is
+  queued, not when it is reached; the prefetch that already warms the next
+  story's audio is the model for this.
+- **Fall through to the bank.** A missing model, a timeout, a refusal or an
+  empty reply all have to land on the pre-written line for that fixation.
+  The station never stops talking because a model was slow.
+- **Never let it read the news.** The headline and summary are the wire's
+  words and go to the anchor verbatim; the model writes only the character's
+  *reaction* to them. A model paraphrasing a real headline is a model
+  inventing news, which is the one thing this project must not do.
+- **Cap and cache.** One reaction per story, kept with the story. The budget
+  is a sentence; anything longer gets cut at a sentence boundary by the same
+  rule the teleprompter already uses.
+
+**Audience questions on air** — the thing Pixel News Network does — needs an
+input channel this project does not have, and would want the same
+pre-written fallback. It sits behind all of the above.
+

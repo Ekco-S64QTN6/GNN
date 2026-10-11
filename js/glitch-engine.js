@@ -221,8 +221,15 @@ const GNNGlitch = (() => {
         idleAnnounced = false;
         const now = performance.now();
 
-        // Globe: 25-frame hologram over the left shoulder.
-        if (px > 210 && px < 400 && py > 90 && py < 250) {
+        const hits = (typeof GNNRenderer !== 'undefined' && GNNRenderer.hitRegions)
+            ? GNNRenderer.hitRegions() : null;
+        const inside = (r) => r && px >= r.x && px <= r.x + r.w
+            && py >= r.y && py <= r.y + r.h;
+
+        // The studio monitor. This used to be the holographic globe, which
+        // is no longer drawn; the monitor in the same corner inherited both
+        // the corner and the prank.
+        if (hits && inside(hits.monitor)) {
             if (now - globeClickAt > 2400) globeClicks = 0;
             globeClickAt = now;
             globeClicks++;
@@ -239,8 +246,8 @@ const GNNGlitch = (() => {
             return true;
         }
 
-        // Anchor optics: the three red lenses on the faceplate.
-        if (px > 430 && px < 560 && py > 120 && py < 210) {
+        // An anchor's face, wherever that anchor is sitting.
+        if (hits && hits.faces.some(inside)) {
             eyeClicks++;
             GNNAudio.playRole('chirp', { gain: 0.45, rate: 1.3 });
             fire('eye_flicker', now);

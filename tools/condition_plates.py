@@ -231,6 +231,7 @@ def condition(src, frac=None):
     return quantise(resize_premultiplied(im, size))
 
 
+CUTAWAY_OUT = os.path.join(ROOT, 'assets', 'generated', 'cutaways')
 ANCHOR_OUT = os.path.join(ROOT, 'assets', 'generated', 'anchors')
 RAW_KEEP = os.path.join(ROOT, 'assets', 'generated', '_inbox')
 STATES = ('desk_hero', 'speaking', 'listening')
@@ -318,10 +319,21 @@ def graft_body(hero, variant, feather=14):
     return Image.fromarray((v * m + h * (1 - m)).astype(np.uint8), 'RGBA')
 
 
+def palette_size(im):
+    """Distinct colours, or a large number when there are too many to count.
+
+    getcolors() returns None above its limit rather than a count, and `or []`
+    turned that into zero — so the richest possible image counted as having
+    no colours and read as already conditioned.
+    """
+    got = im.convert('RGB').getcolors(1 << 16)
+    return len(got) if got is not None else (1 << 16)
+
+
 def conditioned_already(im):
     """Whether this is output rather than something freshly dropped in."""
     return (im.width <= VIEW_W * 2 and im.height <= VIEW_H * 2
-            and len(im.convert('RGB').getcolors(1 << 16) or []) <= 256)
+            and palette_size(im) <= 256)
 
 
 def anchor_sources(sid, state):
@@ -400,6 +412,32 @@ def do_anchors():
         print('   Check by eye that no desk is drawn into the plate.')
 
 
+def do_cutaways():
+    """Fit the story plates to the frame.
+
+    They are full-bleed pictures rather than cut-outs, so there is nothing
+    to de-fringe; they want the frame's shape, a hard palette and none of
+    the half-megabyte of colour an image model hands back.
+    """
+    if not os.path.isdir(CUTAWAY_OUT):
+        return
+    names = sorted(f for f in os.listdir(CUTAWAY_OUT) if f.endswith('.png'))
+    done = 0
+    for name in names:
+        path = os.path.join(CUTAWAY_OUT, name)
+        im = Image.open(path).convert('RGBA')
+        if conditioned_already(im):
+            continue
+        os.makedirs(RAW_KEEP, exist_ok=True)
+        shutil.copy2(path, os.path.join(RAW_KEEP, name))
+        im = quantise(resize_premultiplied(im, (VIEW_W, VIEW_H)))
+        im.save(path)
+        done += 1
+    if done:
+        print('\n--- cutaways ---')
+        print('%d of %d fitted to %dx%d' % (done, len(names), VIEW_W, VIEW_H))
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     made = {}
@@ -467,6 +505,7 @@ def main():
         big.save(p)
         print('preview (room + desk, at the 3x the engine uses) -> docs/set-preview.png')
     do_anchors()
+    do_cutaways()
     return 0
 
 

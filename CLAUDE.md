@@ -49,6 +49,7 @@ the metric is the thing to doubt.
 | Frame | 320×180 design grid, 1280×720 canvas, follows the window, full-bleed |
 | Plates | conditioned at canvas resolution, not the design grid |
 | Cast | 11 generated species + the MOO1 robot, keyed out of his own scene |
+| Characters | `js/cast.js` — 12 profiles, voices and an asymmetric relationship table |
 | Voices | 9 shortlisted by ear, plus `vox_unit` (a DSP robot, not a model) |
 
 Verify all of it:
@@ -245,6 +246,32 @@ non-zero for every moment of an utterance, so the mouth opened on the first
 syllable and shut on the last. It follows `GNNAnimator.mouthLevel()` now — the
 smoothed envelope, which moves at the speed of speech. The MOO1 robot is
 unaffected: he has a real 25-cel matrix and indexes it directly.
+
+### Easter eggs pointed at a layout that no longer existed
+Two of the six secrets were hit-tested against literal pixel rects measured
+off the old 960×600 canvas: a globe that is no longer drawn, and an "anchor
+optics" box that now covers empty sky above the desk. Both were dead. Hit
+regions come from `GNNRenderer.hitRegions()` now, derived from where the
+cast and the monitor are actually drawn this frame.
+
+The glitch engine's `anchorOverride` had gone half-dead the same way. It
+returns a cel index, which the MOO1 robot still indexes directly, but
+two-state cast art reads the envelope — so `desync` and `flicker` bent the
+robot's mouth and left the generated anchors unaffected. The override now
+writes through to the envelope as well.
+
+→ **A hit region belongs to whoever does the drawing.** A second copy of
+the geometry is a second thing to forget.
+
+### `getcolors()` returns None, and `or []` made that zero
+`conditioned_already()` counted colours with `len(im.getcolors(1 << 16) or [])`.
+Above 65536 colours that call returns `None`, so the richest possible image
+counted as having **no** colours and read as already conditioned — which is
+why fourteen raw cutaways sat untouched through several runs of the tool
+that exists to condition them.
+
+→ **A sentinel is not an empty collection.** `palette_size()` now returns a
+large number when the count overflows.
 
 ### Static files had no `Cache-Control`
 Served with only `Last-Modified`, so browsers cached the JS heuristically and

@@ -3,17 +3,17 @@
 # GNN — Galactic News Network
 
 **An unscripted live newscast simulation.**
-Real-world RSS, read by the *Master of Orion 1* robot anchor,
+Real-world RSS, read by a desk of *Master of Orion 1* aliens,
 on a channel built entirely out of that game's 1993 asset library.
 
 [![No dependencies](https://img.shields.io/badge/frontend-vanilla_JS-f7df1e?style=flat-square&logo=javascript&logoColor=black)](#)
 [![Python](https://img.shields.io/badge/server-python_3.8%2B-3776ab?style=flat-square&logo=python&logoColor=white)](#)
-[![Canvas](https://img.shields.io/badge/render-HTML5_canvas_960×600-6fc3df?style=flat-square)](#)
+[![Canvas](https://img.shields.io/badge/render-HTML5_canvas_full--window-6fc3df?style=flat-square)](#)
 [![Assets](https://img.shields.io/badge/assets-873_items_·_4316_frames-9c6bff?style=flat-square)](#)
 [![Audio](https://img.shields.io/badge/audio-41_SFX_·_40_tracks-54e08a?style=flat-square)](#)
 [![Voice](https://img.shields.io/badge/voice-kokoro--82M_local-ff9de2?style=flat-square)](#)
 
-<img src="docs/hero.png" alt="The GNN newsroom: the robot anchor reading a live RSS headline, holographic globe over one shoulder, story icon over the other, commodity crawl along the bottom" width="820">
+<img src="docs/hero.png" alt="The GNN newsroom: two alien anchors at a lit desk reading a live RSS headline, story monitor over one shoulder, commodity crawl along the bottom" width="820">
 
 </div>
 
@@ -70,7 +70,7 @@ it. See [Legal](#legal).
 | Anchor commentary | Transmission fault |
 | :---: | :---: |
 | <img src="docs/banter.png" width="400" alt="The anchor delivering standalone commentary between headlines"> | <img src="docs/glitch.png" width="400" alt="The picture rolling and tearing during a scheduled transmission anomaly"> |
-| Between headlines the anchor comments, or reads a re-pointed 1993 sector-wire bulletin. | Eight fault types seize the lip matrix, the globe, the audio bus and the picture. |
+| Between headlines the anchors talk to each other, or read a re-pointed 1993 sector-wire bulletin. | Eight fault types seize the lip matrix, the audio bus and the picture. |
 
 <div align="center">
 <img src="docs/scenes.png" width="820" alt="Contact sheet of nine synthesized B-roll scene recipes: convoy, tactical, survey, council, interview, industry, anomaly, cyber and deep field">
@@ -174,9 +174,11 @@ CRT border.
 <details open>
 <summary><b>Pixel-perfect VGA studio</b></summary>
 
-- 320×200 6-bit VGA source rendered at 3× (960×600), nearest-neighbour, with
-  CRT scanlines and glow.
-- 25-frame robot anchor, 25-cel holographic globe, 22 over-the-shoulder icons.
+- The window is the broadcast, edge to edge. A 320×180 design grid rendered
+  at 4× and fitted to the window, nearest-neighbour, with CRT scanlines.
+- Twelve anchors with their own voices, faces and opinions of one another;
+  the MOO1 robot keyed out of his original scene with his 25-cel lip matrix
+  intact. 22 over-the-shoulder icons.
 - Everything inside the studio monitor is drawn to a **single viewport buffer**
   before being blitted, so faults roll, tear and desaturate the whole signal at
   once — the way a failing CRT would — rather than per element.
@@ -273,14 +275,14 @@ station bus, through a bit-crush glitch stage, into a master compressor.
 <details open>
 <summary><b>Anomalies and easter eggs</b></summary>
 
-Eight scheduled fault types — `carrier_drop · lipsync_desync · globe_reverse ·
+Eight scheduled fault types — `carrier_drop · lipsync_desync · signal_tear ·
 palette_burn · tape_stop · ghost_signal · interference · vertical_hold ·
-eye_flicker` — seize the anchor's lip matrix, run the globe backwards or stall
+eye_flicker` — seize the anchors' lip matrices, tear the picture or stall
 it on a single cel, bit-crush the audio bus, drag the music like a dying tape
 transport, roll and tear the picture, and punch frames of otherwise-unusable
 artwork into the composite.
 
-The secrets are undocumented on purpose. The globe rewards persistence, the
+The secrets are undocumented on purpose. The studio monitor rewards persistence, the
 anchor's optics reward curiosity, the keyboard remembers 1986, and the top of
 the hour always sounds different.
 
@@ -326,24 +328,30 @@ js/
 ├── ticker-manager.js      seamless commodity crawl
 ├── icon-manager.js        over-the-shoulder icon matcher
 ├── feed-manager.js        RSS ingestion, sanitising, importance scoring
+├── cast.js                who the anchors are: voices, tics, what they
+│                          think of one another
 ├── renderer.js            viewport buffer, layer stack, CRT post-processing
 └── main.js                bootstrap, UI wiring, frame loop
 ```
 
-**Layer stack.** Layers 2–7 are composited into an offscreen viewport buffer,
-post-processed as one signal, then blitted into the studio frame:
+**Layer stack.** Everything is composited into an offscreen buffer the size of
+the window and post-processed as one signal, so a failing channel rolls and
+tears whole rather than per element:
 
 ```
-1  studio frame                         ─┐
-2  anchor                                │  drawn to the
-3  holographic globe                     │  viewport buffer,
-4  over-the-shoulder icon plate          │  then rolled / torn /
+1  the set                              ─┐
+2  the anchors, lip-synced               │  drawn to the
+3  the desk, in front of them            │  viewport buffer,
+4  over-the-shoulder monitor             │  then rolled / torn /
 5  cutaway or commercial break           │  desaturated / ghosted
-6  chyron lower third                    │  as one picture
-7  commodity crawl                      ─┘
-8  alert border + glitch artefacts
-9  console readout (outside the monitor)
+6  story caption, the lower third        │  as one picture
+7  LIVE tag and clock                    │
+8  commodity crawl                      ─┘
+9  alert border + glitch artefacts
 ```
+
+There is no studio frame around it and no picture inside one. The window is
+the television.
 
 **The one rule:** no module outside `asset-registry.js` may name an asset path.
 Everything asks the registry for *a kind of thing* — "a clean bright backdrop

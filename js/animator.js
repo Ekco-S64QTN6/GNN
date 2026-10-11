@@ -79,6 +79,12 @@ const GNNAnimator = (() => {
 
         const aOverride = (typeof GNNGlitch !== 'undefined')
             ? GNNGlitch.anchorOverride(anchorFrame, now) : null;
+        // A glitch that bends the mouth has to bend it for two-state cast
+        // art too, and that reads the envelope rather than the frame index.
+        // Without this, desync and flicker reached the MOO1 robot alone.
+        if (aOverride !== null && aOverride !== undefined) {
+            smoothed = aOverride ? 0.5 : 0;
+        }
 
         return {
             anchor: (aOverride === null || aOverride === undefined) ? anchorFrame : aOverride,

@@ -173,6 +173,107 @@ const GNNScript = (() => {
     }
 
     /** A standalone commentary beat delivered between headlines. */
+    // ---------------------------------------------------------
+    // The show, as a shape
+    // ---------------------------------------------------------
+    //
+    // A newscast is not a list of stories; it is an opening, a run of
+    // stories with people talking between them, breaks that are announced
+    // and come back from, and a close. These supply the joins. Characters
+    // come from GNNCast, so the same line reads differently depending on
+    // who is at the desk.
+
+    /** Who is in which seat right now, as cast entries. */
+    function desk() {
+        if (typeof GNNRenderer === 'undefined' || !GNNRenderer.seatedIds) return [];
+        return GNNRenderer.seatedIds()
+            .map((id) => (typeof GNNCast !== 'undefined' ? GNNCast.get(id) : null))
+            .filter(Boolean);
+    }
+
+    function lead() { return desk()[0] || null; }
+
+    const SHOW_OPEN = [
+        'Good evening. This is the Galactic News Network, broadcasting from '
+        + 'station control.',
+        'You are watching G N N. The rundown is live and the wire is open.',
+        'This is G N N. Across the sector tonight, the following.',
+    ];
+
+    /** Top of the hour: the station names itself, then the lead anchor does. */
+    function showOpen() {
+        const who = lead();
+        const line = pickFrom(SHOW_OPEN, SHOW_OPEN[0]);
+        if (!who) return line;
+        return `${line} I am ${who.name}.`;
+    }
+
+    const INTO_BREAK = [
+        'Stay with us. There is more on the other side of this.',
+        'We will be back after these messages.',
+        'Hold the channel. We are not finished.',
+        'More in a moment, including the figures nobody wants to read out.',
+    ];
+
+    const OUT_OF_BREAK = [
+        'And we are back.',
+        'You are still watching G N N.',
+        'This is G N N, and the rundown continues.',
+        'Back on the channel. Where were we.',
+    ];
+
+    function intoBreak() { return pickFrom(INTO_BREAK, INTO_BREAK[0]); }
+
+    function outOfBreak() {
+        const who = lead();
+        const line = pickFrom(OUT_OF_BREAK, OUT_OF_BREAK[0]);
+        return who && chance(0.4) ? `${line} ${who.tic}` : line;
+    }
+
+    const SHOW_CLOSE = [
+        'That is the rundown. The wire stays open whether anyone is reading '
+        + 'it or not.',
+        'That is where we leave it. The sector does not stop because we do.',
+        'We are out of time and the story is not finished. It rarely is.',
+    ];
+
+    /** End of a block: the lead signs off, and names whoever sat with them. */
+    function showClose() {
+        const seats = desk();
+        const line = pickFrom(SHOW_CLOSE, SHOW_CLOSE[0]);
+        if (!seats.length) return line;
+        if (seats.length === 1) return `${line} I have been ${seats[0].name}.`;
+        const others = seats.slice(1).map((p) => p.name).join(' and ');
+        return `${line} I have been ${seats[0].name}, with ${others}. Good night.`;
+    }
+
+    /**
+     * Two anchors talking to each other rather than at the camera.
+     *
+     * Returns an array of lines tagged with who says them, so the director
+     * can hand each to the right voice, or null when the pair at the desk
+     * have no history worth airing.
+     */
+    function exchange() {
+        const seats = desk();
+        if (seats.length < 2 || typeof GNNCast === 'undefined') return null;
+        // Try both directions; the table is deliberately one-sided in places.
+        const pairs = [];
+        for (let i = 0; i < seats.length; i++) {
+            for (let j = 0; j < seats.length; j++) {
+                if (i === j) continue;
+                const ex = GNNCast.exchange(seats[i].id, seats[j].id);
+                if (ex) pairs.push({ a: seats[i], b: seats[j], ex });
+            }
+        }
+        if (!pairs.length) return null;
+        const pick = pairs[(Math.random() * pairs.length) | 0];
+        return [
+            { who: pick.a, text: pick.ex.jab },
+            { who: pick.b, text: pick.ex.reply },
+        ];
+    }
+
     function banter(story) {
         const roll = Math.random();
         if (roll < 0.34) return fillGeneric(pickFrom(ROBOT_ASIDES, ''), story);
@@ -357,6 +458,7 @@ const GNNScript = (() => {
         properNouns, numbers, keywords, sourceText,
         sectorWire, banter, toss, hold,
         ident, signoff, commercial, promo,
+        showOpen, intoBreak, outOfBreak, showClose, exchange, desk,
         tickerSegments, chyron, sponsorName,
     };
 })();

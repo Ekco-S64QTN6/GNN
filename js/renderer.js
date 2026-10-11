@@ -448,11 +448,43 @@ const GNNRenderer = (() => {
         }
     }
 
+    /**
+     * Where the clickable things actually are, in canvas pixels.
+     *
+     * The glitch engine used to carry its own copy of these as literals
+     * measured off a 960x600 layout: a globe that is no longer drawn, and
+     * an "anchor optics" box that now points at empty sky above the desk.
+     * Hit regions belong to whoever does the drawing.
+     */
+    function hitRegions() {
+        const list = seated.slice(0, 3);
+        const seats = SEATS[list.length] || SEATS[1];
+        const h = CAST.h * VIEW.h;
+        return {
+            monitor: {
+                x: ICON.x * VIEW.w, y: ICON.y * VIEW.h,
+                w: ICON.w * VIEW.w, h: ICON.h * VIEW.h,
+            },
+            // The upper third of each plate is the head.
+            faces: list.map((person, i) => {
+                const img = person.frames ? person.frames[0] : person.hero;
+                const w = img ? img.width * (h / img.height) : h;
+                return {
+                    x: seats[i] * VIEW.w - w / 2,
+                    y: CAST.seat * VIEW.h - h,
+                    w, h: h * 0.45,
+                };
+            }),
+        };
+    }
+
     function getContext() { return ctx; }
 
     return {
         init, renderFrame, getContext,
-        VIEW, SCALE, BASE_W, BASE_H, bottomStack, fit,
+        VIEW, SCALE, BASE_W, BASE_H, bottomStack, fit, hitRegions,
+        /** Who is at the desk, left to right, for the script writer. */
+        seatedIds: () => seated.map((p) => p.sid),
         get CANVAS_W() { return CANVAS_W; },
         get CANVAS_H() { return CANVAS_H; },
     };
