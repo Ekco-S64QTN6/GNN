@@ -59,11 +59,20 @@ def main():
     for name in ('gfx-manifest.json', 'audio-manifest.json', 'moo-strings.json'):
         need('assets/' + name, 'manifest')
 
-    # --- newsroom plates --------------------------------------------
-    need('assets/background_tv.png', 'studio frame')
+    # --- the newsroom ------------------------------------------------
+    # The MOO1 cels are no longer drawn: the broadcast is a generated set
+    # with cut-out anchors in front of it. The anchor cels stay because
+    # tools/key_robot.py reads them to produce the robot's plates; the
+    # studio frame and the globe went with the render path that used them.
     for i in range(1, 26):
-        need('assets/anchor_frame_%03d.png' % i, 'anchor cel')
-        need('assets/globe_frame_%03d.png' % i, 'globe cel')
+        need('assets/anchor_frame_%03d.png' % i, 'robot source cel')
+        need('assets/generated/anchors/robot_frame_%03d.png' % i, 'robot cel')
+    need('assets/generated/set/studio_wide_empty.png', 'set plate')
+    need('assets/generated/set/desk_oval_front.png', 'desk plate')
+    for sid in ('human', 'mrrshan_f'):
+        for state in ('desk_hero', 'speaking', 'listening'):
+            need('assets/generated/anchors/%s_%s.png' % (sid, state),
+                 'anchor plate')
 
     # icons, as named by js/icon-manager.js
     icons = open(os.path.join(ROOT, 'js', 'icon-manager.js')).read()
