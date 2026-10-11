@@ -1,7 +1,7 @@
 {
   "view": {
-    "w": 320,
-    "h": 180
+    "w": 1280,
+    "h": 720
   },
   "anchors": {
     "y": 0.06,
@@ -9,27 +9,27 @@
   },
   "plates": {
     "studio_wide_empty.png": {
-      "w": 320,
-      "h": 180,
+      "w": 1280,
+      "h": 720,
       "role": "room",
       "x": 0,
       "y": 0
     },
     "desk_oval_front.png": {
-      "w": 211,
-      "h": 70,
+      "w": 845,
+      "h": 281,
       "role": "desk",
-      "x": 54,
-      "y": 110
+      "x": 217,
+      "y": 439
     },
     "console_left.png": {
-      "w": 70,
-      "h": 66,
+      "w": 282,
+      "h": 265,
       "role": "prop"
     },
     "console_right.png": {
-      "w": 70,
-      "h": 65,
+      "w": 282,
+      "h": 261,
       "role": "prop"
     }
   }

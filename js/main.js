@@ -57,7 +57,6 @@
         await GNNAssets.init();
 
         statusText.textContent = 'Loading studio plates…';
-        const bg = await GNNAssets.loadImage(`${ASSET_DIR}/background_tv.png`);
 
         // The generated newsroom, if it has been made. All optional: the
         // station still goes to air on the MOO1 scene alone, so a missing
@@ -109,15 +108,14 @@
                             listening: listening || hero } : null;
         }))).filter(Boolean);
 
-        // The MOO1 newscast cels. Still loaded: they are the fallback when
-        // the generated set is absent, and the globe plays on the studio
-        // monitor either way.
+        // The robot, cut out of his old newscast scene by tools/key_robot.py.
+        // He keeps his 25-cel lip matrix, which is more than the generated
+        // cast have, so he is loaded as frames rather than as three states.
         const nums = [];
         for (let i = 1; i <= TOTAL_FRAMES; i++) nums.push(String(i).padStart(3, '0'));
-        const [anchors, globes] = await Promise.all([
-            Promise.all(nums.map((n) => GNNAssets.loadImage(`${ASSET_DIR}/anchor_frame_${n}.png`))),
-            Promise.all(nums.map((n) => GNNAssets.loadImage(`${ASSET_DIR}/globe_frame_${n}.png`))),
-        ]);
+        const robotFrames = (await Promise.all(nums.map(
+            (n) => GNNAssets.loadImage(`${GEN}/anchors/robot_frame_${n}.png`)
+        ))).filter(Boolean);
 
         await GNNIconManager.loadIcons(`${ASSET_DIR}/icons`);
 
@@ -129,10 +127,11 @@
         }
         statusText.textContent = 'Studio ready';
         return {
-            bg, set, desk, seated,
+            set, desk, seated,
             deskVoice: seated.length ? seated[0].voice : null,
-            anchors: anchors.filter(Boolean),
-            globes: globes.filter(Boolean),
+            robot: robotFrames.length
+                ? { sid: 'robot', voice: 'vox_unit', frames: robotFrames }
+                : null,
         };
     }
 

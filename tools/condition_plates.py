@@ -77,20 +77,29 @@ def find_source(name, out_dir=None):
 OUT = os.path.join(ROOT, 'assets', 'generated', 'set')
 
 def _frame():
-    """The broadcast frame in source pixels, read from the renderer.
+    """The broadcast frame in canvas pixels, read from the renderer.
 
-    Hardcoding it here is how the plates came to be conditioned to 292x105
-    for a frame that had already become 320x180.
+    Plates are conditioned at the size they are drawn, not at the 320x180
+    design grid. Conditioned to the grid they were upscaled four times by
+    the canvas, while the anchors — bigger plates drawn smaller — were
+    upscaled about twice, so the room looked coarse beside the people
+    standing in it. The pixel-art look belongs to the source art, which
+    already has chunky hand-sized pixels in it; resampling it down and back
+    up does not add that, it only blurs what is there.
     """
+    w, h, scale = 320, 180, 4
     try:
         text = open(os.path.join(ROOT, 'js', 'renderer.js')).read()
-        w = re.search(r'BASE_W\s*=\s*(\d+)', text)
-        h = re.search(r'BASE_H\s*=\s*(\d+)', text)
-        if w and h:
-            return int(w.group(1)), int(h.group(1))
+        mw = re.search(r'BASE_W\s*=\s*(\d+)', text)
+        mh = re.search(r'BASE_H\s*=\s*(\d+)', text)
+        ms = re.search(r'SCALE\s*=\s*(\d+)', text)
+        if mw and mh:
+            w, h = int(mw.group(1)), int(mh.group(1))
+        if ms:
+            scale = int(ms.group(1))
     except OSError:
         pass
-    return 320, 180
+    return w * scale, h * scale
 
 
 VIEW_W, VIEW_H = _frame()
@@ -226,9 +235,10 @@ ANCHOR_OUT = os.path.join(ROOT, 'assets', 'generated', 'anchors')
 RAW_KEEP = os.path.join(ROOT, 'assets', 'generated', '_inbox')
 STATES = ('desk_hero', 'speaking', 'listening')
 
-# The cast is drawn at 70% of frame height (renderer.js CAST.h), so a plate
-# wider than this is only carrying transparency.
-CAST_H = 126          # 0.70 of the 180-line base grid
+# The cast is drawn at CAST.h of the frame height in renderer.js. Matching
+# it here means the plate is blitted close to 1:1 instead of being scaled
+# twice — once down by this tool and once up by the canvas.
+CAST_H = int(VIEW_H * 0.34)
 
 
 def subject_metrics(im):

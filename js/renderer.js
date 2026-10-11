@@ -50,13 +50,6 @@ const GNNRenderer = (() => {
 
     // Everything below is in viewport-local space, as a fraction of the
     // frame, so the layout survives a change of resolution.
-    const ANCHOR = { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H };
-    // The holographic globe is not drawn on the generated set. Its cels
-    // carry an opaque starfield backdrop that was painted to sit inside the
-    // MOO1 newscast frame, and on a studio wall it reads as a square of
-    // someone else's picture pasted on. It stays in the MOO1 fallback,
-    // where it belongs.
-    const GLOBE = { x: 0.07, y: 0.12, w: 0.17, h: 0.26 };
     // Small and high, clear of the heads: the anchors' faces start around
     // 0.33 of the frame and this used to run to 0.41 across the third seat.
     const ICON = { x: 0.755, y: 0.075, w: 0.175, h: 0.215 };
@@ -66,12 +59,10 @@ const GNNRenderer = (() => {
     let vcanvas = null;
     let vctx = null;
 
-    let bgImage = null;
     let setPlate = null;
     let deskPlate = null;
     let seated = [];
-    let anchorFrames = [];
-    let globeFrames = [];
+    let robot = null;
 
     /** Resize the frame to the window, keeping the vertical pixel density. */
     function fit() {
@@ -84,8 +75,6 @@ const GNNRenderer = (() => {
         CANVAS_H = h;
         VIEW.w = w;
         VIEW.h = h;
-        ANCHOR.w = w;
-        ANCHOR.h = h;
         canvas.width = w;
         canvas.height = h;
         ctx.imageSmoothingEnabled = false;
@@ -115,15 +104,10 @@ const GNNRenderer = (() => {
         // every proportion in it was wrong. Checking per frame is a few
         // comparisons and cannot get this wrong.
 
-        // The newsroom set, when it has been generated. Without it the
-        // MOO1 newscast scene stands in: it is a complete picture rather
-        // than a set, so it is cover-fitted and the anchors ride on it.
         setPlate = assets.set || null;
         deskPlate = assets.desk || null;
         seated = assets.seated || [];
-        bgImage = assets.bg;
-        anchorFrames = assets.anchors || [];
-        globeFrames = assets.globes || [];
+        robot = assets.robot || null;
     }
 
     // ---------------------------------------------------------
@@ -155,21 +139,9 @@ const GNNRenderer = (() => {
             // set, anchor, desk in front. Without it the MOO1 newscast frame
             // is a finished picture of its own, so drawing a set behind it
             // would only be painting something nothing can see.
-            const onSet = seated.length && setPlate;
-            if (onSet) {
-                drawCover(c, setPlate, VIEW.w, VIEW.h);
-                drawCast(c, frames.anchor);
-                if (deskPlate) drawDesk(c, deskPlate);
-            } else if (anchorFrames[frames.anchor]) {
-                drawCover(c, anchorFrames[frames.anchor], ANCHOR.w, ANCHOR.h);
-            }
-            if (!onSet && globeFrames[frames.globe]) {
-                // The globe cels carry their own opaque backdrop, so without
-                // a frame around them they read as a square pasted on the
-                // set. Given the same plate as the story icon they read as
-                // the other monitor in the studio.
-                drawPlate(c, globeFrames[frames.globe], GLOBE);
-            }
+            if (setPlate) drawCover(c, setPlate, VIEW.w, VIEW.h);
+            drawCast(c, frames.anchor);
+            if (deskPlate) drawDesk(c, deskPlate);
             if (icon && !GNNCutsceneManager.isCutawayActive()) {
                 drawIconPlate(c, icon);
             }
@@ -260,11 +232,15 @@ const GNNRenderer = (() => {
         2: [0.37, 0.63],
         3: [0.28, 0.50, 0.72],
     };
-    // The desk's top edge is derived from where the anchors are seated, not
-    // set alongside it. Two independent numbers drifted apart every time
-    // either was adjusted and left a band of studio floor showing between
-    // the anchors' shoulders and the desk.
-    const DESK = { w: 1.0, overlap: 0.055 };
+    // The desk is sized by height, between the seat line and just past the
+    // bottom of the frame, and its width follows from that.
+    //
+    // Sized by width it was 1280 across and so 425 tall in a 720 frame: the
+    // oval top filled the shot and the front panel — the lit strip, the
+    // hazard stripes, the emblem, the part that makes it a news desk — was
+    // below the bottom edge. What was left read as a boardroom table a few
+    // metres in front of the anchors.
+    const DESK = { overlap: 0.055, bottom: 1.02 };
     const deskTop = () => CAST.seat - DESK.overlap;
 
     /**
@@ -279,9 +255,23 @@ const GNNRenderer = (() => {
         const h = CAST.h * VIEW.h;
         list.forEach((person, i) => {
             const active = i === 0;
-            const img = active
-                ? (lipFrame === 0 ? person.hero : person.speaking)
-                : person.listening;
+            let img;
+            if (person.frames && person.frames.length) {
+                // A cast member with a real lip matrix — the MOO1 robot has
+                // 25 cels — drives it directly off the animator's frame
+                // instead of being reduced to two mouth states.
+                img = active
+                    ? (person.frames[lipFrame] || person.frames[0])
+                    : person.frames[0];
+            } else {
+                // Two mouth states, driven by how loud the syllable is
+                // rather than by whether a syllable is happening at all.
+                const jaw = (typeof GNNAnimator !== 'undefined'
+                    && GNNAnimator.mouthLevel) ? GNNAnimator.mouthLevel() : 0;
+                img = active
+                    ? (jaw > 0.09 ? person.speaking : person.hero)
+                    : person.listening;
+            }
             if (!img) return;
             const w = img.width * (h / img.height);
             c.drawImage(img, seats[i] * VIEW.w - w / 2,
@@ -290,9 +280,10 @@ const GNNRenderer = (() => {
     }
 
     function drawDesk(c, img) {
-        const w = DESK.w * VIEW.w;
-        const h = img.height * (w / img.width);
-        c.drawImage(img, (VIEW.w - w) / 2, deskTop() * VIEW.h, w, h);
+        const top = deskTop() * VIEW.h;
+        const h = DESK.bottom * VIEW.h - top;
+        const w = img.width * (h / img.height);
+        c.drawImage(img, (VIEW.w - w) / 2, top, w, h);
     }
 
     /** A studio monitor: the art, inset in a lit bezel. */

@@ -96,6 +96,16 @@ const GNNAnimator = (() => {
 
     return {
         tick, update, setSpeaking,
+        /**
+         * How far open the jaw is, 0 to about 1.
+         *
+         * The frame index cannot answer this. It indexes a 25-cel matrix and
+         * is non-zero for every moment of an utterance, so art with two
+         * mouth states read it as "open" and held the mouth open from the
+         * first syllable to the last. This is the smoothed envelope, which
+         * moves at the speed of speech.
+         */
+        mouthLevel: () => smoothed,
         getAnchorFrame: () => lastFrames.anchor,
         getGlobeFrame: () => lastFrames.globe,
         VISEMES, TOTAL_FRAMES,
