@@ -1,6 +1,6 @@
 # GNN — Generated Asset Prompts
 
-Produced by `tools/prompt_bridge.py`. Each one is a gap the Master of Orion 1 catalogue cannot fill: it has 76 usable cutaways and 132 portraits, but none cut out for a news set and nothing resembling a studio to put them in.
+Produced by `tools/prompt_bridge.py`. Each one is a gap the Master of Orion 1 catalogue cannot fill: it has 75 usable cutaways and 124 portraits, but none cut out for a news set and nothing resembling a studio to put them in.
 
 ---
 
@@ -455,7 +455,7 @@ Save the result as `assets/generated/set/studio_wide_empty.png`.
 ```
 Create a 1792x1024 image.
 
-1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. the interior of a starship television studio: bevelled hull wall panels, a large octagonal viewport dominating the centre of the back wall, angled instrument consoles built into the side walls with rows of lit indicator buttons, a raised circular floor dais with an inlaid trim ring. No desk, no furniture in the centre, no figures. Framing: wide empty set plate, the window centred on the back wall, floor occupying the lower third, the centre of the room completely empty. Palette: muted teal and bone white, warning-stripe yellow. Background: the window opening is a flat area of pure black, showing nothing at all — no stars, no planet, no light.
+1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. the interior of a starship television studio seen in deep perspective: the side walls running away from the camera with their bevelled hull panels foreshortened, a large octagonal viewport set in the far back wall, angled instrument consoles built into the side walls with rows of lit indicator buttons, a raised circular floor dais with an inlaid trim ring receding toward the back. Strong sense of depth, the back wall clearly distant. No desk, no furniture in the centre, no figures. Framing: wide empty set plate, one-point perspective with the vanishing point at the centre of the back wall, the window centred on that wall, floor occupying the lower third and leading the eye back, the centre of the room completely empty. Palette: muted teal and bone white, warning-stripe yellow. Background: the window opening is a flat area of pure black, showing nothing at all — no stars, no planet, no light.
 
 Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```

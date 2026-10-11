@@ -46,7 +46,9 @@ the metric is the thing to doubt.
 | Per-line loudness | −19.3 to −20.3 LUFS, 1.0 LU spread, true peak −3.0 dBFS |
 | Spoken lines | 22 consecutive, 0 truncated |
 | Broadcast | runs the full rundown with zero exceptions over 90 s+ |
-| Frame | 320×180 base, 1280×720 canvas, 16:9, full-bleed — no CRT frame |
+| Frame | 320×180 design grid, 1280×720 canvas, follows the window, full-bleed |
+| Plates | conditioned at canvas resolution, not the design grid |
+| Cast | 11 generated species + the MOO1 robot, keyed out of his own scene |
 | Voices | 9 shortlisted by ear, plus `vox_unit` (a DSP robot, not a model) |
 
 Verify all of it:
@@ -216,6 +218,33 @@ word does not.**
 A break sets its own type: product name, tagline, its own margins. The
 teleprompter caption was still being drawn on top of it and put a panel
 through the tagline. The break owns the frame while it runs.
+
+### Plates were conditioned to the design grid and upscaled back
+Everything was fitted to 320×180 and then blown up four times by the canvas,
+while the anchors — larger plates drawn smaller — were blown up about twice.
+The set carried four times the blur of the people standing in it. The chunky
+pixel look belongs to the source art, which already has hand-sized pixels in
+it; resampling down and back up does not add it, it destroys it.
+
+→ **Condition a plate at the size it is drawn.** `condition_plates.py` reads
+`BASE_W`/`BASE_H`/`SCALE` out of `renderer.js` so this cannot drift again.
+
+### The desk was sized by width and fell out of frame
+At full frame width it was 425 px tall in a 720 px frame drawn from the seat
+line, so the oval top filled the shot and the front panel — the lit strip,
+the hazard stripes, the emblem — was below the bottom edge. It read as a
+boardroom table a few metres away. It is sized by **height** now, between the
+seat line and just past the bottom of the frame, and the width follows.
+
+→ **Size a prop by the dimension that is constrained.** For anything meeting
+the bottom of frame that is the height.
+
+### Two-state mouths never closed
+Cast art with `hero`/`speaking` read the animator's frame index, which is
+non-zero for every moment of an utterance, so the mouth opened on the first
+syllable and shut on the last. It follows `GNNAnimator.mouthLevel()` now — the
+smoothed envelope, which moves at the speed of speech. The MOO1 robot is
+unaffected: he has a real 25-cel matrix and indexes it directly.
 
 ### Static files had no `Cache-Control`
 Served with only `Last-Modified`, so browsers cached the JS heuristically and

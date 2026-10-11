@@ -168,14 +168,18 @@ DAY_CYCLE = [
 # single baked image of the whole scene cannot have anyone sit at it.
 SET = [
     ('studio_wide_empty',
-     'the interior of a starship television studio: bevelled hull wall panels, '
-     'a large octagonal viewport dominating the centre of the back wall, angled '
-     'instrument consoles built into the side walls with rows of lit indicator '
-     'buttons, a raised circular floor dais with an inlaid trim ring. No desk, '
-     'no furniture in the centre, no figures',
+     'the interior of a starship television studio seen in deep perspective: '
+     'the side walls running away from the camera with their bevelled hull '
+     'panels foreshortened, a large octagonal viewport set in the far back '
+     'wall, angled instrument consoles built into the side walls with rows of '
+     'lit indicator buttons, a raised circular floor dais with an inlaid trim '
+     'ring receding toward the back. Strong sense of depth, the back wall '
+     'clearly distant. No desk, no furniture in the centre, no figures',
      'station',
-     'wide empty set plate, the window centred on the back wall, floor '
-     'occupying the lower third, the centre of the room completely empty',
+     'wide empty set plate, one-point perspective with the vanishing point '
+     'at the centre of the back wall, the window centred on that wall, floor '
+     'occupying the lower third and leading the eye back, the centre of the '
+     'room completely empty',
      'the window opening is a flat area of pure black, showing nothing at '
      'all — no stars, no planet, no light'),
     ('desk_oval_front',
