@@ -233,11 +233,26 @@ const GNNDirector = (() => {
         return (title + joiner + desc).replace(/\s+/g, ' ');
     }
 
+    // A genuine emergency, not a word that turned up in a sentence.
+    //
+    // The old test fired on "killed" and "attack", which appear in a large
+    // share of ordinary wire copy, so the red alert ran on most stories and
+    // stopped meaning anything. It now wants an emergency word in the
+    // headline — not buried in the body — and it will not fire twice inside
+    // a few minutes however the wire reads.
+    const BREAKING_WORDS =
+        /\b(breaking|emergency|catastroph\w*|evacuat\w*|disaster|massacre)\b/i;
+    const BREAKING_COOLDOWN_MS = 6 * 60 * 1000;
+    let lastBreakingAt = 0;
+
     function isBreaking(item) {
         if (!item) return false;
-        if (item.breaking) return true;
-        return /\b(breaking|emergency|crisis|catastroph|evacuat|disaster|attack|killed|explosion)\b/i
-            .test(`${item.title} ${item.description}`);
+        const now = performance.now();
+        if (now - lastBreakingAt < BREAKING_COOLDOWN_MS) return false;
+        const flagged = item.breaking || BREAKING_WORDS.test(item.title || '');
+        if (!flagged) return false;
+        lastBreakingAt = now;
+        return true;
     }
 
     // ---------------------------------------------------------

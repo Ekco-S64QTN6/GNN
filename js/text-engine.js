@@ -30,7 +30,29 @@ const GNNTextEngine = (() => {
     // bottom left. It follows the speaker, carries their colour and points
     // at them, so you can tell who is talking without reading a name. Width
     // is a fraction of the frame; x comes from the seat.
-    const PANEL = { w: 0.46, maxH: 0.20, minW: 0.20 };
+    const PANEL = { w: 0.46, minW: 0.20 };
+
+    // The box is born at the width it will always be and two lines tall, and
+    // grows a whole line at a time. Sizing it to the characters typed so far
+    // redrew it on every frame — it crept wider and taller as the line
+    // arrived, which reads as broken rather than as typing.
+    //
+    // Two lines, then three, then four, each in one step at the moment the
+    // line below fills. After the last line it stops growing and scrolls:
+    // the oldest words leave at the top and new ones keep arriving at the
+    // bottom.
+    const LINES_MIN = 2;
+    const LINES_MAX = 4;
+
+    // Two different things wear this box.
+    //
+    // An anchor talking gets a bubble over their head, in their colour,
+    // labelled with their name. The station talking — a commercial, an
+    // ident, an unlisted transmission — is not any anchor, so it gets a
+    // plain slab under the desk instead of a speech bubble pointing at
+    // someone who is not saying it.
+    const STATION_KINDS = new Set(['ad', 'ident', 'wire', 'promo']);
+    const STATION_BOX = { y: 0.845, w: 0.56 };
     const TAIL = 11;
     let BOX = { x: 0, y: 0, w: 0, h: 0 };
 
@@ -194,67 +216,77 @@ const GNNTextEngine = (() => {
         // empty slab over the set for most of every line, because the text
         // arrives a character at a time and only fills it at the very end.
         const lead = Math.round(LINE_HEIGHT * 0.92);
-        const maxLines = Math.max(1, Math.floor(
-            (PANEL.maxH * ctx.canvas.height
-             - (cue ? lead + PADDING : PADDING * 2)) / LINE_HEIGHT));
         let shownLines = [];
         if (fullText && visible > 0) {
             ctx.font = `${FONT_SIZE}px "Press Start 2P", monospace`;
             shownLines = wrap(ctx, fullText.substring(0, visible),
                               BOX.w - PADDING * 2);
-            if (shownLines.length > maxLines) {
-                shownLines = shownLines.slice(shownLines.length - maxLines);
-            }
         }
-        const bodyH = Math.max(1, shownLines.length) * LINE_HEIGHT;
+        // The box is as many lines tall as have been written, never fewer
+        // than two and never more than four; past that it scrolls.
+        const rows = Math.min(LINES_MAX,
+                              Math.max(LINES_MIN, shownLines.length));
+        if (shownLines.length > rows) {
+            shownLines = shownLines.slice(shownLines.length - rows);
+        }
+        const bodyH = rows * LINE_HEIGHT;
         BOX.h = (cue ? lead : PADDING) + bodyH + PADDING;
+        BOX.w = Math.round(PANEL.w * ctx.canvas.width);
 
-        // Shrink to the longest line actually shown, so a short remark is a
-        // short bubble rather than a half-empty slab.
-        let widest = 0;
-        for (const ln of shownLines) widest = Math.max(widest, ctx.measureText(ln).width);
-        if (cue) {
-            ctx.font = `${Math.max(7, Math.round(FONT_SIZE * 0.6))}px "Press Start 2P", monospace`;
-            widest = Math.max(widest, ctx.measureText(cue).width);
-            ctx.font = `${FONT_SIZE}px "Press Start 2P", monospace`;
-        }
-        BOX.w = Math.max(Math.round(PANEL.minW * ctx.canvas.width),
-                         Math.min(BOX.w, Math.round(widest + PADDING * 2)));
+
+        const station = STATION_KINDS.has(kind);
 
         // Place it over the speaker, point it at them, and keep it clear of
         // both the edges and the story monitor — the bubble ran under the
         // monitor and both became unreadable.
         const spk = speakerAnchor(ctx);
         const margin = Math.round(ctx.canvas.width * 0.016);
-        let right = ctx.canvas.width - margin;
-        const mon = monitorRect();
-        BOX.y = Math.round(Math.max(margin, spk.y - BOX.h - TAIL));
-        if (mon && BOX.y < mon.y + mon.h) right = Math.min(right, mon.x - 10);
-        BOX.x = Math.round(Math.max(margin,
-            Math.min(right - BOX.w, spk.x - BOX.w / 2)));
+        if (station) {
+            BOX.w = Math.round(STATION_BOX.w * ctx.canvas.width);
+            BOX.x = Math.round((ctx.canvas.width - BOX.w) / 2);
+            BOX.y = Math.round(STATION_BOX.y * ctx.canvas.height - BOX.h);
+        } else {
+            let right = ctx.canvas.width - margin;
+            const mon = monitorRect();
+            BOX.y = Math.round(Math.max(margin, spk.y - BOX.h - TAIL));
+            if (mon && BOX.y < mon.y + mon.h) right = Math.min(right, mon.x - 10);
+            BOX.x = Math.round(Math.max(margin,
+                Math.min(right - BOX.w, spk.x - BOX.w / 2)));
+        }
 
-        const accent = (kind === 'breaking') ? '#ff3b3b' : (spk.colour || '#1f7fa8');
+        // An alert does not repaint the anchor. The red border around the
+        // frame says the station is in an emergency; the person reading it
+        // is still themselves, in their own colour and under their own name.
+        const accent = station ? '#6fc3df' : (spk.colour || '#1f7fa8');
         ctx.fillStyle = 'rgba(4,12,20,0.88)';
         ctx.fillRect(BOX.x, BOX.y, BOX.w, BOX.h);
-        // The tail, aimed at the speaker and clamped inside the bubble so it
-        // never floats off a corner when the bubble has been pushed over.
-        const tx = Math.max(BOX.x + 12, Math.min(BOX.x + BOX.w - 12, spk.x));
-        ctx.beginPath();
-        ctx.moveTo(tx - 9, BOX.y + BOX.h);
-        ctx.lineTo(tx + 9, BOX.y + BOX.h);
-        ctx.lineTo(tx, BOX.y + BOX.h + TAIL);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(4,12,20,0.88)';
-        ctx.fill();
+        if (!station) {
+            // The tail, aimed at the speaker and clamped inside the bubble
+            // so it never floats off a corner when the bubble is pushed over.
+            const tx = Math.max(BOX.x + 12, Math.min(BOX.x + BOX.w - 12, spk.x));
+            ctx.beginPath();
+            ctx.moveTo(tx - 9, BOX.y + BOX.h);
+            ctx.lineTo(tx + 9, BOX.y + BOX.h);
+            ctx.lineTo(tx, BOX.y + BOX.h + TAIL);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(4,12,20,0.88)';
+            ctx.fill();
+        }
         ctx.fillStyle = accent;
         ctx.fillRect(BOX.x, BOX.y, Math.max(3, Math.round(BOX.w * 0.012)), BOX.h);
         ctx.fillRect(BOX.x, BOX.y, BOX.w, 2);
 
-        if (cue) {
+        // The label is who is talking. "SECTOR DESK" told the viewer
+        // nothing; the anchor's name tells them everything, and it is the
+        // only label the cast has ever needed.
+        const who = (!station && typeof GNNDirector !== 'undefined'
+            && GNNDirector.speaker) ? GNNDirector.speaker() : null;
+        const label = who && who.name ? who.name.toUpperCase() : cue;
+        if (label) {
             ctx.font = `${Math.max(7, Math.round(FONT_SIZE * 0.6))}px "Press Start 2P", monospace`;
             ctx.textBaseline = 'top';
             ctx.fillStyle = accent;
-            ctx.fillText(cue, BOX.x + PADDING, BOX.y + Math.round(PADDING * 0.45));
+            ctx.fillText(label, BOX.x + PADDING, BOX.y + Math.round(PADDING * 0.45));
         }
 
         if (fullText && visible > 0) {

@@ -90,7 +90,7 @@ const GNNCast = (() => {
             tic: 'I am told this is still developing.',
         },
         darlok: {
-            id: 'darlok', colour: '#c79aff', name: 'The Analyst', role: 'Intelligence Desk',
+            id: 'darlok', colour: '#c79aff', machine: true, name: 'The Analyst', role: 'Intelligence Desk',
             voice: 'vox_unit', register: 'oblique', mood: 'unreadable',
             fixation: 'what was left out of the statement',
             tic: 'What interests me is the omission.',

@@ -167,9 +167,13 @@
         const frames = GNNAnimator.tick(now);
 
         const story = GNNDirector.getCurrent();
+        // No story, no monitor. The fallback used to park a STATUS plate on
+        // the wall and leave it there for the whole of dead air, a studio
+        // screen showing the same word for minutes at a time. The monitor is
+        // off unless there is something on it.
         const icon = story
             ? (story.icon || GNNIconManager.matchIcon(story.title, story.description))
-            : GNNIconManager.getIconByLabel('STATUS');
+            : null;
 
         GNNRenderer.renderFrame(now, frames, icon);
 
@@ -394,10 +398,30 @@
                 secretLog.prepend(li);
                 while (secretLog.children.length > 6) secretLog.lastChild.remove();
             }
-            GNNTextEngine.present(line, {
-                kind: 'wire', cue: '◆ UNLISTED TRANSMISSION', durationMs: 3200,
-            });
-            GNNTTS.speak(line, { pitch: -26, rate: -12 });
+            // Wait for the anchor to finish. Cutting in mid-headline is a
+            // clunky handoff, and the thing being interrupted is a person
+            // reading a sentence, not a buffer — an unlisted transmission
+            // that waits four seconds for a full stop is still eerie, and
+            // one that chops a word in half is just a bug.
+            const air = () => {
+                GNNTextEngine.present(line, {
+                    kind: 'wire', cue: '◆ UNLISTED TRANSMISSION',
+                    durationMs: 3200,
+                });
+                GNNTTS.speak(line, { pitch: -26, rate: -12 });
+            };
+            const waitStart = performance.now();
+            const poll = () => {
+                const stillTalking = GNNTTS.isSpeaking()
+                    || GNNTextEngine.isTyping();
+                // A hard ceiling, so a stuck line cannot swallow the secret.
+                if (!stillTalking || performance.now() - waitStart > 9000) {
+                    air();
+                } else {
+                    setTimeout(poll, 200);
+                }
+            };
+            poll();
         };
     }
 

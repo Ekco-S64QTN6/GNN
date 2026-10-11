@@ -191,7 +191,6 @@ const GNNSceneCompositor = (() => {
 
     const BACKDROP_DIRS = ['LANDING', 'INTRO', 'INTRO2', 'STARVIEW', 'SPIES', 'COUNCIL', 'EMBASSY'];
     const SPRITE_DIRS = ['SHIPS', 'SHIPS2', 'MISSILE', 'NEBULA', 'PLANETS', 'SPACE', 'VORTEX'];
-    const CHROME_DIRS = ['STARMAP', 'SCREENS', 'DESIGN', 'BACKGRND', 'SPACE'];
 
     // A few dozen items in the library were authored against screen palettes
     // the archives never shipped; they decode structurally correct but
@@ -216,9 +215,23 @@ const GNNSceneCompositor = (() => {
         }, extra || {}));
     }
 
-    function chrome(extra) {
+    /**
+     * Blueprint schematics, in place of the old chrome plates.
+     *
+     * The chrome pool is the game's own interface: window frames, button
+     * panels, the population and tactical readouts. Pinned over footage as
+     * "screen dressing" they are unmistakably gameplay HUD — a shot of a
+     * convoy with POP and Moving and a tactical plot bar stuck to it reads
+     * as a strategy game, not as a news feed.
+     *
+     * TECHNO carries wireframe schematics on a grid instead: hulls, drives,
+     * sensors, drawn as line art. Those are what a newsroom would put on a
+     * screen behind a reporter, and they come from the sprite pool, which
+     * is admitted art rather than interface.
+     */
+    function schematics(extra) {
         return GNNAssets.find(Object.assign({
-            pool: 'chrome', dirs: CHROME_DIRS,
+            pool: 'sprite', dirs: ['TECHNO'],
             minW: PLATE_MIN_W, minH: PLATE_MIN_H,
         }, extra || {}));
     }
@@ -260,18 +273,18 @@ const GNNSceneCompositor = (() => {
             const bg = GNNAssets.pick(GNNAssets.find({
                 dirs: ['STARVIEW', 'SPACE'], minW: 200, maxNoise: 140,
             })) || GNNAssets.pick(backdrops());
-            const plates = GNNAssets.pickMany(chrome({ dirs: ['STARMAP', 'DESIGN'] }), 5);
+            const plates = GNNAssets.pickMany(schematics(), 3);
             const target = GNNAssets.pick(GNNAssets.find({ dirs: ['SHIPS'], roles: ['sprite'], minW: 24 }));
             const layers = [await makeLayer(bg, { fit: 'cover', alpha: 0.9 })];
             layers.push(await makeLayer(target, {
                 fit: 'native', scale: 2.6, motion: 'drift',
                 params: { sx: 0.6, sy: 0.9, ax: 46, ay: 18 }, fps: 12,
             }));
-            // Plates are pinned to the corners and scaled up so a 40x30
-            // tactical readout reads as a HUD element rather than a speck.
+            // Three, in the corners the captions do not use. Five of them
+            // pinned to every edge was the thing that read as a game HUD
+            // however good the individual plate was.
             const spots = [
-                { x: 0.02, y: 0.04 }, { x: 0.66, y: 0.04 }, { x: 0.02, y: 0.70 },
-                { x: 0.66, y: 0.70 }, { x: 0.34, y: 0.86 },
+                { x: 0.04, y: 0.08 }, { x: 0.70, y: 0.08 }, { x: 0.70, y: 0.66 },
             ];
             const PLATE_W = 0.31, PLATE_H = 0.24;
             for (let i = 0; i < Math.min(plates.length, spots.length); i++) {
@@ -300,7 +313,7 @@ const GNNSceneCompositor = (() => {
             // narrow plate across the frame reads as vertical banding, not a
             // scan line.
             const bar = GNNAssets.pick(GNNAssets.find({
-                dirs: ['SPACE', 'DESIGN'], roles: ['strip', 'chrome'],
+                pool: 'sprite', dirs: ['SPACE'], roles: ['strip'],
             }).filter((e) => e.w >= e.h * 4 && e.w >= 28));
             return {
                 label: 'ORBITAL SURVEY',
@@ -405,8 +418,7 @@ const GNNSceneCompositor = (() => {
         /** Data-centre / cyber: espionage plates behind scrolling chrome. */
         async cyber() {
             const room = GNNAssets.pick(GNNAssets.find({ dir: 'SPIES', roles: ['fullscreen'] }));
-            const rack = GNNAssets.pickMany(GNNAssets.find({
-                dirs: ['SCREENS', 'STARMAP', 'TECHNO'], roles: ['panel'],
+            const rack = GNNAssets.pickMany(schematics({
                 minW: 40, minH: 30, maxNoise: CLEAN_PLATE,
             }), 4);
             const layers = [await makeLayer(room, { fit: 'cover', fps: 10, alpha: 0.9 })];
@@ -469,6 +481,6 @@ const GNNSceneCompositor = (() => {
         BASE_W, BASE_H,
         synthesize, single, makeLayer, draw,
         recipes: () => RECIPE_NAMES.slice(),
-        backdrops, sprites, chrome,
+        backdrops, sprites, schematics,
     };
 })();

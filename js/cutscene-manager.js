@@ -382,6 +382,17 @@ const GNNCutsceneManager = (() => {
         }
     }
 
+    /**
+     * The two captions on a commercial shot: a product name at the top and
+     * a line of copy at the bottom.
+     *
+     * Both used to be slabs. The top one was forced to at least 45% of the
+     * frame width whatever it said, and the bottom one spanned the frame
+     * edge to edge — together about a third of the picture, in translucent
+     * grey, for two short lines of text. They are boxes around words now,
+     * inset from the edges so they read as broadcast furniture rather than
+     * as something pressed against the window frame.
+     */
     function drawBreakCard(ctx, view, shot, elapsed) {
         const card = shot.card;
         if (!card || (!card.top && !card.bottom)) return;
@@ -389,29 +400,65 @@ const GNNCutsceneManager = (() => {
         ctx.imageSmoothingEnabled = false;
         ctx.textBaseline = 'middle';
         const slide = Math.min(1, elapsed / 380);
+        const inset = Math.round(view.w * 0.035);
+        const pad = Math.round(view.w * 0.016);
+
         if (card.top) {
-            const h = Math.round(view.h * 0.11);
-            const w = Math.min(view.w, 40 + ctx.measureText(card.top.slice(0, 34)).width + 40);
+            const text = card.top.slice(0, 34);
+            // Font before measuring. Measured with whatever was left over
+            // from the previous draw, every one of these came out the wrong
+            // width.
             ctx.font = '15px "Press Start 2P", monospace';
-            ctx.fillStyle = 'rgba(4,10,18,0.88)';
-            ctx.fillRect(view.x, view.y + view.h * 0.1,
-                Math.max(w, view.w * 0.45) * slide, h);
+            const w = Math.round(ctx.measureText(text).width) + pad * 2;
+            const h = Math.round(view.h * 0.085);
+            const x = view.x + inset;
+            const y = view.y + Math.round(view.h * 0.10);
+            ctx.fillStyle = 'rgba(4,10,18,0.9)';
+            ctx.fillRect(x, y, Math.round(w * slide), h);
             ctx.fillStyle = '#ffd166';
-            ctx.font = '15px "Press Start 2P", monospace';
-            ctx.fillText(card.top.slice(0, 34), view.x + 18,
-                view.y + view.h * 0.1 + h / 2, view.w - 36);
+            ctx.fillRect(x, y, Math.max(2, Math.round(w * 0.006)), h);
+            ctx.fillText(text, x + pad, y + h / 2);
         }
+
         if (card.bottom) {
-            const h = Math.round(view.h * 0.16);
-            const y = view.y + view.h * 0.7;
-            ctx.fillStyle = 'rgba(4,10,18,0.88)';
-            ctx.fillRect(view.x, y, view.w * slide, h);
-            ctx.fillStyle = shot.beat.kind === 'legal' ? '#8ea4b8' : '#9fe6ff';
-            ctx.font = (shot.beat.kind === 'legal' ? '9px' : '12px') + ' "Press Start 2P", monospace';
-            wrapInto(ctx, card.bottom, view.x + 18, y + 16, view.w - 36,
-                shot.beat.kind === 'legal' ? 14 : 18, 3);
+            const legal = shot.beat.kind === 'legal';
+            ctx.font = (legal ? '9px' : '12px') + ' "Press Start 2P", monospace';
+            const lh = legal ? 14 : 18;
+            const maxW = Math.round(view.w * 0.52);
+            const lines = wrapLines(ctx, card.bottom, maxW - pad * 2, 3);
+            let widest = 0;
+            for (const ln of lines) widest = Math.max(widest, ctx.measureText(ln).width);
+            const w = Math.round(widest) + pad * 2;
+            const h = lines.length * lh + pad;
+            const x = view.x + inset;
+            const y = view.y + view.h - inset - h;
+            ctx.fillStyle = 'rgba(4,10,18,0.9)';
+            ctx.fillRect(x, y, Math.round(w * slide), h);
+            ctx.fillStyle = legal ? '#8ea4b8' : '#9fe6ff';
+            for (let i = 0; i < lines.length; i++) {
+                ctx.fillText(lines[i], x + pad, y + pad / 2 + lh / 2 + i * lh);
+            }
         }
         ctx.restore();
+    }
+
+    /** Wrap to a width, capped at `max` lines. */
+    function wrapLines(ctx, text, width, max) {
+        const words = String(text || '').split(/\s+/);
+        const out = [];
+        let line = '';
+        for (const word of words) {
+            const probe = line ? line + ' ' + word : word;
+            if (ctx.measureText(probe).width > width && line) {
+                out.push(line);
+                if (out.length >= max) return out;
+                line = word;
+            } else {
+                line = probe;
+            }
+        }
+        if (line && out.length < max) out.push(line);
+        return out;
     }
 
     function wrapInto(ctx, text, x, y, maxW, lh, maxLines) {

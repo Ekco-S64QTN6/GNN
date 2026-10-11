@@ -52,7 +52,7 @@ const GNNRenderer = (() => {
     // frame, so the layout survives a change of resolution.
     // Small and high, clear of the heads: the anchors' faces start around
     // 0.33 of the frame and this used to run to 0.41 across the third seat.
-    const ICON = { x: 0.755, y: 0.075, w: 0.175, h: 0.215 };
+    const ICON = { x: 0.775, y: 0.072, w: 0.152, h: 0.187 };
 
     let canvas = null;
     let ctx = null;
@@ -151,7 +151,6 @@ const GNNRenderer = (() => {
         GNNCutsceneManager.render(c, { x: 0, y: 0, w: VIEW.w, h: VIEW.h }, now);
 
         if (!breakActive) {
-            GNNTextEngine.renderChyron(c, { x: 0, y: 0, w: VIEW.w, h: VIEW.h });
         }
         if (!breakActive) drawFurniture(c, now);
         GNNTickerManager.render(c, { x: 0, y: 0, w: VIEW.w, h: VIEW.h });
