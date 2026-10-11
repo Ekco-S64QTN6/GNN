@@ -346,8 +346,12 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   finished picture rather than a set. The existing `set/studio_wide_empty.png`
   is 2.77:1 from before the frame went 16:9, so it is cover-fitted and loses
   its top and bottom — it wants regenerating at the new shape.
-- **`docs/hero.png` and the other README screenshots still show the old CRT
-  layout.** Re-shoot with `tools/capture_docs.py` once the set lands.
+- **The README screenshots still show the old CRT layout.** `capture_docs.py`
+  waits for live wire states, and the feeds return 429 to back-to-back harness
+  runs, so it hangs on a state the director can never reach. It needs driving
+  from injected stories the way the pipeline check does: enqueue four, then
+  wait on READ, a cutaway, BANTER, a fired glitch and a forced break.
+  Everything in those pictures is current except the pictures.
 - **Listen by ear before declaring audio done.** Every metric here has at some
   point said "clean" while the owner could hear a problem.
 - **Voice choice is subjective.** Owner's standing judgement: the edge-tts
@@ -358,6 +362,11 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   One marginal item in 76.
 - `RENDER_FPS` is **20**, not 10.
 - rss2json returns HTTP 429 during back-to-back harness runs. External.
+- **Never put a process pattern in the same command as the text it matches.**
+  `pkill -f` has killed the shell issuing it four times in this project,
+  twice through a heredoc that merely *mentioned* the target filename. Select
+  the pids first with `ps -eo pid,comm,args` filtered on `comm`, then kill
+  those pids.
 - **`pgrep -f <pattern>` matches the shell that is running the check**, so a
   check for leftover processes reports its own command line as a survivor.
   This produced a false "window left behind" and a false "launcher still
