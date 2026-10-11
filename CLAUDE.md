@@ -346,12 +346,11 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   finished picture rather than a set. The existing `set/studio_wide_empty.png`
   is 2.77:1 from before the frame went 16:9, so it is cover-fitted and loses
   its top and bottom — it wants regenerating at the new shape.
-- **The README screenshots still show the old CRT layout.** `capture_docs.py`
-  waits for live wire states, and the feeds return 429 to back-to-back harness
-  runs, so it hangs on a state the director can never reach. It needs driving
-  from injected stories the way the pipeline check does: enqueue four, then
-  wait on READ, a cutaway, BANTER, a fired glitch and a forced break.
-  Everything in those pictures is current except the pictures.
+- `capture_docs.py` **waits for live wire states and hangs** when the feeds
+  return 429 to back-to-back harness runs, because the director never reaches
+  the state it is waiting on. The screenshots in `docs/` were re-shot by
+  driving it instead — enqueue stories, then force the states rather than
+  wait for them. Worth folding back into the tool.
 - **Listen by ear before declaring audio done.** Every metric here has at some
   point said "clean" while the owner could hear a problem.
 - **Voice choice is subjective.** Owner's standing judgement: the edge-tts
