@@ -266,6 +266,23 @@ index.
 
 → **A fix in one stage can remove the input another stage depends on.**
 
+### The mirrored plate came out as a thumbnail, and flipped the badge
+Two faults in one feature.
+
+A whole-image horizontal flip turns the glance the right way and turns the
+station badge into backwards lettering with it. Mirroring **above the neck
+only** and leaving the body alone moves the face and keeps the uniform — the
+same trick that put the badges back after the edit prompts blanked them.
+
+Deriving it part-way through conditioning then put a miniature in the corner
+of its own canvas: the mirrored raw plate went back through the body graft,
+the hero crop and the resize, and came out framed as if it were a different
+picture. It is made from the **finished** plate instead, which is already
+framed, and the only thing left to do to it is the mirror.
+
+→ **Derive a variant from the finished asset, not from the middle of the
+pipeline that made it.**
+
 ### `neck_row` assumed every head has a neck
 A Bulrathi's mane and a Mrrshan's hair run straight into the shoulders, so the
 silhouette only ever widens and `argmin` returned wherever the search started
@@ -383,6 +400,10 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   the state it is waiting on. The screenshots in `docs/` were re-shot by
   driving it instead — enqueue stories, then force the states rather than
   wait for them. Worth folding back into the tool.
+- **A pupil-centroid metric said nine of eleven `listening` plates had no eye
+  turn. It was wrong too** — the regenerated plates visibly turn. Two metrics
+  in a row claimed to see something the owner's eye contradicted, and the eye
+  was right both times. Show a picture before claiming a plate is broken.
 - **A diff percentage cannot tell you whether an edit happened.** The image
   model redraws the whole plate, so 5–27% of every band differs as noise. A
   `listening` band reporting 8.7% changed looked healthy and was the hero

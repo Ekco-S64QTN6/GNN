@@ -243,7 +243,15 @@ RAW_KEEP = os.path.join(ROOT, 'assets', 'generated', '_inbox')
 # the right of whoever is talking. It is made by hand — flip horizontal in
 # an image editor — because mirroring it here from a plate whose eyes never
 # left the camera just produced another copy of the hero.
-STATES = ('desk_hero', 'speaking', 'listening', 'listening_flip')
+STATES = ('desk_hero', 'speaking', 'listening')
+
+# `listening_flip` is not generated or hand-made; it is derived here, by
+# mirroring the head of the listening plate and leaving the body alone.
+#
+# Flipping the whole picture turns the glance the right way and turns the
+# station badge into backwards lettering with it. Mirroring above the neck
+# only, then grafting that onto the hero's body, moves the face and leaves
+# the uniform exactly as it was.
 
 # The cast is drawn at CAST.h of the frame height in renderer.js. Matching
 # it here means the plate is blitted close to 1:1 instead of being scaled
@@ -502,7 +510,8 @@ def do_anchors():
         # has a different bounding box, so the plates came out different
         # sizes and could not be compared, let alone crossfaded.
         hero_box = content_box(hero_im) if hero_im is not None else None
-        for st, src in found.items():
+        work = dict(found)
+        for st, src in work.items():
             im = Image.open(src).convert('RGBA')
             if hero_im is not None and st != 'desk_hero':
                 # Body from the hero, head from the variant.
@@ -530,12 +539,33 @@ def do_anchors():
                 shutil.copy2(src, os.path.join(RAW_KEEP, os.path.basename(src)))
             im.save(dest)
 
-        tops = [m['top'] for m in metrics.values()]
-        heads = [m['head'] for m in metrics.values() if m['head']]
+        # The mirrored listening plate, made from the finished one rather
+        # than part-way through. Mirroring the raw plate and then running it
+        # back through the graft, the hero crop and the resize came out as a
+        # thumbnail in the corner of its own canvas; the conditioned plate is
+        # already framed and the only thing left to do to it is the mirror.
+        done_listen = os.path.join(ANCHOR_OUT, '%s_listening.png' % sid)
+        if os.path.exists(done_listen):
+            lp = Image.open(done_listen).convert('RGBA')
+            neck = neck_row(lp)
+            head = lp.crop((0, 0, lp.width, neck)).transpose(
+                Image.FLIP_LEFT_RIGHT)
+            flip = lp.copy()
+            flip.paste(head, (0, 0))
+            flip.save(os.path.join(ANCHOR_OUT, '%s_listening_flip.png' % sid))
+
+        # `listening` is excluded from the size comparison on purpose. It is
+        # a head turn now, and a turned head is legitimately narrower than a
+        # square-on one — comparing them reported 14% variance and called a
+        # correct plate a failure. The hero and the speaking plate are both
+        # square to camera, so they are the pair worth comparing.
+        square = {k: v for k, v in metrics.items() if k != 'listening'}
+        tops = [m['top'] for m in square.values()] or [0]
+        heads = [m['head'] for m in square.values() if m['head']]
         drift = max(tops) - min(tops)
         scale = (max(heads) / float(min(heads)) - 1) * 100 if heads else 0
-        print('%s: %d of 4 states conditioned to %dpx tall%s'
-              % (sid, len(found), CAST_H,
+        print('%s: %d states at %dpx tall%s'
+              % (sid, len(work), CAST_H,
                  ', %d grafted onto the hero body' % grafted if grafted else ''))
         for st in STATES:
             m = metrics.get(st)
@@ -551,8 +581,6 @@ def do_anchors():
                 if shift is not None and abs(shift) < 1.2:
                     print('   listening: eyeline unchanged (%.1f%%) — worth a '
                           'look; it may be the hero with noise on it' % shift)
-            if 'listening_flip' not in found:
-                print('   listening_flip: absent (mirror the listening plate)')
         if 'desk_hero' not in found or 'speaking' not in found:
             print('   INCOMPLETE: needs at least desk_hero and speaking')
         elif drift > 20 or scale > 8:
