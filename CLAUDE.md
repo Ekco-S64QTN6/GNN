@@ -296,6 +296,26 @@ and not against either end of the search, or a fixed fraction is used.
 the three states came out different sizes and could not be compared, let alone
 crossfaded. One box, taken from the hero, for the whole species.
 
+### Two generations of anchor plate, one set of filenames
+The chest-cropped plates and the full-torso ones both used
+`<sid>_desk_hero.png`, in different directories, and nothing said which was
+which. The full-torso set is canonical and lives in `_inbox/`; the
+chest-cropped set is archived in `_inbox/field/`, where it is the right art
+for a correspondent in the over-the-shoulder monitor.
+
+**Grafting one generation's head onto the other's body does not work.** It
+was worth trying — the old plates carry the expressions and the new ones
+carry the body — and the silhouettes can be aligned to within two pixels,
+which is what the measurement reported. The face still lands at the wrong
+size, because the two generations draw the head with different internal
+proportions: matching the outline does not match the features inside it. No
+rigid scale and offset fixes that. The variants have to be generated from
+the new heroes.
+
+→ **A measurement that says two things match is not the same as them
+matching.** The owner looked at the result and was right; the metric agreed
+with itself and was wrong.
+
 ### The glitch engine queried the catalogue with no pool
 `ghost_signal` and `interference` called `GNNAssets.pick()` and `find()`
 without naming a pool, which reaches past admission entirely — so the ghost

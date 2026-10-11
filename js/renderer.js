@@ -257,7 +257,11 @@ const GNNRenderer = (() => {
     // just above the desk's top edge to read as resting on it — drawn any
     // further up and the desk covers them, which is the whole point of
     // redrawing them.
-    const DESK = { overlap: 0.049, bottom: 0.79 };
+    // 0.015 now the cast has hands. The old 0.049 existed to hide a chest
+    // cropped at the bottom of its plate; with hands there, the hands are
+    // the lowest thing and the desk has to start just under them so they
+    // read as resting on it rather than behind it.
+    const DESK = { overlap: 0.015, bottom: 0.79 };
     const deskTop = () => CAST.seat - DESK.overlap;
 
     /**
