@@ -1,1 +1,1 @@
-{"id":"SPIES/item_18","archive":"SPIES","item":18,"palette":"WINLOSE[0] base","frames":25,"native":[320,200],"animated":true,"role":"fullscreen","pools":[],"ui":0.011,"noise":177,"coverage":0.097}
+{"id":"SPIES/item_18","archive":"SPIES","item":18,"palette":"WINLOSE[0] base","frames":25,"native":[320,200],"animated":true,"role":"fullscreen","pools":["glitch"],"ui":0.011,"noise":177,"coverage":0.097}

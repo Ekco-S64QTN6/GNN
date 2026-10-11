@@ -163,6 +163,17 @@ def pools_for(w, h, coverage, noise, ui, role, colors=64, archive='', item=-1):
                 and colors >= CHROME_MIN_COLORS and coverage >= 0.2)
 
     out = []
+
+    # Deliberate interference. A handful of items decode structurally correct
+    # and chromatically scrambled, and they are the right thing to flash over
+    # a failing broadcast. They are admitted to nothing else, which left the
+    # glitch engine querying the catalogue with no pool at all and pulling up
+    # the galaxy setup screen — Size, Difficulty, Opponents and two buttons —
+    # as a ghost signal.
+    if (noise > 95 and w >= 200 and ui < UI_LIMIT and role != 'blank'
+            and not denied(archive, item, 'glitch')):
+        out.append('glitch')
+
     if ui >= UI_LIMIT or role == 'blank':
         # Chrome is still useful as diegetic screen dressing, just never as
         # footage or as a face.

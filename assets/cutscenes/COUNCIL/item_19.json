@@ -1,1 +1,1 @@
-{"id":"COUNCIL/item_19","archive":"COUNCIL","item":19,"palette":"WINLOSE[0] base","frames":1,"native":[320,200],"animated":false,"role":"fullscreen","pools":[],"ui":0.018,"noise":220,"coverage":0.148}
+{"id":"COUNCIL/item_19","archive":"COUNCIL","item":19,"palette":"WINLOSE[0] base","frames":1,"native":[320,200],"animated":false,"role":"fullscreen","pools":["glitch"],"ui":0.018,"noise":220,"coverage":0.148}

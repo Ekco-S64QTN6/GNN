@@ -296,6 +296,20 @@ and not against either end of the search, or a fixed fraction is used.
 the three states came out different sizes and could not be compared, let alone
 crossfaded. One box, taken from the hero, for the whole species.
 
+### The glitch engine queried the catalogue with no pool
+`ghost_signal` and `interference` called `GNNAssets.pick()` and `find()`
+without naming a pool, which reaches past admission entirely — so the ghost
+flashed up the galaxy setup screen, Size and Difficulty and Opponents and two
+buttons, over a failing broadcast.
+
+The scrambled items it actually wanted were admitted to **nothing**
+(`pools: []`), which is why it was querying raw in the first place. They have
+a pool of their own now — `glitch`, 30 items, noise above 95 and UI score
+under 0.11 — and both faults draw from it, falling back to `broll`.
+
+→ **Constraint 11 is not advice.** An asset consumer that names no pool is
+reading the unadmitted set.
+
 ### Easter eggs pointed at a layout that no longer existed
 Two of the six secrets were hit-tested against literal pixel rects measured
 off the old 960×600 canvas: a globe that is no longer drawn, and an "anchor

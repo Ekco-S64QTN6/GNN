@@ -62,15 +62,15 @@ const GNNGlitch = (() => {
         ghost_signal: {
             weight: 14, ms: [260, 700],
             enter() {
-                // Prefer the chromatically scrambled items: they are useless as
-                // footage and perfect as interference.
-                ghost = GNNAssets.pick({ minW: 120, minCoverage: 0.4 })
-                    || GNNAssets.pick({ minW: 40 });
-                const scrambled = GNNAssets.find({ minW: 200, minCoverage: 0.5 })
-                    .filter((e) => e.noise > 95);
-                if (scrambled.length && Math.random() < 0.7) {
-                    ghost = scrambled[(Math.random() * scrambled.length) | 0];
-                }
+                // Both of these query a pool. Asking the catalogue without
+                // one reaches past admission entirely and brought up the
+                // galaxy setup screen — Size, Difficulty, Opponents and two
+                // buttons — as a ghost signal.
+                //
+                // `glitch` holds the chromatically scrambled items, which
+                // are useless as footage and perfect as interference.
+                ghost = GNNAssets.pick({ pool: 'glitch' })
+                    || GNNAssets.pick({ pool: 'broll', minW: 120 });
                 if (ghost) GNNAssets.loadImage(GNNAssets.heroPath(ghost));
                 GNNAudio.playRole(['chirp', 'zap', 'beep'][(Math.random() * 3) | 0],
                     { gain: 0.45, rate: 1.6 });
@@ -81,11 +81,8 @@ const GNNGlitch = (() => {
         interference: {
             weight: 10, ms: [500, 1400],
             enter(ms) {
-                const scrambled = GNNAssets.find({ minW: 200, minCoverage: 0.4 })
-                    .filter((e) => e.noise > 95);
-                ghost = scrambled.length
-                    ? scrambled[(Math.random() * scrambled.length) | 0]
-                    : GNNAssets.pick({ roles: ['fullscreen'] });
+                ghost = GNNAssets.pick({ pool: 'glitch' })
+                    || GNNAssets.pick({ pool: 'broll', minW: 200 });
                 if (ghost) GNNAssets.loadImage(GNNAssets.heroPath(ghost));
                 GNNAudio.glitchCrush(5, ms);
                 GNNAudio.playRole('rumble', { gain: 0.4, rate: 1.7 });

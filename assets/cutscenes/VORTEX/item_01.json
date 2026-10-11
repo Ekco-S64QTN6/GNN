@@ -1,1 +1,1 @@
-{"id":"VORTEX/item_01","archive":"VORTEX","item":1,"palette":"WINLOSE[0] base","frames":1,"native":[231,51],"animated":false,"role":"panel","pools":["chrome"],"ui":0.0,"noise":267,"coverage":0.492}
+{"id":"VORTEX/item_01","archive":"VORTEX","item":1,"palette":"WINLOSE[0] base","frames":1,"native":[231,51],"animated":false,"role":"panel","pools":["glitch"],"ui":0.0,"noise":267,"coverage":0.492}

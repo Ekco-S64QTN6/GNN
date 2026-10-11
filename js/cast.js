@@ -29,6 +29,9 @@ const GNNCast = (() => {
      * One entry per seat the station can fill.
      *
      *   id          matches the anchor plates in assets/generated/anchors/
+     *   colour      their accent on screen — the caption spine, its tail and
+     *               its cue label, so you can tell who is talking without
+     *               reading a name
      *   name        what a name card would say
      *   role        their billing
      *   voice       the speech model that reads for them
@@ -39,73 +42,73 @@ const GNNCast = (() => {
      */
     const CAST = {
         human: {
-            id: 'human', name: 'Commander Hale', role: 'Lead Anchor',
+            id: 'human', colour: '#e8c87a', name: 'Commander Hale', role: 'Lead Anchor',
             voice: 'am_michael', register: 'formal', mood: 'composed',
             fixation: 'protocol and the chain of command',
             tic: 'Let us be precise about this.',
         },
         mrrshan_f: {
-            id: 'mrrshan_f', name: 'Varr', role: 'Co-Anchor',
+            id: 'mrrshan_f', colour: '#ff9a6c', name: 'Varr', role: 'Co-Anchor',
             voice: 'af_bella', register: 'dry', mood: 'amused',
             fixation: 'what it costs and who is paying',
             tic: 'Which is one way of putting it.',
         },
         mrrshan: {
-            id: 'mrrshan', name: 'Rell', role: 'Trade Desk',
+            id: 'mrrshan', colour: '#ffb347', name: 'Rell', role: 'Trade Desk',
             voice: 'bm_george', register: 'eager', mood: 'distracted',
             fixation: 'tonnage, margins and shipping lanes',
             tic: 'And that is before freight.',
         },
         robot: {
-            id: 'robot', machine: true, name: 'Unit 7', role: 'Station Automation',
+            id: 'robot', colour: '#8fe0ff', machine: true, name: 'Unit 7', role: 'Station Automation',
             voice: 'vox_unit', register: 'flat', mood: 'unbothered',
             fixation: 'the exact figure, to four decimal places',
             tic: 'That is not what the record says.',
         },
         psilon: {
-            id: 'psilon', name: 'Oth', role: 'Science Desk',
+            id: 'psilon', colour: '#9ad7ff', name: 'Oth', role: 'Science Desk',
             voice: 'bm_fable', register: 'academic', mood: 'patient',
             fixation: 'the part everyone else got wrong',
             tic: 'The mechanism is more interesting than the result.',
         },
         bulrathi: {
-            id: 'bulrathi', name: 'Grolm', role: 'Defence Desk',
+            id: 'bulrathi', colour: '#d2a06a', name: 'Grolm', role: 'Defence Desk',
             voice: 'bm_lewis', register: 'blunt', mood: 'sceptical',
             fixation: 'who is lying about their fleet strength',
             tic: 'Somebody is counting wrong.',
         },
         sakkra: {
-            id: 'sakkra', name: 'Ssyth', role: 'Colonies Desk',
+            id: 'sakkra', colour: '#9ede8a', name: 'Ssyth', role: 'Colonies Desk',
             voice: 'bm_daniel', register: 'measured', mood: 'wary',
             fixation: 'how many people actually live there',
             tic: 'The population figure is the story.',
         },
         alkari: {
-            id: 'alkari', name: 'Kesh', role: 'Field Correspondent',
+            id: 'alkari', colour: '#bfe3ff', name: 'Kesh', role: 'Field Correspondent',
             voice: 'bf_emma', register: 'breathless', mood: 'keen',
             fixation: 'being first to say it out loud',
             tic: 'I am told this is still developing.',
         },
         darlok: {
-            id: 'darlok', name: 'The Analyst', role: 'Intelligence Desk',
+            id: 'darlok', colour: '#c79aff', name: 'The Analyst', role: 'Intelligence Desk',
             voice: 'vox_unit', register: 'oblique', mood: 'unreadable',
             fixation: 'what was left out of the statement',
             tic: 'What interests me is the omission.',
         },
         meklar: {
-            id: 'meklar', machine: true, name: 'Foundry-Nine', role: 'Industry Desk',
+            id: 'meklar', colour: '#ff8f5e', machine: true, name: 'Foundry-Nine', role: 'Industry Desk',
             voice: 'vox_unit', register: 'clipped', mood: 'literal',
             fixation: 'throughput and failure rates',
             tic: 'Output is output.',
         },
         silicoid: {
-            id: 'silicoid', name: 'Quarry', role: 'Resources Desk',
+            id: 'silicoid', colour: '#7fe6d2', name: 'Quarry', role: 'Resources Desk',
             voice: 'bf_isabella', register: 'slow', mood: 'immovable',
             fixation: 'the very long view',
             tic: 'This will matter in a century.',
         },
         klackon: {
-            id: 'klackon', name: 'Hive-Liaison', role: 'Labour Desk',
+            id: 'klackon', colour: '#e0d27a', name: 'Hive-Liaison', role: 'Labour Desk',
             voice: 'af_heart', register: 'brisk', mood: 'efficient',
             fixation: 'how many hands it took',
             tic: 'The work was done. That is the report.',
