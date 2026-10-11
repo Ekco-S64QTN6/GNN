@@ -90,10 +90,12 @@ SPECIES = [
 # opaque desk across the bottom of the first batch. The anchor is a cut-out;
 # the desk is a separate plate in front of it.
 POSES = [
-    ('desk_hero', 'upright and square to camera, shoulders level, looking '
-     'straight down the lens, mouth closed, arms down and out of frame',
-     'head and shoulders, chest cropped at the bottom edge of the frame, '
-     'the head occupying the upper middle'),
+    ('desk_hero', 'seated upright and square to camera, shoulders level, '
+     'looking straight down the lens, mouth closed, forearms coming forward '
+     'and hands resting loosely clasped in front of them at the very bottom '
+     'of the frame, as if on a desk that is not drawn',
+     'head, shoulders, chest and hands, cropped just below the hands, the '
+     'head occupying the upper third'),
     ('speaking', 'EDIT: open the mouth as if mid-word. Change nothing else',
      'do not re-pose, re-scale, re-frame, re-light or redraw any other part'),
     # "Turn the eyes slightly" was below what the model will act on: nine of
@@ -336,7 +338,10 @@ def main():
       'Generating them separately gives three subtly different characters and '
       'the crossfade turns into a lurch.\n')
     w('No desk in these: the desk is its own plate, and the anchors sit '
-      'between the room and it.\n')
+      'between the room and it. The hands matter — an anchor with their '
+      'hands on the desk reads as sitting at it, and one cropped at the '
+      'chest reads as standing behind it. Draw the hands resting on nothing; '
+      'the desk arrives under them later.\n')
     for sid, label, look, palette in SPECIES:
         w('### %s\n' % label)
         for pose, pose_desc, framing in POSES:
@@ -344,8 +349,9 @@ def main():
             if pose == 'desk_hero':
                 asset(fname, prompt(
                     'a %s, %s, wearing a GNN-badged broadcast uniform, %s. '
-                    'Head, shoulders and chest only — no desk, no table, no '
-                    'furniture, nothing beneath or in front of the figure'
+                    'No desk, no table, no furniture and no surface under '
+                    'the hands — the hands rest on nothing, and the desk is '
+                    'composited in afterwards'
                     % (label, look, pose_desc),
                     framing, palette,
                     'fully transparent, subject cleanly cut out on empty '

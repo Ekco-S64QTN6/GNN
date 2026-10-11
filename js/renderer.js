@@ -226,7 +226,13 @@ const GNNRenderer = (() => {
     // `seat` is where the plate's bottom edge lands, and the desk is drawn
     // over it: they have to overlap, or the anchors float above the desk
     // with a band of floor showing between.
-    const CAST = { h: 0.34, seat: 0.72 };
+    // Measured off the owner's reference frame by scanning a column through
+    // an anchor: head top at 0.285 of the frame and the desk's top edge at
+    // 0.551, which puts a quarter of the frame on the people and a quarter
+    // on the desk. Ours had the heads starting at 0.38 behind a desk that
+    // began at 0.665 — the camera too close and the desk too low, so they
+    // read as standing behind a counter rather than sitting at one.
+    const CAST = { h: 0.315, seat: 0.60 };
     const SEATS = {
         1: [0.50],
         2: [0.37, 0.63],
@@ -240,7 +246,10 @@ const GNNRenderer = (() => {
     // hazard stripes, the emblem, the part that makes it a news desk — was
     // below the bottom edge. What was left read as a boardroom table a few
     // metres in front of the anchors.
-    const DESK = { overlap: 0.055, bottom: 1.02 };
+    // Bottom at 0.79, matching the reference, which leaves floor visible
+    // below the desk. At 0.90 the desk ran to 35% of the frame against the
+    // reference's 24% and swallowed the people sitting at it.
+    const DESK = { overlap: 0.049, bottom: 0.79 };
     const deskTop = () => CAST.seat - DESK.overlap;
 
     /**
