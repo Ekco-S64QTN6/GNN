@@ -1,28 +1,39 @@
 # Newsroom set — the prompt
 
-The painterly instruction worked: both of the last two came back richly
-shaded rather than flat. Four things did not, and three are my wording.
+## The style, settled
 
-**The station name.** My exclusion list said "no lettering other than a
-station name on the front of the desk" — permission without instruction, so
-one model wrote `STATION NAME` and the other invented `HORIZON NEWS`. It
-has to say what the name is.
+Every version of this I have written has asked for pixel art in some form —
+first "1993 VGA, 320x200 DOS screen", then "crisp clean pixels", then
+"painterly pixel art of the highest craft". All three produced pixel art,
+which is not what the set should be. The cast plates read as high-fidelity
+illustration; a pixel-art room next to them looks like a cheaper asset from
+a different project.
 
-**The desk's back edge.** Grok returned one long straight run, which is what
-two anchors need. Gemini returned a faceted hexagon whose angled segments
-eat the centre. The prompt never said which, so it is a coin toss. The two
-anchors sit at 37% and 63% of the image width and are each about a fifth of
-it wide, so they occupy roughly 27% to 73% — the back edge has to be
-straight and unbroken across all of that.
+The reference point is **Master of Orion 2 or 3, not Master of Orion 1** —
+the pre-rendered look of a space strategy game made a decade later, with
+smooth shading, volumetric light and specular metal. The prompt below says
+that, and excludes pixel art, dithering and retro styling outright rather
+than leaving it to tone.
 
-**The grime.** I asked for "scuffed composite", "worn paint" and
-"weathering", and got rust streaks and a derelict. That was meant to give
-surfaces something to shade; it is the wrong way to do it. Clean surfaces
-with good lighting shade just as richly.
+The cast prompts in `prompts.md` keep their own style line. A face at that
+density reads as deliberate; a room does not.
 
-**The gloom.** "Charcoal and gunmetal", "dark polished composite" and
-low-key lighting gave a room that is mostly black. A news studio is one of
-the most evenly and brightly lit rooms there is.
+## What the last two returns fixed and broke
+
+The painterly instruction did get rich shading rather than flat fills, so
+that half worked. Four other things did not, and three were my wording:
+
+- **The station name** — the exclusion list allowed "a station name" without
+  saying which, so one model wrote `STATION NAME` and the other invented
+  `HORIZON NEWS`. Now specified as GNN / GALACTIC NEWS NETWORK.
+- **The desk's back edge** — Grok returned one straight run, Gemini a
+  faceted hexagon that eats the centre. The anchors occupy 27% to 73% of
+  the image width, so the back edge must be straight across all of it. Now
+  stated in capitals.
+- **The grime** — I asked for "scuffed", "worn paint" and "weathering" to
+  give surfaces something to shade, and got rust streaks.
+- **The gloom** — "charcoal and gunmetal" and low-key lighting gave a room
+  that is mostly black. A news studio is brightly and evenly lit.
 
 ---
 
@@ -31,12 +42,19 @@ the most evenly and brightly lit rooms there is.
 ```
 Create a 1792x1024 image.
 
-Painterly pixel art of the highest craft. Every surface shaded with many
-tones and hand-placed dithering — no flat fills, no large areas of a single
-colour. Clean, well-maintained surfaces: polished metal, brushed steel,
-smoked glass, crisp paint. No rust, no grime, no weathering, no decay.
-Bright, even, confident studio lighting. Dense and deeply detailed, drawn
-with the same care as a finely rendered character portrait.
+Detailed digital illustration of a science-fiction interior, in the manner
+of pre-rendered art from an early-2000s space strategy game — the
+generation after Master of Orion 1, not that game. Smooth rich shading with
+real gradients, volumetric light, specular highlights on metal, and
+reflections. High fidelity and finely detailed, the quality of a modern
+game's concept art.
+
+Not pixel art. No visible pixel grid, no dithering, no chunky blocks, no
+retro or 8-bit or 16-bit styling.
+
+Clean, well-maintained surfaces: polished metal, brushed steel, smoked
+glass, crisp paint. No rust, no grime, no weathering, no decay. Bright,
+even, confident studio lighting.
 
 The set of a science-fiction television news studio, brightly lit,
 photographed head-on from a camera at seated eye level. No people anywhere.
@@ -88,7 +106,8 @@ Every pane of the window is a flat area of pure black, showing nothing at
 all — no stars, no planet, no nebula, no glow. Nothing else in the room may
 be pure black.
 
-Do not include: rust, grime, weathering, decay, dim or moody lighting, flat
+Do not include: pixel art, dithering, visible pixels, retro 8-bit or 16-bit
+styling, rust, grime, weathering, decay, dim or moody lighting, flat
 untextured surfaces, large areas of a single colour, any lettering anywhere
 except GNN and GALACTIC NEWS NETWORK on the front of the desk, people,
 chairs, control consoles, counters or any furniture other than the one
