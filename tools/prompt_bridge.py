@@ -49,6 +49,11 @@ NEGATIVE = ('captions, headlines, tickers, labels, letters, numbers or '
 NEGATIVE_UNIFORM = ('captions, headlines, tickers, labels or lettering '
                     'anywhere other than the small GNN badge on the uniform, '
                     + _NEG_BASE)
+# A news desk carries its station's name; that is furniture, not a headline,
+# and it never changes, so baking it in costs nothing.
+NEGATIVE_DESK = ('captions, headlines, tickers or lettering anywhere other '
+                 'than the station name on the front of the desk, '
+                 + _NEG_BASE)
 
 PALETTES = {
     'military': 'cold steel blues and gunmetal greys, hazard amber accents',
@@ -193,16 +198,24 @@ SET = [
      'the viewport opening is a flat area of pure black, showing nothing at '
      'all — no stars, no planet, no light'),
     ('desk_oval_front',
-     'a television news desk seen dead level from the front at seated eye '
-     'height, so that only its front face is visible and none of its top '
-     'surface. A broad shallow slab: a dark front panel with a lit strip '
-     'along its upper edge, a recessed blank plate in the centre for a '
-     'station emblem, and a narrow lip of brushed metal along the very top. '
-     'Much wider than it is tall. The desk only, nothing behind or on it',
+     'a wide television news desk seen from slightly above, so that both its '
+     'dark slate top surface and its front face are visible — the top reads '
+     'as a shallow receding plane with a pale bevelled lip along its front '
+     'edge, which is what makes it look solid rather than like a painted '
+     'wall. A broad trapezoid: the ends taper inward toward the floor and '
+     'show a thin angled return, so the desk has thickness and depth. The '
+     'front face is brushed pale metal carrying three horizontal lit strips '
+     'along its upper edge — rose, pale green and lavender, left to right — '
+     'a large recessed dark panel in the centre reading GNN in bold letters '
+     'with GALACTIC NEWS NETWORK small beneath it, a smaller recessed '
+     'readout panel either side of it with faint glowing text and a coloured '
+     'outline, pale vertical ribs at both ends and flanking the centre '
+     'panel, and small vent grilles at the bottom corners. The desk only, '
+     'nothing behind it and nothing resting on it',
      'station',
-     'front elevation, filling the width of the frame and only the lower '
-     'third of its height, seen straight on with no perspective on the top '
-     'surface',
+     'seen from a camera a little above desk height and straight on, the '
+     'desk filling the width of the frame, its top surface occupying the '
+     'upper quarter of the shape and the front face the rest',
      'transparent background, the desk cleanly cut out'),
     ('console_left',
      'an angled wall-mounted instrument console with rows of small lit square '
@@ -376,10 +389,17 @@ def main():
     w('The window in the back wall must be **flat pure black** — that is what '
       'the engine keys the exterior backdrop into. Nothing else in the room '
       'may be pure black.\n')
+    w('**The desk has to show its top.** A desk drawn flat-on is a painted '
+      'wall: there is nowhere for an anchor to put their hands, and without '
+      'hands on a surface the shot reads as people standing behind a '
+      'counter. The visible top plane and the tapered ends are what sell it '
+      'as furniture in a room.\n')
     for sid, subject, palette, framing, background in SET:
         wide = sid in ('studio_wide_empty', 'desk_oval_front')
         asset('set/%s.png' % sid,
               prompt(subject, framing, palette, background,
+                     negative=(NEGATIVE_DESK if sid == 'desk_oval_front'
+                               else None),
                      size=LANDSCAPE if wide else SQUARE,
                      transparent=sid != 'studio_wide_empty'))
 

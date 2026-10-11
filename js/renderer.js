@@ -249,6 +249,15 @@ const GNNRenderer = (() => {
     // Bottom at 0.79, matching the reference, which leaves floor visible
     // below the desk. At 0.90 the desk ran to 35% of the frame against the
     // reference's 24% and swallowed the people sitting at it.
+    // `overlap` is how far the desk is drawn up over the anchors. 0.049
+    // hides a chest cropped at the bottom of its plate, which is what the
+    // current cast art is.
+    //
+    // When the cast is regenerated with hands, this wants to go to roughly
+    // zero. The hands are the lowest thing on the plate and have to land
+    // just above the desk's top edge to read as resting on it — drawn any
+    // further up and the desk covers them, which is the whole point of
+    // redrawing them.
     const DESK = { overlap: 0.049, bottom: 0.79 };
     const deskTop = () => CAST.seat - DESK.overlap;
 

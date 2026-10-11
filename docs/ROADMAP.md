@@ -188,6 +188,26 @@ realtime. It is flatter than a commercial engine; that is a known, accepted
 tradeoff. If voice quality is revisited, isolate it as its own task with
 benchmarked before/after recordings — not mixed into a feature refactor.
 
+## Hands on the desk
+
+The reference frames the owner produced get three things right that the
+current build does not, and two are fixed: the camera is pulled back and the
+desk is tall enough to sit at. The third is that the anchors' hands rest on
+the desk, and that needs art.
+
+The prompts are updated for it. The anchor plates now ask for forearms
+forward and hands loosely clasped at the bottom edge, resting on nothing —
+no desk in the plate, because the desk is composited under them. The desk
+asks for its top surface to be visible as a receding plane with a bevelled
+front lip, tapered ends and a thin angled return, which is what makes it
+furniture rather than a painted wall.
+
+When those land, `DESK.overlap` in `renderer.js` goes from 0.049 to roughly
+zero. It exists to hide a chest cropped at the bottom of its plate; with
+hands there, the hands are the lowest thing and have to sit just above the
+desk's top edge. Drawn any further up, the desk covers them and the
+regeneration was for nothing.
+
 ## The rest of the cast
 
 Decided while watching the two-anchor desk run, and recorded so it is not

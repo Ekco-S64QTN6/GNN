@@ -448,6 +448,8 @@ The room the anchors sit in, as separate layers: the engine draws the room, then
 
 The window in the back wall must be **flat pure black** — that is what the engine keys the exterior backdrop into. Nothing else in the room may be pure black.
 
+**The desk has to show its top.** A desk drawn flat-on is a painted wall: there is nowhere for an anchor to put their hands, and without hands on a surface the shot reads as people standing behind a counter. The visible top plane and the tapered ends are what sell it as furniture in a room.
+
 #### `set/studio_wide_empty.png`
 
 Save the result as `assets/generated/set/studio_wide_empty.png`.
@@ -467,9 +469,9 @@ Save the result as `assets/generated/set/desk_oval_front.png`.
 ```
 Create a 1792x1024 image with a fully transparent background.
 
-1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a television news desk seen dead level from the front at seated eye height, so that only its front face is visible and none of its top surface. A broad shallow slab: a dark front panel with a lit strip along its upper edge, a recessed blank plate in the centre for a station emblem, and a narrow lip of brushed metal along the very top. Much wider than it is tall. The desk only, nothing behind or on it. Framing: front elevation, filling the width of the frame and only the lower third of its height, seen straight on with no perspective on the top surface. Palette: muted teal and bone white, warning-stripe yellow. Background: transparent background, the desk cleanly cut out.
+1993 VGA pixel art, 256-colour DOS-era palette, Master of Orion 1 aesthetic, chunky visible pixels as if drawn for a 320x200 DOS screen, painterly pixel dithering, hand-placed pixels, no photographic detail. a wide television news desk seen from slightly above, so that both its dark slate top surface and its front face are visible — the top reads as a shallow receding plane with a pale bevelled lip along its front edge, which is what makes it look solid rather than like a painted wall. A broad trapezoid: the ends taper inward toward the floor and show a thin angled return, so the desk has thickness and depth. The front face is brushed pale metal carrying three horizontal lit strips along its upper edge — rose, pale green and lavender, left to right — a large recessed dark panel in the centre reading GNN in bold letters with GALACTIC NEWS NETWORK small beneath it, a smaller recessed readout panel either side of it with faint glowing text and a coloured outline, pale vertical ribs at both ends and flanking the centre panel, and small vent grilles at the bottom corners. The desk only, nothing behind it and nothing resting on it. Framing: seen from a camera a little above desk height and straight on, the desk filling the width of the frame, its top surface occupying the upper quarter of the shape and the front face the rest. Palette: muted teal and bone white, warning-stripe yellow. Background: transparent background, the desk cleanly cut out.
 
-Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
+Do not include: captions, headlines, tickers or lettering anywhere other than the station name on the front of the desk, modern logos, real-world brand names, photorealistic faces or photographic texture, anti-aliasing, smooth gradients beyond 1993 VGA dithering, watermarks, signatures, 3D renders, airbrushed shading.
 ```
 
 #### `set/console_left.png`
