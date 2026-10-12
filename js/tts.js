@@ -71,6 +71,18 @@ const GNNTTS = (() => {
     let engine = null;
     let cloud = false;
 
+    // True from the moment `speak()` is entered to the moment playback is
+    // actually attempted. The fetch and decode of the clip sit in that
+    // window: locally a few milliseconds, on a cold line a second or more.
+    //
+    // The teleprompter reads this via `waitingForAudio()`. It has to,
+    // because `speaking` goes true at the top of `speak()` while the audio
+    // element has nothing to play yet — so the text engine saw "speaking"
+    // and a null `playbackProgress()`, fell through to its own estimate
+    // timer, and typed several words ahead of the voice. Varr's box filled
+    // up before Varr started talking.
+    let awaitingAudio = false;
+
     let onStart = null;
     let onEnd = null;
 
@@ -156,7 +168,7 @@ const GNNTTS = (() => {
         const el = element();
         el.muted = true;
         const p = el.play();
-        if (p && p.catch) p.catch(() => {});
+        if (p && p.catch) p.catch(() => { });
         el.pause();
         el.muted = false;
         el.currentTime = 0;
@@ -284,8 +296,8 @@ const GNNTTS = (() => {
         if (text.length <= maxChars) return text;
         const head = text.slice(0, maxChars);
         const stop = Math.max(head.lastIndexOf('. '),
-                              head.lastIndexOf('! '),
-                              head.lastIndexOf('? '));
+            head.lastIndexOf('! '),
+            head.lastIndexOf('? '));
         if (stop > maxChars * 0.4) return head.slice(0, stop + 1).trim();
         const space = head.lastIndexOf(' ');
         return (space > 0 ? head.slice(0, space) : head).trim() + '.';
@@ -335,13 +347,19 @@ const GNNTTS = (() => {
 
     function cutElement() {
         if (!audioEl) return;
-        try { audioEl.pause(); } catch (_) {}
-        try { audioEl.removeAttribute('src'); audioEl.load(); } catch (_) {}
+        try { audioEl.pause(); } catch (_) { }
+        try { audioEl.removeAttribute('src'); audioEl.load(); } catch (_) { }
         if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
     }
 
     function stop() {
         const myId = ++requestId;
+        // Whatever happens to the element, we are no longer waiting for it.
+        // If this is not cleared, the teleprompter sits on its hands until
+        // the next line's `speak()` clears it — and if the next line is a
+        // comment from a correspondent with no audio element behind it,
+        // nothing ever does.
+        awaitingAudio = false;
         const wait = duckVoice();
         if (wait) {
             // Only cut if nothing newer has taken the element in the meantime,
@@ -351,7 +369,7 @@ const GNNTTS = (() => {
             cutElement();
         }
         if (typeof window !== 'undefined' && window.speechSynthesis) {
-            try { window.speechSynthesis.cancel(); } catch (_) {}
+            try { window.speechSynthesis.cancel(); } catch (_) { }
         }
         finish();
     }
@@ -370,6 +388,7 @@ const GNNTTS = (() => {
     function finish() {
         if (!speaking) { resolveNow(); return; }
         speaking = false;
+        awaitingAudio = false;
         if (typeof GNNAudio !== 'undefined') GNNAudio.duckUnderVoice(false);
         if (onEnd) onEnd();
         resolveNow();
@@ -395,10 +414,6 @@ const GNNTTS = (() => {
         });
     }
 
-    /**
-     * Speak a line. Always resolves — the broadcast clock never blocks on it.
-     * @returns {Promise<void>}
-     */
     // ---------------------------------------------------------
     // Clip fetching
     // ---------------------------------------------------------
@@ -417,8 +432,8 @@ const GNNTTS = (() => {
 
     function clipKey(clean, opts) {
         return [trimForSynthesis(clean), opts.voice || voice,
-                (opts.pitch !== undefined ? opts.pitch : pitchHz),
-                (opts.rate !== undefined ? opts.rate : ratePct)].join('|');
+        (opts.pitch !== undefined ? opts.pitch : pitchHz),
+        (opts.rate !== undefined ? opts.rate : ratePct)].join('|');
     }
 
     function buildUrl(clean, opts, seq) {
@@ -510,6 +525,10 @@ const GNNTTS = (() => {
         resolveNow();
 
         speaking = true;
+        // We are now waiting for a clip to arrive. Cleared the moment
+        // `el.play()` is called, so the text engine knows not to run ahead
+        // of the voice with its estimate timer.
+        awaitingAudio = true;
         lastLine = { text: clean, opts: opts };
         if (typeof GNNAudio !== 'undefined') {
             GNNAudio.ensureContext();
@@ -525,6 +544,10 @@ const GNNTTS = (() => {
             currentResolve = resolve;
 
             if (available === false) {
+                // Web Speech fallback has no element to wait for. Clear the
+                // flag before the utterance so the text engine starts
+                // typing along with it.
+                awaitingAudio = false;
                 browserFallback(clean, id).then(() => { if (id === requestId) finish(); });
                 return;
             }
@@ -560,6 +583,8 @@ const GNNTTS = (() => {
                 if (!blob) {
                     clearGuard();
                     if (available === false) {
+                        // Same fallback path as above; no element to wait for.
+                        awaitingAudio = false;
                         browserFallback(clean, id).then(() => {
                             if (id === requestId) finish();
                         });
@@ -573,6 +598,12 @@ const GNNTTS = (() => {
                     setSource(URL.createObjectURL(blob));
                     el.playbackRate = opts.playbackRate || 1;
                     openVoiceGate();
+                    // We are done waiting. Whatever the browser does with
+                    // this `play()` — succeed, refuse autoplay, refuse
+                    // decode — the text engine should now be running from
+                    // real audio position (or from its own estimate if the
+                    // element never produces a duration).
+                    awaitingAudio = false;
                     const p = el.play();
                     if (p && p.catch) {
                         p.catch(() => {
@@ -581,7 +612,7 @@ const GNNTTS = (() => {
                             // Autoplay still locked — keep the clock honest by
                             // running the segment on the estimated read length.
                             setTimeout(() => { if (id === requestId) finish(); },
-                                       estimateMs(clean));
+                                estimateMs(clean));
                         });
                     }
                 };
@@ -644,6 +675,26 @@ const GNNTTS = (() => {
         }, 12);
     }
 
+    /**
+     * Whether we are between "speak() has been called" and "playback has
+     * actually been attempted".
+     *
+     * `speaking` goes true at the top of `speak()`, well before the clip
+     * has been fetched, decoded, and handed to the audio element. In that
+     * window `playbackProgress()` returns null and there is nothing for a
+     * consumer to read from. `text-engine.js` uses this to decide whether
+     * to pause typing or fall through to its estimate timer.
+     *
+     * Returns false when the browser is on the Web Speech fallback, since
+     * there is no element to wait for — the utterance starts immediately
+     * and the text engine should type along with it.
+     */
+    function waitingForAudio() {
+        if (!speaking) return false;
+        if (available === false) return false;
+        return awaitingAudio;
+    }
+
     return {
         VOICES, speak, prefetch, stop, unlock, getLevel, estimateMs,
         /**
@@ -659,6 +710,13 @@ const GNNTTS = (() => {
             if (!isFinite(d) || d <= 0) return null;
             return Math.max(0, Math.min(1, audioEl.currentTime / d));
         },
+        /**
+         * True while we are still fetching the clip and haven't yet called
+         * play(). Consumers that type to `playbackProgress()` should pause
+         * rather than fall through to an estimate while this is true, or
+         * they will run several words ahead of the voice on a cold line.
+         */
+        waitingForAudio,
         // Exported so a caller can show exactly what will be spoken.
         // The teleprompter used to be handed the whole story while
         // synthesis quietly trimmed it, so on a long read the voice

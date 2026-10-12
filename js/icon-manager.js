@@ -62,13 +62,12 @@ const GNNIconManager = (() => {
     }
 
     /**
-     * Auto-match story text against icon keywords.
-     * Returns the matching definition's label, or null when nothing matches.
+     * Match story text against icon keywords, returning the label.
      *
-     * Separate from matchIcon() because the label is useful on its own — the
-     * rundown uses it as a coarse subject tag — and because it answers even
-     * before the PNGs have finished loading, where matchIcon() can only
-     * return null.
+     * Separate from matchIcon() because the label is useful on its own —
+     * the rundown uses it as a coarse subject tag — and because it answers
+     * even before the PNGs have finished loading, where matchIcon() can
+     * only return null.
      */
     function matchLabel(title = '', description = '') {
         const text = `${title} ${description}`.toLowerCase();
@@ -83,12 +82,19 @@ const GNNIconManager = (() => {
 
     /**
      * Auto-match story text against icon keywords.
-     * Returns matching HTMLImageElement or null.
+     * Returns matching HTMLImageElement, or null when nothing matched.
+     *
+     * There is no fallback. It used to return the STATUS plate whenever a
+     * story matched no keyword — sports, entertainment, anything outside
+     * the twenty-two science and MOO categories — and that plate then sat
+     * on the monitor for the whole of every such story. A blank monitor is
+     * the right default: the icon means "this story is about X", and a
+     * story that is not about any of the twenty-two X's is not about
+     * STATUS.
      */
     function matchIcon(title = '', description = '') {
         const label = matchLabel(title, description);
-        // Default fallback icon when the story matched no keyword at all.
-        return iconImages[label || 'STATUS'] || null;
+        return label ? (iconImages[label] || null) : null;
     }
 
     function getIconByLabel(label) {

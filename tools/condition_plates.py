@@ -507,14 +507,25 @@ def mouth_region(hero, variant):
         return None
     alpha = np.asarray(hero.convert('RGBA'))[:, :, 3] > 128
     d = np.abs(a - b).mean(axis=2) * alpha
+    # The blur has to scale with the plate. It was a flat 4 px, chosen when
+    # plates were 283 px tall; at 216 that smears the mouth proportionally
+    # harder, and the Mrrshan's peak-to-floor ratio fell from 2.6 to 1.9
+    # against a gate of 2.0 — so the detector declined by a hair, her whole
+    # plate was swapped instead of her mouth, and her body moved when she
+    # spoke. A radius in plate-heights holds across any `CAST_H`.
+    radius = max(2.0, d.shape[0] / 70.0)
     blur = np.asarray(Image.fromarray(d.astype(np.uint8)).filter(
-        ImageFilter.GaussianBlur(4)), dtype=float)
+        ImageFilter.GaussianBlur(radius)), dtype=float)
     rows = int(blur.shape[0] * 0.45)          # the head, not the uniform
     head = blur[:rows]
     peak = head.max()
     inside = blur[:rows][alpha[:rows]]
     floor = float(np.median(inside)) if inside.size else 0.0
-    if peak < 20 or peak < floor * 2.0:
+    # The floor is high when the two plates are separate generations that
+    # disagree everywhere, which is exactly the case where swapping whole
+    # plates is worst. 1.8 keeps the mouth as the clear winner without
+    # demanding a quiet background that those pairs will never have.
+    if peak < 20 or peak < floor * 1.8:
         return None
 
     # Centre: the centroid of the hottest two percent, so one stray pixel
@@ -581,6 +592,25 @@ def head_region(hero, variant):
     for i in range(max(0, cut - feather), min(rows, cut + feather)):
         mask[i] = 1.0 - (i - (cut - feather)) / float(2 * feather)
     return np.broadcast_to(mask, (rows, a.shape[1], 1)).copy(), cut
+
+
+def quantise_like(im, ref):
+    """`im` reduced to `ref`'s exact palette.
+
+    Quantising the two independently is what scattered the difference: each
+    gets its own 256 colours, so pixels that were copied verbatim from the
+    hero still come back a palette step away and the whole figure shimmers
+    on every mouth flap. Sharing the hero's palette means a pixel taken
+    from the hero survives the round trip unchanged, and the result cannot
+    exceed 256 colours however much blending went into it.
+    """
+    ref_p = ref.convert('RGB').quantize(colors=256, method=Image.MEDIANCUT)
+    out = im.convert('RGB').quantize(palette=ref_p, dither=Image.Dither.NONE)
+    out = out.convert('RGBA')
+    a = im.convert('RGBA').split()[3].point(lambda v: 255 if v >= 128 else 0)
+    out.putalpha(a)
+    flat = Image.new('RGBA', out.size, (0, 0, 0, 0))
+    return Image.composite(out, flat, a)
 
 
 def swap_region(hero, variant, mask):
@@ -924,7 +954,14 @@ def do_anchors():
                 # (scaling a 216px plate up five and a half times) and
                 # conditioned it again, and the anchor's mouth degraded a
                 # little further every run.
-                out = quantise(out)
+                out = quantise_like(out, hero_p)
+                # Hero verbatim outside the feather, applied last so those
+                # pixels are byte-identical and nothing but the mouth can
+                # move.
+                out = Image.composite(
+                    out, hero_p,
+                    Image.fromarray(((mask[:, :, 0] > 0.02) * 255)
+                                    .astype(np.uint8)))
                 out.save(os.path.join(ANCHOR_OUT, '%s_speaking.png' % sid))
                 moved = int((np.abs(
                     np.asarray(out.convert('RGBA'), int)
@@ -953,7 +990,10 @@ def do_anchors():
             out = Image.composite(
                 out, hero_p,
                 Image.fromarray(((mask[:, :, 0] > 0.02) * 255).astype(np.uint8)))
-            out = quantise(out)
+            out = quantise_like(out, hero_p)
+            out = Image.composite(
+                out, hero_p,
+                Image.fromarray(((mask[:, :, 0] > 0.02) * 255).astype(np.uint8)))
             out.save(os.path.join(ANCHOR_OUT, '%s_%s.png' % (sid, st)))
             moved = int((np.abs(
                 np.asarray(out.convert('RGBA'), int)

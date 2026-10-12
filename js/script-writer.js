@@ -77,6 +77,10 @@ const GNNScript = (() => {
         return line;
     }
 
+    function hasSaidRecently(line) {
+        return recent.indexOf(line) >= 0;
+    }
+
     /**
      * A line from `list` that has not been used recently.
      *
@@ -217,7 +221,6 @@ const GNNScript = (() => {
             .replace(/\{FACTION\}/g, pickFrom(GNNAssets.vocab('races'), 'Psilon'));
     }
 
-    /** A standalone commentary beat delivered between headlines. */
     // ---------------------------------------------------------
     // The show, as a shape
     // ---------------------------------------------------------
@@ -260,6 +263,11 @@ const GNNScript = (() => {
         'More in a moment, including the figures nobody wants to read out.',
     ];
 
+    // Note: this is only one of two back-from-break paths in the codebase.
+    // broadcast-director.js also plays a `signoff()` line in its S.BREAK
+    // case, and when both fire the viewer hears "we now return" followed
+    // by "and we are back" — the second is redundant. The tic append is
+    // gone regardless; see below.
     const OUT_OF_BREAK = [
         'And we are back.',
         'You are still watching G N N.',
@@ -269,10 +277,17 @@ const GNNScript = (() => {
 
     function intoBreak() { return pickFrom(INTO_BREAK, INTO_BREAK[0]); }
 
+    /**
+     * The return-from-break line.
+     *
+     * This used to append the lead anchor's tic 40% of the time. The tic is
+     * a character tell, not a sign-off, and — because the desk is pinned to
+     * Human + Mrrshan, whose tic is "Let us be precise about this" — it was
+     * landing every third return. The line is now the base only. A tic
+     * belongs in banter, where it has a recent-line check around it.
+     */
     function outOfBreak() {
-        const who = lead();
-        const line = pickFrom(OUT_OF_BREAK, OUT_OF_BREAK[0]);
-        return who && chance(0.4) ? `${line} ${who.tic}` : line;
+        return pickFrom(OUT_OF_BREAK, OUT_OF_BREAK[0]);
     }
 
     const SHOW_CLOSE = [
@@ -379,6 +394,13 @@ const GNNScript = (() => {
      * `who` is a cast entry. Without one the line has no owner and the
      * machine pool is left alone, because a line that only a robot can say
      * is worse than a bland one when a person says it.
+     *
+     * The tic branch used to fire on every 8% roll regardless of whether
+     * the tic had already been said, so a broadcast with the same two
+     * anchors at the desk — which is the default — heard the same tic five
+     * or six times an hour. It now skips if the tic is in the recent buffer
+     * and falls through to the next option, which means it can only fire
+     * once per forty lines of banter.
      */
     function banter(story, who) {
         const machine = !!(who && who.machine);
@@ -389,7 +411,9 @@ const GNNScript = (() => {
         }
         if (roll < 0.62) return fillGeneric(pickFrom(CONTEXT_LINES, ''), story);
         if (roll < 0.74) return pickFrom(OPENERS, '');
-        if (roll < 0.82 && who && who.tic) return who.tic;
+        if (roll < 0.82 && who && who.tic && !hasSaidRecently(who.tic)) {
+            return remember(who.tic);
+        }
         const wire = sectorWire(story);
         return wire ? 'From the sector wire. ' + wire : pickFrom(OPENERS, '');
     }
@@ -473,25 +497,29 @@ const GNNScript = (() => {
         const product = chance(0.55)
             ? pickFrom(GNNAssets.vocab('shipclasses'), 'Annihilator') + '-Class'
             : pickFrom(GNNAssets.vocab('stars'), 'Rigel') + ' '
-                + pickFrom(HARDWARE, 'Reactor');
+            + pickFrom(HARDWARE, 'Reactor');
         return {
             brand,
             product,
             beats: [
-                { kind: 'hook', text: pickFrom([
-                    'Deep space is not forgiving.',
-                    'Every empire runs on something.',
-                    'You have questions about the dark.',
-                    'Somewhere out there, a hull is failing.',
-                    'The Council will not save your convoy.',
-                ], 'Deep space is not forgiving.') },
+                {
+                    kind: 'hook', text: pickFrom([
+                        'Deep space is not forgiving.',
+                        'Every empire runs on something.',
+                        'You have questions about the dark.',
+                        'Somewhere out there, a hull is failing.',
+                        'The Council will not save your convoy.',
+                    ], 'Deep space is not forgiving.')
+                },
                 { kind: 'body', text: `${brand} presents the ${product} programme.` },
-                { kind: 'claim', text: pickFrom([
-                    `Rated for ${(2 + (Math.random() * 40) | 0)} standard years of continuous operation.`,
-                    `Now servicing ${(3 + (Math.random() * 60) | 0)} systems across the rim.`,
-                    `Certified by the ${pickFrom(GNNAssets.vocab('races'), 'Psilon')} standards board.`,
-                    `Field-proven at ${pickFrom(GNNAssets.vocab('stars'), 'Antares')}.`,
-                ], 'Field proven.') },
+                {
+                    kind: 'claim', text: pickFrom([
+                        `Rated for ${(2 + (Math.random() * 40) | 0)} standard years of continuous operation.`,
+                        `Now servicing ${(3 + (Math.random() * 60) | 0)} systems across the rim.`,
+                        `Certified by the ${pickFrom(GNNAssets.vocab('races'), 'Psilon')} standards board.`,
+                        `Field-proven at ${pickFrom(GNNAssets.vocab('stars'), 'Antares')}.`,
+                    ], 'Field proven.')
+                },
                 { kind: 'tag', text: `${brand}. ${pickFrom(TAGLINES, 'Built for the long dark.')}` },
                 { kind: 'legal', text: pickFrom(LEGAL, 'Results vary by gravity well.') },
             ],
@@ -505,12 +533,14 @@ const GNNScript = (() => {
             product: 'SECTOR WATCH',
             beats: [
                 { kind: 'hook', text: 'Coming up on the Galactic News Network.' },
-                { kind: 'body', text: pickFrom([
-                    'Sector Watch, with continuous relay coverage.',
-                    'The Colonial Report, every six hours.',
-                    'Deep Survey, from the edge of the mapped dark.',
-                    'Council Floor, gavel to gavel.',
-                ], 'Sector Watch.') },
+                {
+                    kind: 'body', text: pickFrom([
+                        'Sector Watch, with continuous relay coverage.',
+                        'The Colonial Report, every six hours.',
+                        'Deep Survey, from the edge of the mapped dark.',
+                        'Council Floor, gavel to gavel.',
+                    ], 'Sector Watch.')
+                },
                 { kind: 'tag', text: 'Only on G N N.' },
             ],
         };

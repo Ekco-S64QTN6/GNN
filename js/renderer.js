@@ -151,15 +151,15 @@ const GNNRenderer = (() => {
             // gets, or it slides against the glass when the frame resizes.
             if (setPlate && backdrop && setWindow) {
                 const sc = Math.max(VIEW.w / setPlate.width,
-                                    VIEW.h / setPlate.height);
+                    VIEW.h / setPlate.height);
                 const dw = setPlate.width * sc;
                 const dh = setPlate.height * sc;
                 const ox = (VIEW.w - dw) / 2;
                 const oy = (VIEW.h - dh) / 2;
                 c.drawImage(backdrop,
-                            ox + setWindow.x0 * dw, oy + setWindow.y0 * dh,
-                            (setWindow.x1 - setWindow.x0) * dw,
-                            (setWindow.y1 - setWindow.y0) * dh);
+                    ox + setWindow.x0 * dw, oy + setWindow.y0 * dh,
+                    (setWindow.x1 - setWindow.x0) * dw,
+                    (setWindow.y1 - setWindow.y0) * dh);
             }
             if (setPlate) drawCover(c, setPlate, VIEW.w, VIEW.h);
             drawCast(c, frames.anchor);
@@ -331,11 +331,30 @@ const GNNRenderer = (() => {
         // a separate plate drawn over them, just on it when the desk is part
         // of the set and they are drawn over it.
         const seatY = deskPlate ? CAST.seat : DESK_LINE;
-        // Whoever has the chair, not whoever is sitting on the left.
-        const chair = (typeof GNNDirector !== 'undefined' && GNNDirector.activeSeat)
-            ? GNNDirector.activeSeat() % list.length : 0;
+        // Whoever is speaking *this line*, not whoever holds the chair on
+        // the rundown.
+        //
+        // The chair is passed once per story, so for a story read by Hale
+        // then a story read by Varr it moves Hale→Varr→Hale and each anchor
+        // animates in turn. But an exchange between the two, or a two-way
+        // with a correspondent, plays more than one voice inside a single
+        // beat — and the voice belongs to the *line*, not to the story. Using
+        // the chair here made Varr's plate animate on Hale's voice during an
+        // exchange, which is what the desk was doing visibly.
+        //
+        // `activeSeatForLine()` returns the seat of the line's speaker, or
+        // -1 when the line's speaker is not at the desk (a correspondent in
+        // the monitor). -1 means no seat is active and every anchor holds
+        // its listening plate.
+        const chair = (typeof GNNDirector !== 'undefined'
+            && GNNDirector.activeSeatForLine)
+            ? GNNDirector.activeSeatForLine()
+            : ((typeof GNNDirector !== 'undefined' && GNNDirector.activeSeat)
+                ? GNNDirector.activeSeat() : 0);
+        const noActiveSeat = chair < 0;
+        const chairRef = noActiveSeat ? 0 : chair;
         list.forEach((person, i) => {
-            const active = i === chair;
+            const active = !noActiveSeat && i === chairRef;
             let img;
             if (person.frames && person.frames.length) {
                 // A cast member with a real lip matrix — the MOO1 robot has
@@ -352,9 +371,14 @@ const GNNRenderer = (() => {
                 // Listeners turn toward the speaker: the plate as drawn
                 // looks one way, so a seat on the speaker's right wants it
                 // mirrored or it is looking off the side of the set.
+                //
+                // When no seat is active, everyone is a listener and the
+                // mirroring is decided against the middle of the row, since
+                // there is no speaker to turn toward.
+                const turnRef = noActiveSeat ? Math.floor(list.length / 2) : chairRef;
                 img = active
                     ? (open ? person.speaking : person.hero)
-                    : (i > chair ? person.listeningFlip : person.listening);
+                    : (i > turnRef ? person.listeningFlip : person.listening);
             }
             if (!img) return;
             const w = img.width * (h / img.height);

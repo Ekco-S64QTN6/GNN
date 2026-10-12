@@ -121,8 +121,81 @@ const GNNCast = (() => {
      *   stance   how they treat them on air
      *   jab      something `from` says about or to `to`
      *   reply    how `to` answers it, in their own register
+     *
+     * The desk is pinned to Human + Mrrshan for most of the day (see
+     * main.js lineup), so most of the volume lives on that pair — with
+     * only one entry per direction, every exchange between them was the
+     * same two lines, and `exchange()` had nothing to pick from. There
+     * are six in each direction now.
      */
     const RELATIONSHIPS = [
+        // -------- Commander Hale ↔ Varr (the daytime desk) --------
+
+        // Hale on Varr
+        {
+            from: 'human', to: 'mrrshan_f', stance: 'deferential',
+            jab: 'Varr has the floor, if she wants it.',
+            reply: 'I usually do.',
+        },
+        {
+            from: 'human', to: 'mrrshan_f', stance: 'tired',
+            jab: 'You enjoy this.',
+            reply: 'I enjoy the parts where you are wrong.',
+        },
+        {
+            from: 'human', to: 'mrrshan_f', stance: 'careful',
+            jab: 'Correct me if I have that wrong.',
+            reply: 'You have it wrong.',
+        },
+        {
+            from: 'human', to: 'mrrshan_f', stance: 'formal',
+            jab: 'The desk has opinions.',
+            reply: 'One of us does.',
+        },
+        {
+            from: 'human', to: 'mrrshan_f', stance: 'resigned',
+            jab: 'I will take the serious one.',
+            reply: 'You always do.',
+        },
+        {
+            from: 'human', to: 'mrrshan_f', stance: 'measured',
+            jab: 'Varr, in your own time.',
+            reply: 'I was using it.',
+        },
+
+        // Varr on Hale
+        {
+            from: 'mrrshan_f', to: 'human', stance: 'teasing',
+            jab: 'The Commander would like us to be precise about this.',
+            reply: 'I would, yes.',
+        },
+        {
+            from: 'mrrshan_f', to: 'human', stance: 'dry',
+            jab: 'Hale reads it the way it was filed.',
+            reply: 'The way it was written.',
+        },
+        {
+            from: 'mrrshan_f', to: 'human', stance: 'baiting',
+            jab: 'You could just say you do not know.',
+            reply: 'I know.',
+        },
+        {
+            from: 'mrrshan_f', to: 'human', stance: 'sharp',
+            jab: 'Hale. Say the number.',
+            reply: 'Three point six.',
+        },
+        {
+            from: 'mrrshan_f', to: 'human', stance: 'fond',
+            jab: 'The Commander has a statement for us.',
+            reply: 'I do.',
+        },
+        {
+            from: 'mrrshan_f', to: 'human', stance: 'wry',
+            jab: 'There is a version of this where you are right.',
+            reply: 'There is.',
+        },
+
+        // -------- Hale ↔ Unit 7 --------
         {
             from: 'human', to: 'robot', stance: 'cold',
             jab: 'I would rather hear that from someone who has been outside.',
@@ -134,6 +207,13 @@ const GNNCast = (() => {
             reply: 'The record is not the whole of it.',
         },
         {
+            from: 'robot', to: 'human', stance: 'pedantic',
+            jab: 'The record says four decimal places. You said three.',
+            reply: 'I rounded.',
+        },
+
+        // -------- Rell ↔ Varr (one-sided, and stays that way) --------
+        {
             from: 'mrrshan', to: 'mrrshan_f', stance: 'smitten',
             jab: 'Varr put that better than I would have. As usual.',
             reply: 'I put it the only way it goes.',
@@ -144,19 +224,45 @@ const GNNCast = (() => {
             reply: 'I do. I always have them.',
         },
         {
-            from: 'mrrshan_f', to: 'human', stance: 'teasing',
-            jab: 'The Commander would like us to be precise about this.',
-            reply: 'I would, yes.',
+            from: 'mrrshan', to: 'mrrshan_f', stance: 'hopeful',
+            jab: 'Varr, did you see the second relay or shall I read it?',
+            reply: 'Read it. You like reading it.',
         },
+
+        // -------- Grolm ↔ Oth --------
         {
             from: 'bulrathi', to: 'psilon', stance: 'impatient',
             jab: 'Oth will tell us the mechanism. I want the number.',
             reply: 'The number without the mechanism is a rumour.',
         },
         {
+            from: 'psilon', to: 'bulrathi', stance: 'patient',
+            jab: 'Grolm wants the figure. The figure is meaningless without the mechanism.',
+            reply: 'The mechanism can wait. The figure cannot.',
+        },
+
+        // -------- Darlok ↔ Hale --------
+        {
             from: 'darlok', to: 'human', stance: 'needling',
             jab: 'The Commander read the statement. I read what was cut from it.',
             reply: 'We report what was said.',
+        },
+        {
+            from: 'darlok', to: 'human', stance: 'insinuating',
+            jab: 'The statement is three sentences shorter than the draft.',
+            reply: 'The draft is not the statement.',
+        },
+
+        // -------- Quarry ↔ Hive-Liaison --------
+        {
+            from: 'silicoid', to: 'klackon', stance: 'slow',
+            jab: 'The Hive moved faster than the record allows.',
+            reply: 'The record was written by people who were not there.',
+        },
+        {
+            from: 'klackon', to: 'silicoid', stance: 'brisk',
+            jab: 'Quarry will have a view on this in a decade.',
+            reply: 'I have one now. It has not changed.',
         },
     ];
 
@@ -168,11 +274,34 @@ const GNNCast = (() => {
         return RELATIONSHIPS.filter((r) => r.from === aId && r.to === bId);
     }
 
+    // Recently-used exchanges, newest last.
+    //
+    // Without this, a single-entry list returns the same line every time
+    // and a four-entry list repeats every fifth beat. `pickFrom()` in the
+    // script writer does the same job for its own banks; the relationship
+    // table needs its own because `exchange()` is called from a different
+    // path and there is no guarantee the two buffers stay in sync.
+    const exchangeRecent = [];
+    const EXCHANGE_RECENT = 6;
+
+    function rememberExchange(ex) {
+        exchangeRecent.push(ex);
+        while (exchangeRecent.length > EXCHANGE_RECENT) exchangeRecent.shift();
+    }
+
     /** A line `a` can aim at `b`, with `b`'s answer, or null if they have none. */
     function exchange(aId, bId) {
         const opts = between(aId, bId);
         if (!opts.length) return null;
-        return opts[(Math.random() * opts.length) | 0];
+        // Hold the recent half back. On a two-entry list that leaves one
+        // option; on a longer list it picks freely. If everything is held,
+        // fall back to the full list rather than refusing to speak.
+        const blocked = new Set(exchangeRecent);
+        const open = opts.filter((o) => !blocked.has(o));
+        const pool = open.length ? open : opts;
+        const pick = pool[(Math.random() * pool.length) | 0];
+        rememberExchange(pick);
+        return pick;
     }
 
     return { get, all, between, exchange, CAST, RELATIONSHIPS };

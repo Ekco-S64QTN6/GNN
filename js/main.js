@@ -104,13 +104,15 @@
                 GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_listening.png`),
                 GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_listening_flip.png`),
             ]);
-            return hero ? { sid: who.sid, voice: who.voice, hero,
-                            speaking: speaking || hero,
-                            listening: listening || hero,
-                            // Mirrored, for a seat to the right of whoever
-                            // is talking. Falls back to the unmirrored
-                            // plate, which is better than facing away.
-                            listeningFlip: flip || listening || hero } : null;
+            return hero ? {
+                sid: who.sid, voice: who.voice, hero,
+                speaking: speaking || hero,
+                listening: listening || hero,
+                // Mirrored, for a seat to the right of whoever
+                // is talking. Falls back to the unmirrored
+                // plate, which is better than facing away.
+                listeningFlip: flip || listening || hero
+            } : null;
         }))).filter(Boolean);
 
         // What is seen through the studio window. `condition_plates.py`
@@ -200,7 +202,7 @@
                 `BREAK IN ${Math.max(0, r.nextBreakAt - r.sinceBreak)} · ` +
                 `VOICE ${r.speaking ? 'ON' : 'OFF'} · ` +
                 `PROMPT ${Math.round(GNNTextEngine.progress() * 100)}%/${GNNTextEngine.getText().length}c · ` +
-                `FX ${GNNGlitch.activeName() || '—'} · F${frameCount}@${(now/1000).toFixed(0)}s`;
+                `FX ${GNNGlitch.activeName() || '—'} · F${frameCount}@${(now / 1000).toFixed(0)}s`;
         }
 
         if (segmentBadge) {
@@ -391,7 +393,21 @@
     function wireModules() {
         // Single source of truth for the mouth: the voice's own start/end
         // events, not a per-frame poll of the same flag.
-        GNNTTS.onStart = () => GNNAnimator.setSpeaking(true);
+        //
+        // `onStart` asks the director *who* is about to speak, because not
+        // every voice on the wire belongs to somebody at the desk. A remote
+        // two-way plays the correspondent's answering line through the same
+        // voice bus, and until this check existed the animator moved the
+        // anchor's mouth while the correspondent was talking — the anchor's
+        // plate was animating on a voice that did not belong to them.
+        //
+        // `speakerIsSeated()` returns true for anything spoken by an anchor,
+        // false for a correspondent, and true by default outside a two-way,
+        // which is everything else the station plays. `onEnd` is
+        // unconditional: whatever was moving stops.
+        GNNTTS.onStart = () => GNNAnimator.setSpeaking(
+            typeof GNNDirector !== 'undefined' && GNNDirector.speakerIsSeated
+                ? GNNDirector.speakerIsSeated() : true);
         GNNTTS.onEnd = () => GNNAnimator.setSpeaking(false);
 
         GNNFeedManager.onNewItems = (items) => GNNDirector.enqueueAll(items);
@@ -414,30 +430,32 @@
                 secretLog.prepend(li);
                 while (secretLog.children.length > 6) secretLog.lastChild.remove();
             }
-            // Wait for the anchor to finish. Cutting in mid-headline is a
-            // clunky handoff, and the thing being interrupted is a person
-            // reading a sentence, not a buffer — an unlisted transmission
-            // that waits four seconds for a full stop is still eerie, and
-            // one that chops a word in half is just a bug.
-            const air = () => {
+            // Through the director's speech queue, not straight to the TTS.
+            //
+            // This used to poll for the station to stop talking and then
+            // call `GNNTTS.speak()` itself. That poll has a race: if it
+            // expired in the same tick the pump was starting the next line,
+            // the interjection cut the anchor off mid-word. It is why the
+            // station ident was stepped on at first boot exactly once and
+            // then never again on the same build — the timer won the race
+            // that one time.
+            //
+            // Through `interject()` the line waits its turn like anything
+            // else. It plays when the anchor finishes rather than cutting
+            // them off, and the caption presents at the moment its own line
+            // starts, which is what the rest of the station does.
+            if (typeof GNNDirector !== 'undefined' && GNNDirector.interject) {
+                GNNDirector.interject(line, { pitch: -26, rate: -12 });
+            } else {
+                // Director not wired yet — the fallback keeps the secret
+                // audible rather than silently dropping it. Should never
+                // happen in the normal boot order.
                 GNNTextEngine.present(line, {
                     kind: 'wire', cue: '◆ UNLISTED TRANSMISSION',
                     durationMs: 3200,
                 });
                 GNNTTS.speak(line, { pitch: -26, rate: -12 });
-            };
-            const waitStart = performance.now();
-            const poll = () => {
-                const stillTalking = GNNTTS.isSpeaking()
-                    || GNNTextEngine.isTyping();
-                // A hard ceiling, so a stuck line cannot swallow the secret.
-                if (!stillTalking || performance.now() - waitStart > 9000) {
-                    air();
-                } else {
-                    setTimeout(poll, 200);
-                }
-            };
-            poll();
+            }
         };
     }
 

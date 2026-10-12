@@ -78,11 +78,11 @@ const GNNCutsceneManager = (() => {
     const GENERATED = {
         convoy: ['station_trade', 'starship_battle', 'starship_battle_02'],
         tactical: ['starship_battle', 'starship_battle_02', 'planet_invasion',
-                   'planet_invasion_02'],
+            'planet_invasion_02'],
         council: ['council_vote'],
         cyber: ['hacker_code', 'spy_infiltration'],
         anomaly: ['space_vortex', 'space_vortex_02', 'black_hole',
-                  'solar_flare'],
+            'solar_flare'],
         survey: ['black_hole', 'solar_flare', 'asteroid_mining'],
         industry: ['asteroid_mining', 'station_trade'],
         deepfield: ['black_hole', 'space_vortex'],
@@ -142,17 +142,86 @@ const GNNCutsceneManager = (() => {
         return p;
     }
 
+    // ---------------------------------------------------------
+    // Correspondent mouth flap
+    // ---------------------------------------------------------
+    //
+    // The desk's flap lives in GNNAnimator, which is now driven by the
+    // director's "is the desk speaking" flag — a correspondent's line must
+    // not move the anchor's mouth, so the animator is told to stay shut
+    // during a two-way. That leaves the correspondent's own mouth with no
+    // animator, because the animator is a singleton built for the desk.
+    //
+    // So the correspondent has its own small clock here, matched to the
+    // animator's: roughly five flaps a second, shut half shorter than
+    // open, and gated on the voice level so it goes silent between
+    // sentences rather than flapping through a pause.
+    //
+    // The plate is two-state art — hero and speaking — the same way the
+    // cast is, and the layer below swaps between them on this flag.
+    let corrJawOpen = false;
+    let corrJawUntil = 0;
+    let corrVoiceUntil = 0;
+    const CORR_GATE = 0.15;
+
+    function tickCorrespondentMouth(now) {
+        // Only flap the correspondent's mouth while the correspondent is
+        // the one speaking. `GNNTTS.isSpeaking()` is true for the anchor's
+        // question and the anchor's thanks too, so a gate on the voice bus
+        // alone ran the correspondent's mouth through the anchor's lines —
+        // the "alien dude's mouth moving while Commander Hale introduced
+        // him" bug.
+        const dir = (typeof GNNDirector !== 'undefined') ? GNNDirector : null;
+        const speakerNow = dir && dir.speaker ? dir.speaker() : null;
+        const theirTurn = !!(cutaway && cutaway.scene
+            && cutaway.scene.correspondent && speakerNow
+            && speakerNow.id === cutaway.scene.correspondent);
+        const voiceOn = theirTurn
+            && typeof GNNTTS !== 'undefined'
+            && GNNTTS.isSpeaking && GNNTTS.isSpeaking();
+        const level = voiceOn && GNNTTS.getLevel ? GNNTTS.getLevel() : 0;
+        if (voiceOn && level > CORR_GATE) corrVoiceUntil = now + 90;
+        if (now < corrVoiceUntil) {
+            if (now >= corrJawUntil) {
+                corrJawOpen = !corrJawOpen;
+                const hurry = 1 - Math.min(0.5, level);
+                corrJawUntil = now
+                    + (corrJawOpen ? 70 + hurry * 70 : 50 + hurry * 50);
+            }
+        } else {
+            corrJawOpen = false;
+            corrJawUntil = 0;
+        }
+        return corrJawOpen;
+    }
+
     /**
      * A remote two-way: the correspondent in the monitor over a location
      * plate, the way a channel carries a reporter on the ground.
+     *
+     * Loads *both* mouth states. The plate is two-state art, exactly like
+     * the cast — hero and speaking share a pose and differ only at the
+     * mouth — and the layer below swaps between them on a flag `update()`
+     * sets from `tickCorrespondentMouth()`. Loading only the `speaking`
+     * plate, which is what this used to do, gave a correspondent whose
+     * mouth was permanently open and could not be closed or opened.
      *
      * Returns a scene or null. Null means no plate for that character, and
      * the caller simply does not throw to them.
      */
     async function correspondentScene(sid, kind) {
-        const face = await loadCorrespondent(sid, 'speaking')
-            || await loadCorrespondent(sid, 'hero');
-        if (!face) return null;
+        const [hero, speaking] = await Promise.all([
+            loadCorrespondent(sid, 'hero'),
+            loadCorrespondent(sid, 'speaking'),
+        ]);
+        // Fall back to whichever loaded if only one is present, so a
+        // partially-conditioned set still puts a face on air rather than
+        // silently dropping the two-way.
+        const base = hero || speaking;
+        if (!base) return null;
+        const mouthClosed = hero || base;
+        const mouthOpen = speaking || base;
+
         const layers = [];
         const back = (kind && await generatedScene(kind));
         if (back && back.layers[0]) {
@@ -160,13 +229,22 @@ const GNNCutsceneManager = (() => {
             // competing with it.
             layers.push(Object.assign({}, back.layers[0], { alpha: 0.55 }));
         }
+        // Two frames, closed first. `fps: 0` makes the compositor read
+        // `frameIndex`, which `update()` sets every tick. The `mouthSwap`
+        // marker is how it finds this layer without guessing.
         layers.push({
-            entry: null, frames: [face], fps: 0, motion: 'still',
+            entry: null,
+            frames: [mouthClosed, mouthOpen],
+            fps: 0, motion: 'still',
+            frameIndex: 0,
             params: {}, blend: 'source-over', alpha: 1,
             fit: 'contain', rect: null, offset: 0,
+            mouthSwap: true,
         });
-        return { kind: kind || 'interview', layers,
-                 duration: PIP_MS, label: null, correspondent: sid };
+        return {
+            kind: kind || 'interview', layers,
+            duration: PIP_MS, label: null, correspondent: sid
+        };
     }
 
     /** Put a correspondent in the monitor and leave them there. */
@@ -174,8 +252,10 @@ const GNNCutsceneManager = (() => {
         if (breakState) return false;
         const scene = await correspondentScene(sid, kind);
         if (!scene) return false;
-        cutaway = { scene, startedAt: now, duration: 1e9, mode: 'pip',
-                    label: label || null, twoWay: true };
+        cutaway = {
+            scene, startedAt: now, duration: 1e9, mode: 'pip',
+            label: label || null, twoWay: true
+        };
         if (typeof GNNAudio !== 'undefined') {
             GNNAudio.playChord(SCENE_AUDIO.interview);
         }
@@ -247,16 +327,22 @@ const GNNCutsceneManager = (() => {
             case 'ident':
                 return GNNAssets.find({ pool: 'broll', dirs: ['INTRO', 'INTRO2'] });
             case 'hook':
-                return GNNAssets.find({ pool: 'broll',
-                    dirs: ['LANDING', 'STARVIEW', 'VORTEX'], minLum: 24 });
+                return GNNAssets.find({
+                    pool: 'broll',
+                    dirs: ['LANDING', 'STARVIEW', 'VORTEX'], minLum: 24
+                });
             case 'body':
-                return GNNAssets.find({ pool: 'sprite',
-                    dirs: ['SHIPS', 'SHIPS2'], minW: 30 });
+                return GNNAssets.find({
+                    pool: 'sprite',
+                    dirs: ['SHIPS', 'SHIPS2'], minW: 30
+                });
             case 'claim':
                 return GNNAssets.find({ pool: 'broll', dirs: ['TECHNO', 'BACKGRND'] });
             case 'tag':
-                return GNNAssets.find({ pool: 'broll',
-                    dirs: ['SPIES', 'EMBASSY', 'COUNCIL'] });
+                return GNNAssets.find({
+                    pool: 'broll',
+                    dirs: ['SPIES', 'EMBASSY', 'COUNCIL']
+                });
             case 'legal':
                 return GNNAssets.find({ pool: 'broll', dirs: ['BACKGRND', 'INTRO'] });
             default:
@@ -300,7 +386,7 @@ const GNNCutsceneManager = (() => {
     // Deliberately excludes am_michael and af_bella, which are Hale and
     // Varr. If the desk cast changes, this list is the thing to update.
     const AD_VOICES = ['bm_george', 'bm_daniel', 'bm_lewis', 'af_heart',
-                       'bf_emma', 'bf_isabella'];
+        'bf_emma', 'bf_isabella'];
     const LEGAL_VOICE = 'bm_fable';
     let breakVoice = AD_VOICES[0];
 
@@ -315,11 +401,15 @@ const GNNCutsceneManager = (() => {
         // a commercial that ducks its own effects hard stops sounding like a
         // commercial.
         return beat.kind === 'legal'
-            ? { voice: LEGAL_VOICE, rate: 38, pitch: -4,
-                duck: 0.5, duckSfx: 0.55 }
-            : { voice: breakVoice, rate: 0,
+            ? {
+                voice: LEGAL_VOICE, rate: 38, pitch: -4,
+                duck: 0.5, duckSfx: 0.55
+            }
+            : {
+                voice: breakVoice, rate: 0,
                 pitch: beat.kind === 'tag' ? -4 : -2,
-                duck: 0.45, duckSfx: 0.55 };
+                duck: 0.45, duckSfx: 0.55
+            };
     }
 
     function cardFor(beat, script) {
@@ -435,9 +525,30 @@ const GNNCutsceneManager = (() => {
             }
             return;
         }
-        if (cutaway && now - cutaway.startedAt >= cutaway.duration) {
-            lastCutawayEnd = now;
-            cutaway = null;
+        if (cutaway) {
+            // Swap the correspondent's mouth while they are talking.
+            //
+            // The layer holds two plates — hero and speaking — and this is
+            // what picks between them. `tickCorrespondentMouth()` runs its
+            // own clock off the voice level, because the desk's animator is
+            // deliberately shut during a two-way so the anchor watching does
+            // not move their mouth on the correspondent's voice.
+            //
+            // Only two-way cutaways have a mouth-swap layer. Ordinary
+            // b-roll and commercial shots are single-frame or time-driven
+            // and do not need this tick.
+            if (cutaway.twoWay) {
+                tickCorrespondentMouth(now);
+                for (const layer of cutaway.scene.layers) {
+                    if (layer && layer.mouthSwap) {
+                        layer.frameIndex = corrJawOpen ? 1 : 0;
+                    }
+                }
+            }
+            if (now - cutaway.startedAt >= cutaway.duration) {
+                lastCutawayEnd = now;
+                cutaway = null;
+            }
         }
     }
 
@@ -468,7 +579,7 @@ const GNNCutsceneManager = (() => {
         const labelX = dest.x + 8 + ctx.measureText(tag).width + 10;
         ctx.fillStyle = '#9fe6ff';
         ctx.fillText(String(label || '').slice(0, 22), labelX, dest.y + 12,
-                     dest.x + dest.w - 8 - labelX);
+            dest.x + dest.w - 8 - labelX);
         if (sub) {
             ctx.fillStyle = 'rgba(0,0,0,0.72)';
             ctx.fillRect(dest.x + 2, dest.y + dest.h - 20, dest.w - 4, 18);

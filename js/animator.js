@@ -49,7 +49,30 @@ const GNNAnimator = (() => {
         const globeOut = gOverride === null || gOverride === undefined ? globeFrame : gOverride;
 
         // --- Mouth ---
-        const level = (typeof GNNTTS !== 'undefined' && GNNTTS.isSpeaking())
+        //
+        // The level is only read when the desk is the thing speaking.
+        //
+        // Not every voice on the station's voice bus belongs to somebody at
+        // the desk. A remote two-way plays the correspondent's answering
+        // line through the same `GNNTTS.speak()` path, so `GNNTTS.isSpeaking()`
+        // is true and `GNNTTS.getLevel()` returns the correspondent's
+        // amplitude — and until this check existed, the animator read that
+        // and moved the *anchor's* mouth on the correspondent's voice while
+        // the correspondent's own face sat still in the monitor.
+        //
+        // `speaking` is now driven from the director, not from the raw
+        // voice events: `main.js` calls `setSpeaking(GNNDirector.speakerIsSeated())`
+        // on start, so during a correspondent's line it is false. Gating
+        // the level read on it means `smoothed` decays to zero for the
+        // whole of that line, `jawOpen` stays false, `mouthOpen()` returns
+        // false, and the seated anchor's mouth is shut while the
+        // correspondent talks.
+        //
+        // The correspondent's own mouth is animated by the cutscene manager
+        // — see `tickCorrespondentMouth()` in cutscene-manager.js — because
+        // this animator is a singleton built for the desk and cannot serve
+        // two mouths at once.
+        const level = (speaking && typeof GNNTTS !== 'undefined' && GNNTTS.isSpeaking())
             ? GNNTTS.getLevel() : 0;
         // Light smoothing only. Heavier than this and the gaps between
         // words smear shut, which is the thing the gate below exists to

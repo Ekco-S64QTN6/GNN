@@ -1,3 +1,4 @@
+```markdown
 <div align="center">
 
 # GNN — Galactic News Network
@@ -14,7 +15,7 @@ in a studio that keeps the game's archive as its footage library.
 [![Voice](https://img.shields.io/badge/voice-kokoro--82M_local-ff9de2?style=flat-square)](#)
 [![Cast](https://img.shields.io/badge/cast-12_characters_·_11_generated-ffb454?style=flat-square)](#)
 
-<img src="docs/hero.png" alt="The GNN newsroom: two alien anchors at a lit desk reading a live RSS headline, story monitor over one shoulder, commodity crawl along the bottom" width="820">
+<img src="docs/hero.png" alt="The GNN newsroom: two alien anchors at a lit desk reading a live RSS headline, story monitor over one shoulder, market crawl along the bottom" width="820">
 
 </div>
 
@@ -27,9 +28,9 @@ in a studio that keeps the game's archive as its footage library.
 - [Quickstart](#quickstart)
 - [How the broadcast is paced](#how-the-broadcast-is-paced)
 - [Features](#features)
-- [Controls](#controls)
 - [Architecture](#architecture)
 - [The asset pipeline](#the-asset-pipeline)
+- [The generated asset library](#the-generated-asset-library)
 - [Verifying and rebuilding](#verifying-and-rebuilding)
 - [Credits](#credits)
 - [Legal](#legal)
@@ -49,14 +50,22 @@ adds a line of his own, and throws to the next item. Every few stories the desk
 goes away entirely for a commercial break that was storyboarded and voiced at
 runtime. The transmitter fails on a schedule nobody published.
 
-The channel is built on two sources, and it is worth being plain about which
-is which.
+**The news the anchors read is real news.** Real headlines, real summaries,
+real language. The 1993 aesthetic is the studio, the cutaways, the sound and
+the anchors' faces — not a translation layer that turns a tariff ruling into a
+sector trade accord. When a story about an election runs, the anchors say the
+names on the wire. When a market moves, the ticker reports the actual number.
+The MOO1 lore stays where it belongs: in the station idents, the fictional
+commercials, and the easter eggs a viewer finds by looking.
+
+The channel is built on two sources.
 
 **The archive.** Decoded out of the original `.LBX` files: **873 graphics
 items, 4,316 frames, 41 sound effects, 40 music tracks and the 154 news
 bulletins the original in-game anchor read**. It supplies the sound, the
-music, the sector-wire copy, the commercial break footage and the robot who
-still has a real 25-cel lip matrix. The freighter convoys and tactical plots
+music, the cutaway footage, the robot who still has a real 25-cel lip matrix,
+and the easter-egg content — the sector-wire bulletins, the unlisted
+transmissions, the top-of-hour chime. The freighter convoys and tactical plots
 are *composited at runtime* out of parts the game shipped separately.
 
 **The studio.** The set, the eleven generated anchors and correspondents, the
@@ -64,7 +73,7 @@ window backdrops and the story cutaways are generated art, conditioned by
 `tools/condition_plates.py` to the resolution they are drawn at and quantised
 to 256 colours so they cut together with the decoded material rather than
 sitting on top of it looking like a different decade. Every prompt that made
-them is in [`assets/generated/prompts.md`](assets/generated/prompts.md),
+them is in [`assets/generated/Prompts/`](assets/generated/Prompts/),
 regenerated from `tools/prompt_bridge.py`.
 
 The game data itself is **not** in this repository, and is not needed to run
@@ -87,7 +96,7 @@ it. See [Legal](#legal).
 <div align="center">
 <img src="docs/banter.png" width="820" alt="The two anchors at the desk between headlines, one delivering a line of commentary with the station window behind them">
 <br><em>Between headlines the desk talks — to each other, to a correspondent,
-or over a re-pointed 1993 sector-wire bulletin.</em>
+or straight to camera.</em>
 </div>
 
 ---
@@ -103,17 +112,39 @@ cd GNN
 python3.12 -m venv .venv
 .venv/bin/pip install kokoro soundfile edge-tts
 
-./start.sh                    # http://localhost:8080   (Ctrl-C stops it)
+./broadcast.sh                # opens in its own window
 ```
+
+`broadcast.sh` starts the server, opens the station in a dedicated window,
+and takes it off air when that window closes. It is the way to watch the
+channel — the audio path is cleaner than opening the page in a browser tab,
+because the window grants autoplay and gets a straight audio route with no
+browser UI in the middle.
 
 `start.sh` uses `.venv/bin/python` when it exists. Without the venv the app
 still runs — it falls back to `edge-tts` if installed, and to the browser's own
 Web Speech API if not.
 
-Open <http://localhost:8080> and **click once anywhere** — browsers require a
-gesture before any page may make sound.
+Click once anywhere in the window — browsers require a gesture before any page
+may make sound.
+
+### Other ways to open it
+
+```bash
+./broadcast.sh --browser      # force the browser app window
+./broadcast.sh --tab          # plain tab in your default browser
+```
+
+The first is a fallback for systems where the native window is unavailable.
+The second is for the case where you want it inside your normal browsing
+session, at the cost of the cleaner audio path.
 
 ### Going off air
+
+Close the window. That is the whole procedure — `broadcast.sh` catches the
+window closing, stops the server, and cleans up anything the run left behind.
+
+If you started the station some other way:
 
 ```bash
 ./start.sh --bg     # run detached, logging to gnn-server.log
@@ -127,6 +158,9 @@ being a browser, so your own Chromium is never a target. `Ctrl-C` on a
 foreground `start.sh` does the same thing — the server traps `SIGINT`/`SIGTERM`,
 closes the listener and removes its PID file.
 
+These two remain because the test harness drives the server directly and does
+not want a window.
+
 ### Checking the install
 
 ```bash
@@ -137,7 +171,6 @@ python3 tools/verify_assets.py      # prove every asset resolves locally
 **Requirements:** Python 3.8+ and a modern browser. No build step, no bundler,
 no `node_modules`, no external services at runtime. `edge-tts` is the only
 optional dependency; the app falls back to the Web Speech API without it.
-
 ---
 
 ## How the broadcast is paced
@@ -155,8 +188,6 @@ stateDiagram-v2
     HOLD --> TOSS : 42%
     HOLD --> READ
     BANTER --> HOLD
-    WIRE --> HOLD
-    BANTER --> WIRE : 35% of beats
     BANTER --> TWO_WAY : 22% of beats
     TWO_WAY --> HOLD
     TOSS --> READ
@@ -172,16 +203,21 @@ stateDiagram-v2
 
 | Segment | What actually happens |
 | :--- | :--- |
-| **READ** | A live RSS story. The teleprompter types to the *audio element's own playback position*, so the words appear as they are said rather than to an estimate that drifts. A cutaway fires a third of the way in. |
+| **READ** | A live RSS story, read as real news. The teleprompter types to the *audio element's own playback position*, so the words appear as they are said rather than to an estimate that drifts. A cutaway fires a third of the way in. |
 | **HOLD** | **Real dead air.** Voice silent, prompter holding the last line, the anchor's mouth shut, room tone carrying it. 1.5–3.6 s. This is the single biggest difference between a page reading RSS and a channel that is on. |
-| **BANTER** | Commentary on the story just read, or the two anchors talking to each other — a jab and a reply drawn from an asymmetric relationship table, each in its own voice. |
+| **BANTER** | Commentary on the story just read, or the two anchors talking to each other — a jab and a reply drawn from an asymmetric relationship table, each in its own voice. In real-world language, about the real story. |
 | **TWO_WAY** | A remote. A correspondent appears live in the studio monitor; the anchor asks, the reporter answers in their own voice, the anchor thanks them. One portrait rather than a second set. |
-| **WIRE** | One of the **actual 154 `EVENTMSG.LBX` bulletins** the original GNN anchor read, with its placeholders re-pointed at proper nouns and figures mined out of the live story. |
 | **TOSS** | The one-line handoff into the next item. |
 | **BREAK** | A full commercial sequence — see below. |
 | **IDENT** | Station identification. |
 | **SHOW_CLOSE** | End of a block. The lead signs off and names whoever sat with them, and the channel opens a new show rather than reading on forever. |
 | **DRY** | The feed went quiet. The anchor notices, and says so. |
+
+**Sector-wire bulletins are not in the normal rotation.** The 154 `EVENTMSG.LBX`
+bulletins the original in-game anchor read are an easter egg — they fire at the
+top of the hour, from glitch-engine anomalies, from unlisted transmissions. Not
+between real stories. The distinction is the whole point: what the viewer joins
+for is real anchors reading real news, and the archive stays where it belongs.
 
 Breaking-news keywords pre-empt the rundown, sound the klaxon and flash the
 CRT border.
@@ -275,8 +311,9 @@ anomaly · cyber · deepfield` — layer backdrops, sprites and HUD chrome on a
 driven by the story's own keywords. Two runs of the same recipe never look
 alike.
 
-This is what puts the "tiny tactical icons" and "blank UI screens" that earlier
-passes threw away back on air as the moving parts of original footage.
+The composited recipes are the **fallback** for cutaways with no generated
+plate, and the primary source for the two product-hero beats inside a
+commercial break.
 
 </details>
 
@@ -285,10 +322,14 @@ passes threw away back on air as the moving parts of original footage.
 
 A break is a storyboarded 4–6 shot sequence — station ident, hook, product
 hero, spec plate, tag card, legal card — each shot with its own composited
-scene, its own voice-over beat read by the same anchor, its own sound design,
+scene, its own voice-over beat read by its own announcer, its own sound design,
 and a hard cut or a dissolve between them. Sponsor names, product names,
 taglines and legal disclaimers are generated from the game's own vocabulary of
 118 hull classes, 39 star names and 10 races.
+
+This is where the MOO1 pastiche lives in full. The anchors do not sell you a
+hull cleaner between stories; the announcer does, in a spot for a company that
+does not exist, about a product from a decade that never happened.
 
 > *Draconis Cybernetics presents the Annihilator-Class programme.*
 > *Rated for 26 standard years of continuous operation.*
@@ -321,50 +362,55 @@ it on a single cel, bit-crush the audio bus, drag the music like a dying tape
 transport, roll and tear the picture, and punch frames of otherwise-unusable
 artwork into the composite.
 
-The secrets are undocumented on purpose. The studio monitor rewards persistence, the
-anchor's optics reward curiosity, the keyboard remembers 1986, and the top of
-the hour always sounds different.
+The secrets are undocumented on purpose. The studio monitor rewards persistence,
+the anchor's optics reward curiosity, the keyboard remembers 1986, and the top
+of the hour always sounds different.
 
 </details>
 
 ---
 
-## Controls
+## The channel as a channel
 
-| Control | Description |
-| :---: | :--- |
-| **▶ / ⏸** | Run or hold the broadcast |
-| **🔊 / 🔇** | Station audio |
-| **🗣 / 🤐** | The anchor's neural voice |
-| **Voice ▾** | Nine neural voice models, switchable mid-sentence |
-| **⏭** | Next item on the rundown |
-| **📺** | Go to a commercial break now |
-| **⚙** | Inject a breaking bulletin, manage RSS feeds, toggle the crawl |
-| **Canvas** | The globe and the anchor's optics are clickable |
-| **Keyboard** | Listening. |
+GNN does not have a transport bar. It has a broadcast. There is no
+play/pause button, no mute toggle, no voice picker visible on screen — the
+window is the television and the television does not have controls on its
+face.
 
-A live telemetry line under the console reports the current segment, rundown
-depth, stories read, stories until the next break and any active fault.
+Three things respond to the viewer:
+
+- **The canvas is clickable.** The studio monitor and the anchor's face
+  each do something. Discovered by trying.
+- **The keyboard is listening.** Some sequences are remembered. Some words
+  are recognised. The top of the hour is not the only thing that chimes.
+- **`Esc` or `S` opens station configuration.** Feed list, breaking
+  bulletin injection, the panel of unlisted transmissions the station has
+  logged. It closes the same way.
+
+A debugging telemetry line is off by default and enabled through the
+configuration panel. It reports the current segment, rundown depth, stories
+read, stories until the next break and any active fault — useful while
+working, not part of the broadcast.
 
 ---
 
 ## Architecture
 
-No framework, no build step. Fifteen plain-script modules, each with one job.
+No framework, no build step. Sixteen plain-script modules, each with one job.
 
 ```
 js/
 ├── asset-registry.js      manifest queries — nothing else hard-codes a path
 ├── audio-engine.js        sfx/music/voice buses, ducking, glitch DSP
 ├── tts.js                 neural voice client + lip-sync analyser
-├── script-writer.js       banter, wire riffs, ad copy, ticker, chyrons
+├── script-writer.js       banter, ad copy, ticker segments, chyrons
 ├── scene-compositor.js    layered B-roll synthesis (9 recipes, 7 motion models)
 ├── cutscene-manager.js    cutaways + the commercial break sequencer
 ├── broadcast-director.js  the rundown state machine — owns the clock
 ├── text-engine.js         teleprompter + lower-third chyron
 ├── glitch-engine.js       anomalies + easter eggs
 ├── animator.js            viseme lip-sync + globe cel control
-├── ticker-manager.js      seamless commodity crawl
+├── ticker-manager.js      seamless market crawl
 ├── icon-manager.js        over-the-shoulder icon matcher
 ├── feed-manager.js        RSS ingestion, sanitising, importance scoring
 ├── cast.js                who the anchors are: voices, tics, what they
@@ -385,7 +431,7 @@ tears whole rather than per element:
 5  cutaway or commercial break           │  desaturated / ghosted
 6  story caption, the lower third        │  as one picture
 7  LIVE tag and clock                    │
-8  commodity crawl                      ─┘
+8  market crawl                         ─┘
 9  alert border + glitch artefacts
 ```
 
@@ -460,6 +506,25 @@ Full format notes and the manifest schema: **[`assets/README.md`](assets/README.
 
 ---
 
+## The generated asset library
+
+Everything else the studio is made of. Each directory is conditioned by
+`tools/condition_plates.py`, which reads the frame size out of `renderer.js`
+so a change of resolution cannot leave a plate behind.
+
+| Directory | What lives there |
+| :--- | :--- |
+| `anchors/` | Eleven species plus the MOO1 robot. `desk_hero`, `speaking`, `listening`, `listening_flip` per species. |
+| `set/` | Five studio plates — the original plus Markets, Geopolitics/War, Tech and Celebrity. Window panes are keyed out and recorded in `layout.json` so backdrops composite behind the glass. |
+| `cutaways/` | Story plates routed by subject keyword — `starship_battle`, `council_vote`, `hacker_code`, `space_vortex`, `black_hole`, `asteroid_mining`, `station_trade`, `solar_flare`, `spy_infiltration`, `council_summit`, `planet_invasion`, `virus_outbreak`. |
+| `backdrops/` | Exterior views composited into the window opening, four moods across four times of day. |
+| `logos/` | One per show. Not yet wired into the renderer. |
+| `icons/` | Over-the-shoulder story icons. |
+| `titlecards/` | Full-bleed show bumpers. In testing. |
+| `Prompts/` | The prompt files that made all of the above. |
+
+---
+
 ## Verifying and rebuilding
 
 The app ships with `assets/` populated and needs nothing else:
@@ -478,6 +543,7 @@ To regenerate `assets/` you need your own copy of the game at
 python3 tools/extract_all.py     # 22 archives → RGBA frames, manifest, sidecars
 python3 tools/build_audio.py     # SFX profiling + MIDI→OGG
 python3 tools/extract_text.py    # EVENTMSG / NAMES / HELP → moo-strings
+python3 tools/condition_plates.py  # generated art → 256-colour plates at draw size
 python3 tools/prompt_bridge.py   # prompts for art MOO1 cannot supply
 ```
 
@@ -486,7 +552,7 @@ DevTools Protocol, samples the director and screenshots each segment:
 
 ```bash
 python3 tools/drive.py 120 .shot
-# states seen: {'READ': 161, 'HOLD': 33, 'BANTER': 30, 'WIRE': 24, 'BREAK': 23}
+# states seen: {'READ': 161, 'HOLD': 33, 'BANTER': 30, 'TWO_WAY': 24, 'BREAK': 23}
 # console errors: 0, exceptions: 0
 ```
 

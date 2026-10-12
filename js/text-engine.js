@@ -20,16 +20,15 @@ const GNNTextEngine = (() => {
     'use strict';
 
     // The story caption, as a fraction of the frame so it survives a change
-    // of resolution. Sits over the lower left of the set, clear of the name
-    // card, chyron and ticker stacked beneath it.
-    // The lower third. It sits on the bottom of the frame with the ticker
-    // and the live clock, rather than floating in the middle of the set:
-    // three separate boxes stacked up the left-hand side is not a lower
-    // third, it is clutter. `y` is resolved against the bottom stack.
-    // A speech bubble over whoever is talking, not a bar bolted to the
-    // bottom left. It follows the speaker, carries their colour and points
-    // at them, so you can tell who is talking without reading a name. Width
-    // is a fraction of the frame; x comes from the seat.
+    // of resolution.
+    //
+    // Every caption is drawn in the same slot now — a slab along the bottom
+    // of the frame. The bubble that used to sit above the speaker's head,
+    // with a tail pointing at their mouth, is gone: it read as a comic-book
+    // speech balloon, and it kept colliding with the monitor in the corner.
+    //
+    // `PANEL.w` and `PANEL.minW` are kept for reference only; they are no
+    // longer read. Every box is `STATION_BOX` width.
     const PANEL = { w: 0.46, minW: 0.20 };
 
     // The box is born at the width it will always be and two lines tall, and
@@ -44,21 +43,12 @@ const GNNTextEngine = (() => {
     const LINES_MIN = 2;
     const LINES_MAX = 4;
 
-    // Two different things wear this box.
-    //
-    // An anchor talking gets a bubble over their head, in their colour,
-    // labelled with their name. The station talking — a commercial, an
-    // ident, an unlisted transmission — is not any anchor, so it gets a
-    // plain slab under the desk instead of a speech bubble pointing at
-    // someone who is not saying it.
-    const STATION_KINDS = new Set(['ad', 'ident', 'wire', 'promo']);
+    // The bottom slot, shared by every caption: anchor dialogue, station
+    // idents, commercial tosses, unlisted transmissions, correspondents in
+    // the monitor. `y` is the fraction of frame height the box's bottom
+    // edge sits at.
     const STATION_BOX = { y: 0.845, w: 0.56 };
-    // Gap between the bottom of the speech bubble and the speaker's head.
-    //
-    // At 11 the box sat on the commander's hair. The anchors were resized
-    // and reseated after this number was chosen, which moved their heads
-    // up the frame; the bubble followed and ran out of room.
-    const TAIL = 26;
+
     let BOX = { x: 0, y: 0, w: 0, h: 0 };
 
     // Type sizes scale with the frame too; at 1280x720 these land close to
@@ -139,6 +129,27 @@ const GNNTextEngine = (() => {
     function update(now) {
         if (paused || !fullText) return;
         if (visible >= fullText.length) { holding = true; return; }
+
+        // Wait for the audio to actually start before typing anything.
+        //
+        // The director calls `present()` *before* `GNNTTS.speak()`, and
+        // `speak()` does not begin playback until the clip has been fetched
+        // and decoded — locally that is tens of milliseconds, on a cold
+        // line it is a second or more. In that window `playbackProgress()`
+        // returns null (no audio is playing yet) and this function fell
+        // through to its own timer below, typing several words ahead of the
+        // voice. That is what made Varr's box fill up before Varr started
+        // talking.
+        //
+        // Resetting `lastTick` each frame while waiting is deliberate: when
+        // the voice does begin, the timer starts from zero rather than
+        // firing a burst of characters at once to catch up.
+        if (typeof GNNTTS !== 'undefined' && GNNTTS.waitingForAudio
+            && GNNTTS.waitingForAudio()) {
+            lastTick = now;
+            return;
+        }
+
         // Follow the voice when there is one.
         //
         // The clock below paces the type-out from an *estimate* of how long
@@ -188,37 +199,40 @@ const GNNTextEngine = (() => {
     // ---------------------------------------------------------
 
     /**
-     * Where the bubble should point, and in whose colour.
+     * Where the speaker's face is, and in whose colour.
      *
-     * The renderer knows where the cast are drawn and the director knows
-     * which of them has the chair; asking both beats keeping a third copy
-     * of the seating here. Falls back to the middle of the frame, which is
-     * where a station ident or a commercial toss belongs anyway.
+     * Still used for the accent stripe and the label colour, so you can
+     * still tell who is talking at a glance even though the box no longer
+     * sits over their head. The tail that pointed at them is gone.
+     *
+     * `seat: -1` means the line's speaker is not at the desk — a
+     * correspondent in the monitor. The colour falls back to the station
+     * accent and the label reads the cue rather than the (unknown) face.
      */
     function speakerAnchor(ctx) {
         const w = ctx.canvas.width;
         const h = ctx.canvas.height;
-        const mid = { x: Math.round(w * 0.5), y: Math.round(h * 0.42), colour: null };
+        const mid = {
+            x: Math.round(w * 0.5), y: Math.round(h * 0.42),
+            colour: null, seat: -1
+        };
         if (typeof GNNRenderer === 'undefined' || !GNNRenderer.hitRegions) return mid;
         let faces;
         try { faces = GNNRenderer.hitRegions().faces; } catch (err) { return mid; }
         if (!faces || !faces.length) return mid;
-        const chair = (typeof GNNDirector !== 'undefined' && GNNDirector.activeSeat)
-            ? GNNDirector.activeSeat() % faces.length : 0;
+        const chair = (typeof GNNDirector !== 'undefined'
+            && GNNDirector.activeSeatForLine)
+            ? GNNDirector.activeSeatForLine() : 0;
+        if (chair < 0) return mid;
         const f = faces[chair] || faces[0];
         const who = (typeof GNNDirector !== 'undefined' && GNNDirector.speaker)
             ? GNNDirector.speaker() : null;
         return {
             x: Math.round(f.x + f.w / 2),
-            y: Math.round(f.y),               // just above the head
+            y: Math.round(f.y),
             colour: who && who.colour ? who.colour : null,
+            seat: chair,
         };
-    }
-
-    /** The over-the-shoulder monitor, so the bubble can keep out of it. */
-    function monitorRect() {
-        if (typeof GNNRenderer === 'undefined' || !GNNRenderer.hitRegions) return null;
-        try { return GNNRenderer.hitRegions().monitor; } catch (err) { return null; }
     }
 
     /** Resolve the caption's pixel rect against the canvas it is drawn on. */
@@ -226,7 +240,7 @@ const GNNTextEngine = (() => {
         const w = ctx.canvas.width;
         const h = ctx.canvas.height;
         BOX = {
-            x: 0, y: 0, w: Math.round(PANEL.w * w), h: 0,
+            x: 0, y: 0, w: Math.round(STATION_BOX.w * w), h: 0,
         };   // x, y and h are set per frame by render()
         const k = h / 720;
         PADDING = Math.max(8, Math.round(14 * k));
@@ -252,73 +266,54 @@ const GNNTextEngine = (() => {
         if (fullText && visible > 0) {
             ctx.font = `${FONT_SIZE}px "Press Start 2P", monospace`;
             shownLines = wrap(ctx, fullText.substring(0, visible),
-                              BOX.w - PADDING * 2);
+                BOX.w - PADDING * 2);
         }
         // The box is as many lines tall as have been written, never fewer
         // than two and never more than four; past that it scrolls.
         const rows = Math.min(LINES_MAX,
-                              Math.max(LINES_MIN, shownLines.length));
+            Math.max(LINES_MIN, shownLines.length));
         if (shownLines.length > rows) {
             shownLines = shownLines.slice(shownLines.length - rows);
         }
         const bodyH = rows * LINE_HEIGHT;
         BOX.h = (cue ? lead : PADDING) + bodyH + PADDING;
-        BOX.w = Math.round(PANEL.w * ctx.canvas.width);
 
+        // ============================================================
+        // EVERY CAPTION DRAWS IN THE SAME SLOT.
+        //
+        // This block used to branch: a bubble over the speaker's head with
+        // a tail pointing at their mouth, or a station slab along the
+        // bottom. The bubble is gone — it read as a comic-book speech
+        // balloon, collided with the monitor in the corner, and gave a
+        // different box position for every speaker.
+        //
+        // Now every caption uses `STATION_BOX`: centred horizontally, its
+        // bottom edge at `STATION_BOX.y` of the frame height. That is the
+        // same slot the station ident and the third-anchor box already
+        // used, so nothing about the layout is new — only which kinds of
+        // line get it, and now that is all of them.
+        // ============================================================
+        BOX.w = Math.round(STATION_BOX.w * ctx.canvas.width);
+        BOX.x = Math.round((ctx.canvas.width - BOX.w) / 2);
+        BOX.y = Math.round(STATION_BOX.y * ctx.canvas.height - BOX.h);
 
-        // A full-bleed cutaway has no anchor on screen to point at and no
-        // monitor to dodge, so the bubble sat in the middle of the footage.
-        // Treat it like a station message: a bar along the bottom, out of
-        // the picture's way.
-        const overFeed = (typeof GNNCutsceneManager !== 'undefined'
-            && GNNCutsceneManager.isFullCutaway
-            && GNNCutsceneManager.isFullCutaway());
-        const station = STATION_KINDS.has(kind) || overFeed;
-
-        // Place it over the speaker, point it at them, and keep it clear of
-        // both the edges and the story monitor — the bubble ran under the
-        // monitor and both became unreadable.
+        // Colour still follows the speaker when there is one, so you can
+        // tell who is talking at a glance. The station keeps its own.
         const spk = speakerAnchor(ctx);
-        const margin = Math.round(ctx.canvas.width * 0.016);
-        if (station) {
-            BOX.w = Math.round(STATION_BOX.w * ctx.canvas.width);
-            BOX.x = Math.round((ctx.canvas.width - BOX.w) / 2);
-            BOX.y = Math.round(STATION_BOX.y * ctx.canvas.height - BOX.h);
-        } else {
-            let right = ctx.canvas.width - margin;
-            const mon = monitorRect();
-            BOX.y = Math.round(Math.max(margin, spk.y - BOX.h - TAIL));
-            if (mon && BOX.y < mon.y + mon.h) right = Math.min(right, mon.x - 10);
-            BOX.x = Math.round(Math.max(margin,
-                Math.min(right - BOX.w, spk.x - BOX.w / 2)));
-        }
+        const accent = (spk.colour && spk.seat >= 0) ? spk.colour : '#6fc3df';
 
-        // An alert does not repaint the anchor. The red border around the
-        // frame says the station is in an emergency; the person reading it
-        // is still themselves, in their own colour and under their own name.
-        const accent = station ? '#6fc3df' : (spk.colour || '#1f7fa8');
         ctx.fillStyle = 'rgba(4,12,20,0.88)';
         ctx.fillRect(BOX.x, BOX.y, BOX.w, BOX.h);
-        if (!station) {
-            // The tail, aimed at the speaker and clamped inside the bubble
-            // so it never floats off a corner when the bubble is pushed over.
-            const tx = Math.max(BOX.x + 12, Math.min(BOX.x + BOX.w - 12, spk.x));
-            ctx.beginPath();
-            ctx.moveTo(tx - 9, BOX.y + BOX.h);
-            ctx.lineTo(tx + 9, BOX.y + BOX.h);
-            ctx.lineTo(tx, BOX.y + BOX.h + TAIL);
-            ctx.closePath();
-            ctx.fillStyle = 'rgba(4,12,20,0.88)';
-            ctx.fill();
-        }
         ctx.fillStyle = accent;
         ctx.fillRect(BOX.x, BOX.y, Math.max(3, Math.round(BOX.w * 0.012)), BOX.h);
         ctx.fillRect(BOX.x, BOX.y, BOX.w, 2);
+        // No tail. The triangle that used to point at the speaker's mouth
+        // is gone; the accent stripe is what carries the speaker now.
 
         // The label is who is talking. "SECTOR DESK" told the viewer
         // nothing; the anchor's name tells them everything, and it is the
         // only label the cast has ever needed.
-        const who = (!station && typeof GNNDirector !== 'undefined'
+        const who = (spk.seat >= 0 && typeof GNNDirector !== 'undefined'
             && GNNDirector.speaker) ? GNNDirector.speaker() : null;
         const label = who && who.name ? who.name.toUpperCase() : cue;
         if (label) {
@@ -375,9 +370,9 @@ const GNNTextEngine = (() => {
         const h = st ? st.chyronH : 26;
         const y = st ? view.y + st.chyronY
             : view.y + view.h - h - 6
-              - ((typeof GNNTickerManager !== 'undefined'
-                  && GNNTickerManager.isEnabled())
-                  ? GNNTickerManager.BAR_H + 4 : 0);
+            - ((typeof GNNTickerManager !== 'undefined'
+                && GNNTickerManager.isEnabled())
+                ? GNNTickerManager.BAR_H + 4 : 0);
         ctx.fillStyle = 'rgba(6,14,24,0.86)';
         ctx.fillRect(view.x + 8, y, Math.min(view.w - 16, 560), h);
         ctx.fillStyle = kind === 'breaking' ? '#ff3b3b' : '#124a63';

@@ -92,10 +92,6 @@ const GNNDirector = (() => {
     }
 
     // ---------------------------------------------------------
-    // Speech
-    // ---------------------------------------------------------
-
-    // ---------------------------------------------------------
     // Who is reading
     // ---------------------------------------------------------
     //
@@ -106,8 +102,18 @@ const GNNDirector = (() => {
 
     let seatIndex = 0;
 
-    /** The cast entry currently reading, or null before the set has loaded. */
+    /**
+     * The cast entry speaking the current line, or — when the line has no
+     * specific speaker — whoever currently holds the chair on the rundown.
+     *
+     * The distinction matters during an exchange and during a two-way, when
+     * the chair and the speaker of the moment are different people. The
+     * voice was already picked per-line; the caption label and the animating
+     * plate were not, so the two disagreed on screen. Varr's bubble pointed
+     * at Varr while Hale's voice played.
+     */
     function speaker() {
+        if (currentLineSpeaker) return currentLineSpeaker;
         if (typeof GNNRenderer === 'undefined' || !GNNRenderer.seatedIds) return null;
         const ids = GNNRenderer.seatedIds();
         if (!ids.length || typeof GNNCast === 'undefined') return null;
@@ -141,21 +147,67 @@ const GNNDirector = (() => {
     // frame the last one ends and the desk sounds like a machine reading.
     const LINE_GAP_MS = 420;
 
+    // Whether the voice on the wire right now belongs to someone at the
+    // desk. Read by the animator (through `speakerIsSeated()`) so that a
+    // correspondent appearing in the monitor does not move a seated
+    // anchor's mouth. Set at the top of each job in `pump()`.
+    let currentLineDrivesDesk = true;
+
+    // The cast entry speaking the line currently on the air, or null when
+    // the line is being read by the chair (the default for a story, a toss,
+    // plain banter, an ident and a commercial beat). Set at the top of each
+    // job in `pump()`, cleared when the queue empties.
+    let currentLineSpeaker = null;
+
     /**
      * Queue a line.
      *
      * `opts.caption` is the teleprompter payload; it is presented when the
-     * line actually begins. Returns the estimated duration, which callers
-     * use for pacing, not for display timing.
+     * line actually begins.
+     *
+     * `opts.drivesDesk` (default true) says whether this line is spoken by
+     * somebody sitting at the desk — a two-way correspondent answering from
+     * the monitor is not, and their line must not turn the anchor's head or
+     * open the anchor's mouth.
+     *
+     * `opts.speakerId` names the cast entry saying the line, if the caller
+     * knows. It is what makes the caption label, the bubble position and
+     * the animating plate follow the speaker rather than the story's chair.
+     * Omit it when the chair is reading, which is most of the time.
+     *
+     * Returns the estimated duration, which callers use for pacing, not
+     * for display timing.
      */
     function say(text, opts = {}) {
         if (!text) return 0;
         const est = GNNTTS.estimateMs(text);
-        speechQueue.push({ text, opts, est, token: speechToken });
+        speechQueue.push({
+            text, opts, est, token: speechToken,
+            drivesDesk: opts.drivesDesk !== false,
+            speakerId: opts.speakerId || null,
+        });
         speaking = true;
         speechDeadline = performance.now() + est * 2.4 + 8000;
         pump();
         return est;
+    }
+
+    /**
+     * Queue a line that is not on the rundown — an unlisted transmission,
+     * a staff-channel message, the top-of-hour chime.
+     *
+     * Same queue as everything else, so it plays when the anchor finishes
+     * rather than cutting them off. Used by `GNNGlitch.onSecret`. That
+     * handler used to poll for the station to stop talking and then call
+     * `GNNTTS.speak()` itself, which has a race: if the poll expired in the
+     * same tick the pump was starting a line, the interjection cut the
+     * anchor off mid-word. Through the queue it cannot — it waits its turn
+     * like anything else.
+     */
+    function interject(text, opts = {}) {
+        return say(text, Object.assign({
+            caption: { kind: 'wire', cue: '◆ UNLISTED TRANSMISSION' },
+        }, opts));
     }
 
     async function pump() {
@@ -167,8 +219,17 @@ const GNNDirector = (() => {
                 // Dropped if the rundown moved on while it waited.
                 if (job.token !== speechToken) { speechQueue.shift(); continue; }
                 speechQueue.shift();
+                // Set the line's speaker and its drives-desk flag *before*
+                // anything reads them — in particular before the voice
+                // fallback below, which asks `speaker()` and would
+                // otherwise hear the previous line's speaker.
+                currentLineDrivesDesk = job.drivesDesk;
+                currentLineSpeaker = (job.speakerId && typeof GNNCast !== 'undefined')
+                    ? GNNCast.get(job.speakerId) : null;
                 const opts = Object.assign({}, job.opts);
                 delete opts.caption;
+                delete opts.drivesDesk;
+                delete opts.speakerId;
                 if (!opts.voice) {
                     const who = speaker();
                     if (who && who.voice) opts.voice = who.voice;
@@ -190,6 +251,8 @@ const GNNDirector = (() => {
             if (!speechQueue.length) {
                 speaking = false;
                 speechDeadline = 0;
+                currentLineDrivesDesk = true;
+                currentLineSpeaker = null;
             }
         }
     }
@@ -213,6 +276,8 @@ const GNNDirector = (() => {
             speechQueue.length = 0;
             speaking = false;
             speechDeadline = 0;
+            currentLineDrivesDesk = true;
+            currentLineSpeaker = null;
         }
     }
 
@@ -220,6 +285,8 @@ const GNNDirector = (() => {
         speechToken++;
         speechQueue.length = 0;
         speaking = false;
+        currentLineDrivesDesk = true;
+        currentLineSpeaker = null;
         GNNTTS.stop();
     }
 
@@ -409,9 +476,12 @@ const GNNDirector = (() => {
         // this the channel came up mid-rundown with two strangers at a
         // desk already reading a wire story.
         const open = GNNScript.showOpen();
-        const openMs = say(open, { caption: {
-            kind: 'ident', cue: 'STATION IDENT',
-            chyron: 'GALACTIC NEWS NETWORK' } });
+        const openMs = say(open, {
+            caption: {
+                kind: 'ident', cue: 'STATION IDENT',
+                chyron: 'GALACTIC NEWS NETWORK'
+            }
+        });
         GNNAudio.play('intro_sfx_02', { gain: 0.6 });
         const beds = GNNAssets.musicTracks();
         if (beds.length) {
@@ -494,7 +564,9 @@ const GNNDirector = (() => {
         const reply = lines[1];
         const estA = say(jab.text, {
             voice: jab.who.voice, pitch: -3,
-            caption: { kind: 'banter', cue: jab.who.name.toUpperCase() } });
+            speakerId: jab.who.id,
+            caption: { kind: 'banter', cue: jab.who.name.toUpperCase() }
+        });
         // The reply waits for the jab to finish, then speaks in the other
         // anchor's voice. Both lines through `say()` at once would talk
         // over each other — one voice path, one speaker at a time.
@@ -510,8 +582,12 @@ const GNNDirector = (() => {
             if (state !== S.BANTER || speechToken !== myToken || speaking) return;
             const estB = say(reply.text, {
                 voice: reply.who.voice, pitch: -3,
-                caption: { kind: 'banter',
-                           cue: reply.who.name.toUpperCase() } });
+                speakerId: reply.who.id,
+                caption: {
+                    kind: 'banter',
+                    cue: reply.who.name.toUpperCase()
+                }
+            });
             holdUntil = performance.now() + estB + 600;
         }, estA + 350);
         holdUntil = now + estA + 1200;
@@ -523,26 +599,36 @@ const GNNDirector = (() => {
      * three lines go out in order through the speech queue, so the anchor
      * finishes asking before the reporter starts answering — which is the
      * whole reason the queue exists.
+     *
+     * The correspondent's answering line is tagged `drivesDesk: false`, so
+     * the anchor's mouth stays shut while the correspondent talks. It also
+     * carries `speakerId: correspondent.id`, so the caption label reads the
+     * right name and `activeSeatForLine()` can return -1 to tell the
+     * renderer and the text engine that no anchor is speaking.
      */
-    async function beginTwoWay(now) {
+    function beginTwoWay(now) {
         const tw = GNNScript.twoWay();
         if (!tw) return false;
-        const kind = current ? GNNCutsceneManager.routeFor(current) : null;
-        const ok = await GNNCutsceneManager.openTwoWay(
-            tw.correspondent.id, kind, performance.now(),
-            tw.correspondent.name.toUpperCase());
-        if (!ok) return false;
-        banterStreak++;
-        setState(S.BANTER, now);
+        // Queue the three lines first, synchronously, so `speaking` is
+        // true before any frame can run. Then open the cutaway async.
         let total = 0;
         for (const line of tw.lines) {
+            const fromDesk = line.who.id !== tw.correspondent.id;
             total += say(line.text, {
                 voice: line.who.voice,
                 pitch: line.who.id === tw.correspondent.id ? -1 : -3,
-                caption: { kind: 'banter',
-                           cue: line.who.name.toUpperCase() },
+                speakerId: line.who.id,
+                caption: {
+                    kind: 'banter',
+                    cue: line.who.name.toUpperCase()
+                },
+                drivesDesk: fromDesk,
             });
         }
+        const kind = current ? GNNCutsceneManager.routeFor(current) : null;
+        GNNCutsceneManager.openTwoWay(
+            tw.correspondent.id, kind, performance.now(),
+            tw.correspondent.name.toUpperCase());
         // Drop the monitor once the exchange is over, not on a timer.
         drainSpeech(total * 3 + 15000).then(() => {
             if (GNNCutsceneManager.isTwoWay()) GNNCutsceneManager.endCutaway();
@@ -555,7 +641,14 @@ const GNNDirector = (() => {
         // Some anchor beats are a remote two-way, some are the pair
         // talking to each other, the rest a comment on the story.
         if (Math.random() < PACE.twoWayShare) {
-            beginTwoWay(now).then((ok) => { if (!ok) beginPlainBanter(now); });
+            // Reserve BANTER *before* the async two-way opens.
+            // `openTwoWay` awaits image loads; in the meantime the
+            // director's HOLD case would see `!speaking` and fall through
+            // to `nextStory()`, so the two-way played over the top of the
+            // story it was meant to replace.
+            setState(S.BANTER, now);
+            banterStreak++;
+            beginTwoWay(now);
             return;
         }
         if (Math.random() < PACE.exchangeShare && beginExchange(now)) return;
@@ -564,20 +657,32 @@ const GNNDirector = (() => {
 
     function beginPlainBanter(now) {
         const wire = Math.random() < PACE.wireShare;
+        const who = speaker();
         const line = wire ? GNNScript.sectorWire(current)
-            : GNNScript.banter(current, speaker());
+            : GNNScript.banter(current, who);
         if (!line) { beginHold(now, PACE.holdAfterBanter, S.READ); return; }
         banterStreak++;
-        const est = say(line, { pitch: wire ? -6 : -3, caption: {
-            kind: wire ? 'wire' : 'banter',
-            cue: wire ? 'SECTOR WIRE' : 'ANCHOR COMMENT' } });
+        const est = say(line, {
+            pitch: wire ? -6 : -3,
+            // Tagged with the chair, since plain banter is a single-voice
+            // aside from whoever is currently reading.
+            speakerId: who ? who.id : null,
+            caption: {
+                kind: wire ? 'wire' : 'banter',
+                cue: wire ? 'SECTOR WIRE' : 'ANCHOR COMMENT'
+            }
+        });
         if (wire) GNNAudio.playRole('chirp', { gain: 0.3 });
         setState(wire ? S.WIRE : S.BANTER, now);
     }
 
     function beginToss(now) {
         const line = GNNScript.toss();
-        const est = say(line, { caption: { kind: 'banter', cue: '' } });
+        const who = speaker();
+        const est = say(line, {
+            speakerId: who ? who.id : null,
+            caption: { kind: 'banter', cue: '' }
+        });
         setState(S.TOSS, now);
     }
 
@@ -607,10 +712,13 @@ const GNNDirector = (() => {
         // Thrown to the break by whoever has the chair, rather than cutting
         // from a story straight into an advert.
         const toss = GNNScript.intoBreak();
+        const who = speaker();
         // Through the queue like everything else, and *awaited* — the
         // commercials must not start underneath the throw to them.
-        say(toss, { caption: { kind: 'ad', cue: 'COMMERCIAL BREAK',
-                               chyron: '' } });
+        say(toss, {
+            speakerId: who ? who.id : null,
+            caption: { kind: 'ad', cue: 'COMMERCIAL BREAK', chyron: '' }
+        });
         await drainSpeech();
         GNNCutsceneManager.endCutaway();
         let total = 0;
@@ -627,11 +735,18 @@ const GNNDirector = (() => {
         for (let i = 0; i < 400 && GNNCutsceneManager.isBreakActive(); i++) {
             await new Promise((r) => setTimeout(r, 150));
         }
-        // Coming back: the anchor says so. A break that ends by simply
-        // reappearing reads as a dropped signal rather than a return.
-        const back = GNNScript.outOfBreak();
-        const est = say(back, { caption: { kind: 'hold', cue: 'SECTOR DESK' } });
-        beginHold(performance.now(), [est, est + 400], S.READ);
+        // The return from break, once, here.
+        //
+        // This used to fire twice: `update()`'s S.BREAK case played one line
+        // the moment `isBreakActive()` went false, and this continuation
+        // played another. The viewer heard "we now return you to regular
+        // orbital programming" followed by "and we are back" — the second
+        // redundant with the first. The S.BREAK case in `update()` has been
+        // removed; the return belongs to whoever started the break, and that
+        // is this function.
+        const back = GNNScript.signoff();
+        const est = say(back, { caption: { kind: 'ident', cue: 'BACK LIVE' } });
+        beginHold(performance.now(), [est + 600, est + 1200], S.READ);
     }
 
     function beginDry(now) {
@@ -731,15 +846,12 @@ const GNNDirector = (() => {
                 }
                 break;
 
-            case S.BREAK:
-                if (!breakArming && !GNNCutsceneManager.isBreakActive()) {
-                    // One line, spoken and displayed. These used to differ.
-                    const backLive = GNNScript.signoff();
-                    say(backLive, {
-                        caption: { kind: 'ident', cue: 'BACK LIVE' } });
-                    beginHold(now, [1600, 2400], S.READ);
-                }
-                break;
+            // No S.BREAK case. `beginBreak()` owns the return — it is the
+            // function that put the break on air, and it is the one that
+            // knows when the last advert has finished playing. When the
+            // case was here, both it and the continuation played a
+            // back-live line and the viewer heard the same announcement
+            // twice. The state still exists; nothing runs while it is set.
 
             case S.DRY:
                 if (queue.length) { nextStory(now); break; }
@@ -762,13 +874,23 @@ const GNNDirector = (() => {
      */
     function beginShowClose(now) {
         const line = GNNScript.showClose();
-        const est = say(line, { caption: {
-            kind: 'ident', cue: 'SECTOR DESK',
-            chyron: 'GALACTIC NEWS NETWORK' } });
+        // The sign-off is always the lead. `showClose()` names them by
+        // name in the text, so the voice must be theirs too — using
+        // `speaker()` here read the chair, and when the chair happened to
+        // be the co-anchor the station heard Varr introduce herself as
+        // Commander Hale.
+        const seats = GNNScript.desk();
+        const lead = seats[0];
+        const est = say(line, {
+            speakerId: lead ? lead.id : null,
+            voice: lead ? lead.voice : undefined,
+            caption: {
+                kind: 'ident', cue: 'SECTOR DESK',
+                chyron: 'GALACTIC NEWS NETWORK'
+            }
+        });
         storiesRead = 0;
         nextCloseAt = randInt(PACE.storiesPerShow);
-        // Through HOLD, which waits for the sign-off to actually finish
-        // before the next show opens over the top of it.
         beginHold(now, [est + 600, est + 1200], S.COLD_OPEN);
     }
 
@@ -838,9 +960,36 @@ const GNNDirector = (() => {
     return {
         STATES: S, PACE,
         update, enqueueAll, injectBreaking, skip, pause, resume, forceBreak,
-        /** Which seat is reading, for the renderer's lip-sync. */
+        interject,
+        /** Which seat is reading the story, for the rundown's own use. */
         activeSeat: () => seatIndex,
+        /**
+         * Which seat is speaking *this line*, or -1 when the speaker is
+         * not at the desk — a correspondent in the monitor.
+         *
+         * The renderer's hero/speaking swap and the text engine's bubble
+         * position both read this. `activeSeat()` names the chair, which is
+         * who would be speaking if the line were a story; `activeSeatForLine`
+         * names who is actually talking, and during an exchange or a two-way
+         * that is a different person.
+         *
+         * Falls back to the chair when no specific speaker is set, which is
+         * everything outside an exchange or a two-way.
+         */
+        activeSeatForLine: () => {
+            if (!speaking || !currentLineSpeaker) return seatIndex;
+            if (typeof GNNRenderer === 'undefined' || !GNNRenderer.seatedIds) return -1;
+            const ids = GNNRenderer.seatedIds();
+            return ids.indexOf(currentLineSpeaker.id);
+        },
         speaker,
+        /**
+         * Whether the voice currently on the wire belongs to someone at
+         * the desk. The animator reads this — see `js/main.js` — so that a
+         * correspondent appearing in the monitor does not move the mouth
+         * of the anchor watching them.
+         */
+        speakerIsSeated: () => currentLineDrivesDesk,
         isRunning: () => running,
         getState: () => state,
         getCurrent: () => current,

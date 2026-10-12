@@ -1,3 +1,4 @@
+```markdown
 # CLAUDE.md — working notes and verified state
 
 **This file is the single source of truth for what is broken, what is fixed, and
@@ -52,6 +53,14 @@ the metric is the thing to doubt.
 | Cast | 11 generated species + the MOO1 robot, keyed out of his own scene |
 | Characters | `js/cast.js` — 12 profiles, voices and an asymmetric relationship table |
 | Voices | 9 shortlisted by ear, plus `vox_unit` (a DSP robot, not a model) |
+| Anchor variants | all eleven species have `desk_hero` and `speaking`; `listening_flip` not re-derived from the newest plates |
+| Studio sets | five — `studio_wide_empty.png` plus `market_`, `geopolitics_`, `tech_`, `celebrity_wide_empty.png`. The four new ones have black window panes not yet keyed |
+| Cutaways | regenerated; plates in `assets/generated/cutaways/` |
+| Backdrops | generated; full set in `assets/generated/backdrops/` |
+| Show logos | five, in `assets/generated/logos/` — not wired into the renderer |
+| Story icons | regenerating into `assets/generated/icons/`, partial |
+| Prompt library | `assets/generated/Prompts/` — all prompt `.md` files, one per asset class |
+| Speaker attribution | per-line; `activeSeatForLine()` and `speakerIsSeated()` in the director, read by renderer, text engine, animator |
 
 Verify all of it:
 
@@ -619,6 +628,147 @@ shell whose argv mentions the file. Now finds the listener by port.
 It claimed "zero-cloud" while `edge-tts` called Microsoft on every line. Fixed
 by making it true (Kokoro, local) rather than by editing the sentence.
 
+### The same banter line twenty times in one broadcast
+`cast.js` held exactly one relationship between `human` and `mrrshan_f` — the
+pair the desk is pinned to — so `GNNCast.exchange()` had one option. Every
+exchange was that entry. Two other paths reached the same words:
+`banter()` at 8% returned `who.tic` with no recent-line check, and
+`outOfBreak()` at 40% appended `lead().tic`, whose value is *"Let us be
+precise about this."*
+
+Fixed by expanding the table to twelve entries across both directions, adding
+a recency buffer to `GNNCast.exchange()`, gating the `banter()` tic branch on
+a recent-line check, and dropping the tic from `outOfBreak()`.
+
+→ **A short list is not a diverse one.** One option per direction is one
+option, whatever the function that picks from it looks like.
+
+### The break came back twice
+`broadcast-director.js` had two return-from-break paths. `update()`'s
+`S.BREAK` case played one line the moment `isBreakActive()` went false; the
+continuation inside `beginBreak()` — suspended at an `await` while the break
+played — played another when it resumed. Both ran.
+
+Removed the `S.BREAK` case. `beginBreak` owns the return; it is the function
+that put the break on air and knows when the last advert has finished.
+
+→ **One segment, one owner.** If a state can be entered from two places,
+only one of them should be able to leave it.
+
+### The sign-off named the wrong anchor
+`beginShowClose` asked `speaker()` for the voice, which read the chair.
+`showClose()` names `seats[0]` in the text. When the chair happened to be
+Varr, Varr introduced herself as Commander Hale.
+
+Fixed by using `GNNScript.desk()[0]` for both the voice and the `speakerId`.
+
+### The text ran ahead of the voice
+`tts.js` sets `speaking = true` at the top of `speak()`, before the clip is
+fetched and decoded. In that window `playbackProgress()` returns null, and
+`text-engine.js` fell through to its own estimate timer, typing several words
+before the voice arrived.
+
+Added `waitingForAudio()` to `tts.js` — an `awaitingAudio` flag set at
+`speak()` entry, cleared at `el.play()`. `text-engine.js` pauses while it is
+true.
+
+→ **A flag has to be set at the moment it becomes true.** An element-state
+check (`paused`, `readyState`) says nothing during the window that matters,
+when the previous line is still playing and the next one has not been handed
+over.
+
+### The two-way cluster — three causes behind six symptoms
+Owner: *"Grolm's mouth is moving and Varr's mouth moving at the same time...
+the alien dude mouth was moving while commander hale was introducing him...
+sign off was supposed to be commander hale talking but it was varr with var's
+voice."*
+
+**Cause one — the wrong seat was being read.** `GNNDirector.speaker()` and
+`activeSeat()` both answered with the *chair* — whoever's turn it is to read
+the story — not the *line's speaker*. During an exchange or a two-way those
+differ. The voice was correct per line; the caption label and the animating
+plate were not. Fixed by tagging each queued line with a `speakerId`, tracking
+`currentLineSpeaker` in the pump, and exposing `activeSeatForLine()`
+(line-speaker's seat, or `-1` for a correspondent) and `speakerIsSeated()`
+(whether the voice belongs to a desk anchor).
+
+**Cause two — the animator read the level regardless of who was speaking.**
+`GNNAnimator.update()` called `GNNTTS.getLevel()` whenever
+`GNNTTS.isSpeaking()` was true, which it is during a correspondent's answer
+too. Fixed by gating on the animator's own `speaking` flag, which `main.js`
+now drives from `speakerIsSeated()`.
+
+**Cause three — the correspondent's flap ran on the voice bus alone.**
+`tickCorrespondentMouth()` gated on `GNNTTS.isSpeaking()`, true for the
+anchor's question and thanks as well. Fixed by also requiring
+`GNNDirector.speaker()` to match the scene's correspondent.
+
+→ **A voice on the wire is not the same as a person at the desk.** The
+animator is a singleton built for one mouth; anything sharing its bus needs
+its own path and its own gate.
+
+### The two-way played over the story it replaced
+`beginTwoWay` awaited the cutaway open before queueing its three lines. In
+that window the director's `HOLD` case saw `!speaking` and fell through to
+`nextStory()`, so the two-way arrived on top of the story already queued.
+
+Fixed by reserving `S.BANTER` and bumping `banterStreak` synchronously in
+`beginBanter`, and queueing the three lines in `beginTwoWay` before the
+cutaway opens. `beginTwoWay` is no longer `async`.
+
+→ **`await` is a window for the frame loop to run in.** Any state a
+subsequent frame reads has to be set before the await, not after it.
+
+### The station ident was stepped on, exactly once
+Owner: *"when i first booted up broadcast.sh Varr interrupted the end of
+commander hale's station ident... i restarted broadcast.sh and it didn't step
+on the station ident that time so its not repeatable."*
+
+`GNNGlitch.onSecret` polled for silence, then called `GNNTTS.speak()`
+directly, which pre-empts. The poll guard usually won; on the first boot it
+lost.
+
+Fixed by routing secrets through `GNNDirector.interject()`, which queues.
+Nothing outside the director calls `speak()` directly any more.
+
+→ **A non-repeatable bug is a race, not a mystery.** The guard that usually
+wins is the shape of the fault: find what it is racing and remove the race.
+
+### The STATUS plate idled
+`icon-manager.js` returned the STATUS plate whenever a story matched no
+keyword — which is most stories, because the twenty-two icon categories are
+all science and MOO topics. Sports, entertainment and generic world news all
+fell through.
+
+Fixed by returning `null` on no match.
+
+→ **A fallback becomes a default by accident.** "Show *something*" for the
+unmatched case is how the unmatched case became the most common one.
+
+### Every caption pointed at the speaker's mouth
+The speech bubble sat above the speaker's head with a tail aimed at their
+mouth — a different position for every speaker, colliding with the monitor in
+the corner, and floating over the footage on a full-frame cutaway. Moved to
+one slot (`STATION_BOX`, centred, bottom of the frame), tail removed. Accent
+colour and label still follow the speaker.
+
+### The commercial card measured with the wrong font
+`drawBreakCard` called `ctx.measureText()` before setting `ctx.font`, so
+every top card measured against whatever font was left over from the previous
+draw. Every commercial with a top card was drawn at the wrong width.
+
+### The boot died on a paste
+`icon-manager.js` was pasted with two `matchIcon` functions — the second
+overrode the first, and on reload the module failed to parse. `main.js` calls
+`GNNIconManager.loadIcons()` early in `loadAllAssets()`, before
+`GNNRenderer.init()` runs. That call threw, `loadAllAssets()` bailed,
+`init()`'s catch fired, and the frame loop started with no canvas bound to
+the renderer. Every frame early-returned.
+
+→ **When a one-file change produces a black screen, open the browser console
+first.** The error names the file and the line. A boot is a chain; one broken
+link looks like the whole chain failed.
+
 ---
 
 ## 4. Claims that did NOT reproduce
@@ -631,6 +781,8 @@ Do not re-chase these. Each cost real time.
 | Extractor emits magenta transparency | 120 sampled assets scanned for fuchsia | **0** |
 | Extractor emits rainbow palettes | same sample + contact sheet by eye | **0**; ~8 scrambled items remain, flagged `noise > 95` and routed to the glitch engine on purpose |
 | Assets use a keyed transparency colour | check PNG mode | **40/40 RGBA**, real alpha |
+| Anchor filename collision blocks all desk work | checked `assets/generated/anchors/` against `main.js` load paths | **Already fixed.** §3 records the fix; it had landed. |
+| Voice IDs in `main.js` / `cast.js` are edge-tts IDs and break under Kokoro | checked ID format against `/api/voices` | **0** — `am_michael`, `bm_george` and the rest are Kokoro IDs. The format `af_*`/`am_*`/`bf_*`/`bm_*` is Kokoro's. |
 
 The `seq=0` burst in old logs is `tools/voice_audition.py`. Its tells: spoken
 name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
@@ -650,6 +802,7 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
 | `python3 tools/prompt_bridge.py` | regenerate `assets/generated/prompts.md` |
 | `python3 tools/voice_audition.py` | audition every voice the running engine offers |
 | `python3 tools/capture_docs.py` | re-shoot the README screenshots |
+| `assets/generated/Prompts/` | consolidated prompt library — all `.md` prompt files, one per asset class |
 
 `tools/lbx.py` is the LBX container + LBXGFX decoder. Format notes live in
 `assets/README.md`.
@@ -670,12 +823,40 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
 
 ## 7. Known open items
 
-- **The set and eleven anchors are generated.** One scene with the desk in
-  it (`set/studio_wide_empty.png`, 16:9), and `anchors/` holds a
-  `desk_hero` for all eleven species plus `speaking`/`listening`/
-  `listening_flip` for the human and the Klackon and `speaking` for
-  mrrshan_f. The rest still need their variants; without them the renderer
-  holds the hero, which is a still face rather than broken art.
+- **The MOO1 cutaway fallback is still active and produces bad shots.** The
+  generated-plate path in `cutscene-manager.js` matches the story correctly;
+  the fallback to `GNNSceneCompositor.synthesize()` in `prefetch()` and
+  `triggerCutaway()` does not. Three known faults, all in the composite path:
+  delta frames stack instead of replacing (extractor — `tools/lbx.py` /
+  `extract_all.py`), assets from different pools composite at incompatible
+  scales (`MOTION.approach` in particular scales across an 18× range), and
+  some pool queries return empty so the layer is dropped, leaving black (the
+  `interview()` room query, and probably siblings). **Decide what to do with
+  the fallback** — comment it out, fix the recipes, or keep it. The code
+  change has not been made either way.
+- **All eleven species have `desk_hero` and `speaking`.** `listening_flip` has
+  not been re-derived from the newest plates. Without it the renderer falls
+  back to the unflipped `listening` plate, which faces the wrong way for a
+  seat on the speaker's right.
+- **Four new studio sets have not been through `condition_plates.py`'s
+  window-keying step.** Their window panes are black — what the keyer expects
+  — but `PLATES` in `condition_plates.py` names one room. The four new
+  filenames need adding. Without keying, the backdrop composite draws into a
+  black rectangle rather than through the glass.
+- **`condition_plates.py` has no path for `logos/`, `titlecards/` or
+  `icons/`.** All three are new directories. The conditioner needs an entry
+  for each before anything composites.
+- **Title cards are in testing and the prompts are not right yet.**
+  `assets/generated/titlecards/` was created for full-bleed show bumpers
+  with both anchors standing in frame and the show's title mark. Two
+  problems: the image model lands on a commercial style prior (photorealistic,
+  then anime) when asked to draw two figures in a described room, and the
+  background it generates does not match the studio sets in
+  `assets/generated/set/`. The fallback route is one `_standing.png` per
+  character in the anchor style, composited over a set plate by the engine —
+  more work up front, reuses the existing art, and the two cannot disagree.
+- **`assets/generated/icons/` is partially populated.** The twenty-two icon
+  prompts are written; generation is in progress.
 - **Two source plates were whole-image mirrors of their sibling**, which
   flips the GNN badge with the picture — `human_listening` and
   `klackon_listening_flip` both read ИИƆ. Both were rebuilt by mirroring
@@ -758,3 +939,19 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   measurement runs.
 - Decoded SFX buffers are never evicted — bounded by the 41-file library, a
   tradeoff rather than a leak. Music beds are LRU-capped at 4.
+```
+
+## CLAUDE these are the changes to your CLAUDE.md since last i spoke to you
+## What changed from your version
+
+**§1** — eight new rows added after the `Voices` row.
+
+**§3** — seven new entries added after `The README lied`: the banter repetition, the doubled break, the wrong sign-off, the text-ahead-of-voice, the two-way cluster, the two-way race, the ident-once, the STATUS plate, the caption position, the commercial font, and the boot-on-paste. Each in the file's usual shape (heading, evidence, `→` takeaway where there's one).
+
+**§4** — two new rows.
+
+**§5** — one new row.
+
+**§7** — six new bullets at the top of the section, before the anchor-plate items, grouped so the asset-pipeline work reads as one block.
+
+**One thing I left alone:** the `Last verified at commit 056c5a9` line. It's stale — you've made changes since — but I don't have the new hash. Update it when you next commit.
