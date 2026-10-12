@@ -1,4 +1,3 @@
-```markdown
 # ROADMAP — what is still to build
 
 State and constraints live in [`CLAUDE.md`](../CLAUDE.md). This file is only
@@ -72,11 +71,15 @@ Kept short, with what to run to see it. Full evidence is in `CLAUDE.md`.
 | **Commercial announcers** — breaks pick a voice that is not an anchor's, and keep it for the whole spot | `AD_VOICES` in `cutscene-manager.js` |
 | **Feeds by show block** — 25 feeds tagged, subject-level dedupe, and a local digest fallback for when rss2json's daily cap is hit | 12 stories in the rundown in 22 s with the wire capped |
 | **Anchor art** — all eleven species have `desk_hero` and `speaking`. `_speaking` is built as the hero with only the mouth swapped in | `condition_plates.py` prints per-state alignment |
+| **Robot frames** — twenty-five cels in `assets/generated/anchors/robot_frame_*.png`, keyed by `tools/key_robot.py` | run `python3 tools/key_robot.py`, expect 25 files |
 | **Studio sets** — five total. `studio_wide_empty.png` (the original), plus `market_`, `geopolitics_`, `tech_`, `celebrity_wide_empty.png` | four new sets generated |
 | **Cutaways** — regenerated, all plates in `assets/generated/cutaways/` | — |
 | **Backdrops** — the full set in `assets/generated/backdrops/` | — |
 | **Show logos** — five, in `assets/generated/logos/` | not yet wired into the renderer |
 | **Prompt library** — all prompt `.md` files consolidated into `assets/generated/Prompts/` | — |
+| **Two-way shape** — `GNNScript.twoWay()` rolls brief / standard / extended shapes; the extended form uses a follow-up that drops the naming intro so the correspondent is introduced once, not twice | watch an extended two-way: ask, answer, follow-up, answer, close |
+| **Structured anchor beats** — `banterBeat()` builds a two-to-four line conversation from each anchor's own banks; `exchange()` extends with follow and close from the relationship table when the entry carries them | watch a `BANTER` beat between the two anchors; it is a conversation, not a single line |
+| **Character banks** — every cast entry has `openers` / `reactions` / `closers` / `asks`; `GNNCast.line()` reads them, `castLine()` filters through the recency buffer, `queueTaggedLines()` plays them | plumbing works; **the copy itself is placeholder** — see "The newsroom as a simulation" for the writing task |
 | **Ticker** — resource crawl with slow drift. **Deprecated.** Being replaced by a real stock crawl; see "Order of work" item 6 | visible along the bottom of every screenshot |
 
 ---
@@ -88,7 +91,7 @@ reaches the broadcast.
 
 | Directory | State | Next step |
 | :--- | :--- | :--- |
-| `anchors/` | `desk_hero` and `speaking` for all eleven species | Run the `listening_flip` derivation on the newest plates |
+| `anchors/` | `desk_hero` and `speaking` for all eleven species; robot frames produced | Run the `listening_flip` derivation on the newest plates |
 | `set/` | Five studio plates; the four new ones have black window panes | Add the four new filenames to `PLATES` in `condition_plates.py`, run the window-keying step |
 | `cutaways/` | Regenerated | None — routed via `GENERATED` |
 | `backdrops/` | Full set | None |
@@ -116,6 +119,11 @@ Two routes forward, not yet decided:
    in the anchor style, composited over a set plate by the engine. More work
    up front; reuses existing art; the two assets cannot disagree.
 
+Title cards are needed for the loading gate (Order of work item 10). If the
+one-shot approach keeps missing, the standing-plate route is the fallback —
+and either way the decision should be made before the loading gate is built,
+because the gate uses a card as its visual.
+
 ### The MOO1 composite fallback — decision pending
 
 The generated-plate path in `cutscene-manager.js` matches the story
@@ -133,6 +141,12 @@ path:
 code change has not been made either way. Note that the extractor bug affects
 every animated MOO1 asset in the broadcast, not just cutaways — fixing it
 would improve the whole library.
+
+A review tool exists: `tools/scene_review.html`, opens at
+`/tools/scene_review.html`, renders each of the nine recipes as a `.webm`
+clip or a 4×2 contact sheet. `docs/scene-review/README.md` holds the verdict
+table and the fault taxonomy. The first pass has been generated; verdicts are
+not yet filled in.
 
 ---
 
@@ -277,6 +291,61 @@ Once the stock crawl is live, decide what else the ticker carries. Real
 weather alerts, exchange status, maybe a headline crawl. Whatever appears is
 real. No MOO commodities, no "SOLAR WIND: SEVERE."
 
+### 9. Show rundown open
+
+The cold open should name the stories on the queue before reading them,
+rather than the current "The desk is watching several stories tonight"
+placeholder that names nothing. Shape:
+
+> I am Commander Hale. This is G N N. Tonight: the prime minister's
+> statement on foreign interference, orangutans returned to Borneo after
+> the fires, and a ruling on the Warner Bros. Discovery sale. We begin
+> with Downing Street.
+
+Then the first story reads, then the second, then the third, and the desk
+has delivered on the tease.
+
+Needs a headline shortener (sentence → noun phrase, respecting meaning not
+character count), a "what's coming up" pool in `script-writer.js`, and a
+reordered cold-open sequence in `broadcast-director.js`. The director picks
+three to five stories from the queue; the number is a pacing knob, same
+block as the other `PACE` values.
+
+Not in scope: the beat filter and category routing (landed), the
+show-block scheduler (item 4). This rundown is per-block and will need
+rewriting when blocks exist — the rewrite is small, since a block declares
+its own `targetCategories` and the rundown reads from those.
+
+### 10. Loading gate and boot screen
+
+Several related faults appear in the first ~60 seconds after a fresh page
+load and then self-correct: the anchors step on each other on the first
+story, Varr's mouth does not move on her first line, music does not play at
+boot. Which symptom fires varies between runs. Once the station has run for
+about a minute, none recur. Suspected load-order race.
+
+The proposal: a boot screen that waits for the station to be ready, using
+one of the title cards in `assets/generated/titlecards/` with a music bed
+underneath. The station does not go on air until the loading completes and
+the title card has played through.
+
+What this needs:
+
+- The title cards to be usable — currently "in testing", prompts not
+  reliable. See "Asset pipeline" for the two routes forward.
+- The music bed to actually play — see the open item in `CLAUDE.md` §7
+  about `playMusic()` diagnostics not yet run.
+- A readiness signal from `main.js` — `loadAllAssets()` resolves when the
+  assets are loaded, but the audio graph, the voice engine and the first
+  feed poll all resolve separately and none of them block the broadcast
+  starting.
+- The director to hold `S.BOOT` until the gate clears, rather than the
+  current nine-second deadline.
+
+**Establish the load-order cause first.** A loading screen that hides the
+symptom without fixing the race would just delay it, and the music issue in
+particular may be permanent rather than a startup fault.
+
 ---
 
 ## The newsroom as a simulation
@@ -289,17 +358,19 @@ because of the rundown.
 ### What exists now
 
 `js/cast.js` is the cast registry: twelve characters, each with a name, a
-billing, a voice, a register, a fixation and a verbal tic, plus a table of
-what they think of one another. `js/script-writer.js` reads it and can
-produce:
+billing, a voice, a register, a fixation, a tic and a set of banks
+(`openers` / `reactions` / `closers` / `asks`), plus a table of what they
+think of one another. `js/script-writer.js` reads it and can produce:
 
 | call | what it is |
 |---|---|
-| `showOpen()` | the station names itself, then the lead anchor names themselves |
+| `showOpen()` | the lead anchor names themselves, then the station identifies |
 | `intoBreak()` | the toss into a commercial |
 | `outOfBreak()` | the return |
 | `showClose()` | the sign-off, naming everyone who sat that block |
-| `exchange()` | two anchors talking to each other, in character |
+| `exchange()` | two anchors talking to each other, drawn from the relationship table |
+| `banterBeat()` | a two-to-four line conversation from the anchors' own banks |
+| `twoWay()` | a remote interview — brief, standard or extended shape |
 
 The relationship table is deliberately **asymmetrical**. Rell is quietly in
 love with Varr; Varr has not noticed and treats him as the freight desk.
@@ -316,10 +387,48 @@ labelled.
 
 ### What to build next, in order
 
+The section below describes the *structure* that should exist. It is not the
+same as the *writing* that should fill it. The character banks and the
+relationship table are currently three to seven lines per character per
+register. That is enough to prove the plumbing works. It is not enough to
+make a desk of twelve feel inhabited across a session, and it is the larger
+of the two problems.
+
+**0. Write the copy.** Before mood or story-reactions, the banks need to be
+filled. Each character has a fixation, a register, a tic and a set of
+opinions about the others. Those define the *person*; the banks are where
+the person becomes audible. A first pass at a real content budget:
+
+- **Registers per bank**: openers, reactions, closers, asks. Four.
+- **Lines per register**: not three. Twelve to twenty is what a trained
+  writer would produce for a character with a distinctive voice, if the
+  character is going to say anything twice in a session without sounding
+  canned.
+- **Relationship entries**: currently twelve across the whole cast, most
+  concentrated on the daytime pair. The other pairs (Bulrathi ↔ Psilon is
+  the only non-daytime one with more than a single entry) need their own
+  material, especially if the show-block scheduler is going to rotate them
+  onto a desk.
+- **Tics and fixations** are load-bearing — they are the shorthand that
+  makes a line read as *this* character and not another — but they should
+  not be the only thing the character says.
+- **The robots are a special case.** Unit 7, Foundry-Nine and The Analyst
+  share a voice (`vox_unit`) and a register (machine). Their banks need to
+  be distinguishable from each other, or a listener will hear three of the
+  same voice rather than three machines.
+
+This is a writing task. The engineering scaffolding is in place:
+`GNNCast.line(kind, id)` reads the banks, `castLine()` in
+`script-writer.js` filters through the recency buffer,
+`queueTaggedLines()` in the director plays them. A playwright or a sketch
+writer could fill the banks without touching the code, and that is the
+right division of labour.
+
 **1. Mood that moves.** Each character starts with a disposition and nothing
 changes it. A run of bad news should sour the desk; a long quiet stretch
 should bore it. Mood then selects between line variants, so the same story
 lands differently at the top of the hour than at the end of a grim block.
+Mood does not produce the variants — the copy does. Write the copy first.
 
 **2. Reactions to the actual story.** Right now banter is generic and sits
 *next to* the news. A character with a fixation should react to the story in
@@ -328,10 +437,22 @@ desk wants what was left out of the statement. The cheap version is keyword
 matching against each character's `fixation` and a bank of lines per
 fixation. The good version is below.
 
-**Reactions are in real-world language.** The trade desk does not say
-"tonnage" because it is a MOO word; it says "exports" or "shipping volume"
-because that is what a trade desk says. Fixations steer *what* the character
-cares about, not the vocabulary they use to talk about it.
+Reactions are in real-world language. The trade desk does not say "tonnage"
+because it is a MOO word; it says "exports" or "shipping volume" because
+that is what a trade desk says. Fixations steer *what* the character cares
+about, not the vocabulary they use to talk about it.
+
+**3. Two-way interviews that read as interviews.** `twoWay()` rolls three
+shapes — brief (2 lines), standard (3), extended (5). The scaffolding is
+right. The extended shape in particular needs more material per character so
+the ask, the answer, the follow-up and the close each land in distinct
+voices rather than sounding like the same writer. This is a copy pass, not
+a code change.
+
+**4. Show-block rotation.** When the scheduler lands, different blocks seat
+different pairs. Every pairing that could plausibly sit together needs its
+own relationship entry, and every character needs bank material that works
+at multiple desks, not just the one they were written for.
 
 ### A local model writing the reactions
 
@@ -362,9 +483,9 @@ quantised 7B to 12B model. The shape:
   *reaction* to them. A model paraphrasing a real headline is a model
   inventing news, which is the one thing this project must not do.
 - **Never let it invoke MOO lore.** The system prompt excludes the MOO
-  vocabulary for reaction lines. The model's job is a person reacting to real
-  news, not a person reacting in 1993 space-strategy language. Lore language
-  is the easter-egg layer's problem and is scripted, not generated.
+  vocabulary for reaction lines. The model's job is a person reacting to
+  real news, not a person reacting in 1993 space-strategy language. Lore
+  language is the easter-egg layer's problem and is scripted, not generated.
 - **Cap and cache.** One reaction per story, kept with the story. The budget
   is a sentence; anything longer gets cut at a sentence boundary by the same
   rule the teleprompter already uses.
@@ -518,62 +639,19 @@ line-up by show block. The desk is pinned to the human commander and the
 Mrrshan matriarch because a channel has anchors rather than a rota. The
 rotation belongs to the show-block work above: different blocks, different
 desks, with these two as the main daytime pair.
-```
 
+## What changed
 
-## Summary of changes
+**Landed table** — added three rows: **Robot frames** (the 25 cels, produced by `python3 tools/key_robot.py`), **Two-way shape** (`twoWay()` rolling brief / standard / extended with the follow-up that drops the naming intro), **Structured anchor beats** (`banterBeat()` and the extended `exchange()`), **Character banks** — with a note that the plumbing works but the copy is placeholder.
 
-**Target section** — rewritten twice. First pass updated "single robot anchor"
-to the two-anchor desk. Second pass added the primary-content rule: real news
-is read as real news, MOO lore is an easter-egg layer only, never mixed into
-the news rundown.
+**Order of work** — added item 9 (**Show rundown open**) and item 10 (**Loading gate and boot screen**). Both were discussed this session and drafted in `Gemini.md` but had not reached the roadmap.
 
-**Header** — dropped "Nothing here is started." Some of it is.
+**Asset pipeline / Title cards** — added a note that the title cards are needed for the loading gate, so the decision between prompt-iteration and standing-plate route should be made before the gate is built.
 
-**"Done when a reviewer can"** — three edits:
-- Item 4 gained a caveat about the MOO1 composite fallback.
-- Item 5 flipped from "MOO resource ticker" to "real stock crawl with live
-  market data."
-- Item 6 flipped from "RSS stories translated into in-universe events" to
-  "real RSS stories read as real news," with the lore layer explicitly siloed
-  off as easter eggs.
+**Asset pipeline / MOO1 composite** — added a pointer to the review tool and the review folder, so the next agent does not have to be told separately that a first review pass exists.
 
-**Landed table** — nine rows added: two-anchor desk, per-line speaker
-attribution, anchor art for all species, five studio sets, cutaways
-regenerated, backdrops, show logos, prompt library, ticker (marked deprecated
-pending replacement).
+**The newsroom as a simulation** — replaced "What to build next, in order" with a new ordering that leads with **0. Write the copy**. The prior items (mood, story-reactions, two-way interviews, show-block rotation) remain, but each is now framed as work that needs the copy first. Added a robots sub-bullet to the copy task (Unit 7, Foundry-Nine and The Analyst share a voice and need distinguishable banks).
 
-**New section: Asset pipeline — current state.** A table of every directory
-under `assets/generated/`, its state, and its next step. Sub-sections for the
-two open decisions: title cards (in testing, prompts not right yet) and the
-MOO1 composite fallback (decision pending).
+**What exists now** — table of `script-writer.js` calls extended with `banterBeat()` and `twoWay()`, and `showOpen()` description corrected (the lead anchor names themselves first, then the station).
 
-**Order of work** — renumbered and reshuffled:
-- Item 1 is now just `listening_flip`; the rest of the cast work is done.
-- Items 2–5 unchanged from before (character registry, atomic anchor
-  switching, show-block scheduler, wire the show logos).
-- Item 6 is new: the real stock crawl.
-- Item 7 is the lore-separation work, rewritten. The old translation table
-  is deleted — translating real stories was the opposite of what was wanted.
-  New text spells out what siloing looks like concretely: real stories stay
-  real, easter eggs fire as discrete moments, banter uses real-world language.
-- Item 8 is a note about ticker segmentation once the stock crawl lands.
-
-**The newsroom as a simulation** — two edits:
-- "What exists now" updated to describe per-line speaker attribution and the
-  wired show shape as built.
-- "What to build next" — the old items 1 and 2 (wire the show shape, give
-  every line an owner) are gone; both are done. Remaining items are mood and
-  story-reactions, with the reactions item now explicitly requiring
-  real-world language.
-- The local model section gained a bullet excluding MOO lore from the
-  reaction prompt.
-
-**Hands on the desk** — rewritten as past tense. `DESK.overlap` value
-corrected from 0.049 to 0.015.
-
-**The rest of the cast** — correspondents paragraph now past tense, points at
-the Landed table. Other two paragraphs unchanged.
-
-**Removed** — none. The Kaiagotchi rig section kept as-is (still a future
-possibility).
+Nothing was removed. The old "wire the show shape" and "give every line an owner" items are already gone from the last rebuild; this pass adds the copy-first framing on top.

@@ -10,6 +10,14 @@
    Real feed nouns are lifted out of the current story and dropped
    into the 1993 templates, so the robot sounds like it is reading
    our galaxy rather than reciting canned lines.
+
+   Conversations, not single lines. Every character in `js/cast.js`
+   carries banks for openers, reactions, closers and asks; the
+   relationship table between them carries optional follow and
+   close lines. Two-ways and exchanges now draw on those to build
+   a shape — brief, standard, extended — rather than picking one
+   canned line and stopping. A two-anchor beat is a real exchange:
+   one anchor opens, the other reacts, and it closes.
    ============================================================ */
 
 const GNNScript = (() => {
@@ -69,7 +77,7 @@ const GNNScript = (() => {
     // us to be precise about this" four times in five minutes. Random with
     // replacement feels repetitive long before it is statistically odd.
     const recent = [];
-    const RECENT_LIMIT = 40;
+    const RECENT_LIMIT = 60;
 
     function remember(line) {
         recent.push(line);
@@ -95,6 +103,24 @@ const GNNScript = (() => {
         const open = list.filter((l) => !blocked.has(l));
         const pool = open.length ? open : list;
         return remember(pool[(Math.random() * pool.length) | 0]);
+    }
+
+    /**
+     * A line from a character's own bank, filtered through this module's
+     * recency buffer.
+     *
+     * `GNNCast.line()` does the picking; this wrapper remembers the result
+     * so the same opener cannot fire twice in a session, and falls back to
+     * `fallback` when the character has no such bank. Falls through to
+     * `fallback` on null so callers can chain: `castLine('closers', id)
+     * || genericLine`.
+     */
+    function castLine(kind, id, fallback = null) {
+        if (typeof GNNCast === 'undefined') return fallback;
+        const raw = GNNCast.line(kind, id, null);
+        if (!raw) return fallback;
+        if (hasSaidRecently(raw)) return fallback;
+        return remember(raw);
     }
 
     function chance(p) { return Math.random() < p; }
@@ -148,7 +174,7 @@ const GNNScript = (() => {
     }
 
     // ---------------------------------------------------------
-    // Anchor banter
+    // Anchor banter — single-line asides, and the beat-level pools
     // ---------------------------------------------------------
 
     const OPENERS = [
@@ -241,19 +267,34 @@ const GNNScript = (() => {
 
     function lead() { return desk()[0] || null; }
 
+    // The station's opening lines. The anchor's name goes *in front* of
+    // these, not after — see `showOpen()` below. Each of these starts with
+    // "This is G N N" or an equivalent, followed by the tease of what the
+    // programme is about to cover.
+    //
+    // The order matters. Naming the station, then the tease, then the
+    // anchor reads as if the anchor is a footnote to the station. Naming
+    // the anchor first, then the station, then the tease is how a real
+    // sign-on runs: the person introduces themselves, the station
+    // identifies, and then the programme begins.
     const SHOW_OPEN = [
-        'Good evening. This is the Galactic News Network, broadcasting from '
-        + 'station control.',
-        'You are watching G N N. The rundown is live and the wire is open.',
-        'This is G N N. Across the sector tonight, the following.',
+        'This is G N N. Let\'s get to the news from across the sector tonight.',
+        'This is G N N. The rundown is live and the wire is open.',
+        'This is G N N. The top of the hour, and the top of the wire.',
+        'This is G N N, broadcasting from station control.',
+        'This is G N N. Wherever the relay reaches, we are on.',
     ];
 
-    /** Top of the hour: the station names itself, then the lead anchor does. */
+    /**
+     * Top of the hour: the anchor names themselves first, then the
+     * station, then what is coming up. `SHOW_OPEN` lines all begin with
+     * the station's identification; the anchor's name is prefixed.
+     */
     function showOpen() {
         const who = lead();
         const line = pickFrom(SHOW_OPEN, SHOW_OPEN[0]);
         if (!who) return line;
-        return `${line} I am ${who.name}.`;
+        return `I am ${who.name}. ${line}`;
     }
 
     const INTO_BREAK = [
@@ -263,11 +304,6 @@ const GNNScript = (() => {
         'More in a moment, including the figures nobody wants to read out.',
     ];
 
-    // Note: this is only one of two back-from-break paths in the codebase.
-    // broadcast-director.js also plays a `signoff()` line in its S.BREAK
-    // case, and when both fire the viewer hears "we now return" followed
-    // by "and we are back" — the second is redundant. The tic append is
-    // gone regardless; see below.
     const OUT_OF_BREAK = [
         'And we are back.',
         'You are still watching G N N.',
@@ -307,19 +343,39 @@ const GNNScript = (() => {
         return `${line} I have been ${seats[0].name}, with ${others}. Good night.`;
     }
 
-    /**
-     * Two anchors talking to each other rather than at the camera.
-     *
-     * Returns an array of lines tagged with who says them, so the director
-     * can hand each to the right voice, or null when the pair at the desk
-     * have no history worth airing.
-     */
+    // ---------------------------------------------------------
+    // Two-ways — a real interview, not a single question and answer
+    // ---------------------------------------------------------
+
+    // The two halves of a two-way question: an intro that names the
+    // correspondent, and a question that does not. Kept separate so the
+    // follow-up can drop the intro — repeating "we can go to Grolm now"
+    // on the second question reads as a stutter, not an interview.
+    const INTRO = [
+        'We can go to %s now.',
+        'Let us bring in %s.',
+        '%s is across this for us.',
+        'Our correspondent %s is standing by.',
+        'We have %s on the line.',
+    ];
+    // The question on the opening ask, after the intro. Also used alone
+    // when the host has no asks bank and no intro to prepend.
     const ASK = [
-        'We can go to %s now, who has been following this. What are you '
-        + 'seeing?',
-        'Let us bring in %s. What is the picture from where you are?',
-        '%s is across this for us. What can you add?',
-        'Our correspondent %s is standing by. What are you hearing?',
+        'What are you seeing?',
+        'What is the picture from where you are?',
+        'What can you add?',
+        'What are you hearing?',
+        'How does that read from your side?',
+    ];
+    // The follow-up question. No intro line, no correspondent name — they
+    // are already on screen and mid-interview by the time this fires.
+    const ASK_FOLLOWUP = [
+        'Is that consistent with what you have?',
+        'What else can you tell us?',
+        'What does that mean on the ground?',
+        'Anything you can add?',
+        'Where does that leave us?',
+        'Is there more to it than that?',
     ];
     const ANSWER = [
         'What I can tell you is that nobody here is calling it settled. '
@@ -341,12 +397,63 @@ const GNNScript = (() => {
     ];
 
     /**
-     * A remote two-way: the anchor asks, the correspondent answers, the
-     * anchor thanks them.
+     * The host's line to the correspondent.
      *
-     * Three lines tagged with who says each, so the director can hand them
-     * to the right voice in order. The correspondent is anyone in the cast
-     * who is not currently at the desk.
+     * `withIntro` is true on the first ask of a two-way — it prepends a
+     * line that names the correspondent — and false on any follow-up.
+     * The correspondent is already on screen by then, and repeating the
+     * naming line reads as a stutter: "We can go to Grolm now. What is
+     * the picture? ... We can go to Grolm now. Is that consistent?"
+     *
+     * When the host has asks on their cast sheet, those win. Otherwise a
+     * fallback pool supplies the question — a different pool for the
+     * intro variant and the follow-up variant, since they read
+     * differently in context.
+     */
+    function hostAsk(host, correspondent, withIntro = true) {
+        const castAsk = castLine('asks', host.id);
+        if (withIntro) {
+            const intro = pickFrom(INTRO, 'We can go to %s now.')
+                .replace('%s', correspondent.name);
+            return `${intro} ${castAsk || pickFrom(ASK, ASK[0])}`;
+        }
+        if (castAsk) return castAsk;
+        return pickFrom(ASK_FOLLOWUP, ASK_FOLLOWUP[0]);
+    }
+
+    /**
+     * The host's closer. Prefers their own closers; falls back to the
+     * thank-you templates with the correspondent's name.
+     */
+    function hostClose(host, correspondent) {
+        const castClose = castLine('closers', host.id);
+        if (castClose) return castClose;
+        return pickFrom(THANKS, THANKS[0]).replace('%s', correspondent.name);
+    }
+
+    /**
+     * The correspondent's answer. On their first turn in an extended
+     * two-way, this comes from their openers — a framing line that sets
+     * up the report. Otherwise it comes from reactions — a direct answer.
+     */
+    function correspondentLine(correspondent, kind) {
+        const fromCast = castLine(kind, correspondent.id);
+        if (fromCast) return fromCast;
+        return pickFrom(ANSWER, ANSWER[0]);
+    }
+
+    /**
+     * A remote two-way. Three shapes, rolled up front so the whole beat
+     * holds a coherent form rather than drifting longer midway through.
+     *
+     *   brief       ask, answer                          (2 lines)
+     *   standard    ask, answer, close                   (3 lines)
+     *   extended    ask, answer, follow-up, answer,
+     *               close                                (5 lines)
+     *
+     * Each line is tagged with who says it, so the director can hand them
+     * to the right voice in order. The correspondent is anyone in the
+     * cast who is not currently at the desk and not a machine.
      */
     function twoWay() {
         if (typeof GNNCast === 'undefined') return null;
@@ -357,16 +464,53 @@ const GNNScript = (() => {
         if (!seats.length || !away.length) return null;
         const who = away[(Math.random() * away.length) | 0];
         const host = seats[0];
-        return {
-            correspondent: who,
-            lines: [
-                { who: host, text: pickFrom(ASK, ASK[0]).replace('%s', who.name) },
-                { who, text: pickFrom(ANSWER, ANSWER[0]) },
-                { who: host, text: pickFrom(THANKS, THANKS[0]).replace('%s', who.name) },
-            ],
-        };
+
+        const roll = Math.random();
+        const shape = roll < 0.25 ? 'brief'
+            : roll < 0.70 ? 'standard'
+                : 'extended';
+
+        const lines = [];
+        // The first ask names the correspondent. Everything after it — the
+        // follow-up in the extended shape, in particular — drops the
+        // intro, so the interviewer does not introduce them twice.
+        lines.push({ who: host, text: hostAsk(host, who) });
+
+        if (shape === 'brief') {
+            lines.push({ who, text: correspondentLine(who, 'reactions') });
+        } else if (shape === 'standard') {
+            lines.push({ who, text: correspondentLine(who, 'reactions') });
+            lines.push({ who: host, text: hostClose(host, who) });
+        } else {
+            // extended: ask, answer, follow-up, answer, close. The
+            // follow-up drops the intro — see hostAsk — so the
+            // interviewer does not name the correspondent twice in the
+            // space of one beat.
+            lines.push({ who, text: correspondentLine(who, 'reactions') });
+            lines.push({ who: host, text: hostAsk(host, who, false) });
+            lines.push({ who, text: correspondentLine(who, 'reactions') });
+            lines.push({ who: host, text: hostClose(host, who) });
+        }
+
+        return { correspondent: who, lines, shape };
     }
 
+    // ---------------------------------------------------------
+    // Anchor-to-anchor exchanges and structured banter
+    // ---------------------------------------------------------
+
+    /**
+     * A beat of two anchors talking to each other.
+     *
+     * Uses the relationship table for the specific opinion that colours
+     * the exchange — Varr teasing Hale, Rell pining after Varr, the
+     * robot correcting the Commander — and extends the pair with
+     * `follow` and `close` lines when the entry carries them. A four-line
+     * exchange is a real conversation; a two-line one is a quick aside.
+     *
+     * Returns an array of tagged lines, or null when the pair have no
+     * relationship worth airing.
+     */
     function exchange() {
         const seats = desk();
         if (seats.length < 2 || typeof GNNCast === 'undefined') return null;
@@ -381,26 +525,83 @@ const GNNScript = (() => {
         }
         if (!pairs.length) return null;
         const pick = pairs[(Math.random() * pairs.length) | 0];
-        return [
+        const lines = [
             { who: pick.a, text: pick.ex.jab },
             { who: pick.b, text: pick.ex.reply },
         ];
+        // Half the extended relationships carry follow and close; the
+        // script writer uses them when they are present, and stops at the
+        // reply when they are not. Two-anchor beats are also shorter on
+        // average than they look — a four-line exchange needs a longer
+        // hold at the desk than a two-line one.
+        if (pick.ex.follow && chance(0.65)) {
+            lines.push({ who: pick.a, text: pick.ex.follow });
+            if (pick.ex.close) {
+                lines.push({ who: pick.b, text: pick.ex.close });
+            }
+        }
+        return lines;
     }
 
     /**
-     * A line to fill the beat after a story, in the mouth of whoever is
-     * actually going to say it.
+     * A structured beat of banter between the two anchors — separate
+     * from `exchange()`, which draws from the relationship table for a
+     * specific opinion. This one builds from each anchor's own banks:
+     * an opener from one, a reaction from the other, optionally a
+     * follow-up, and a close.
+     *
+     * The point is to make the desk feel inhabited rather than reading
+     * a list. `banter()` still exists for the single-line aside case;
+     * `banterBeat()` is what a two-anchor moment should call.
+     *
+     * Returns an array of tagged lines, or null when fewer than two
+     * anchors are seated.
+     */
+    function banterBeat(story) {
+        const seats = desk();
+        if (seats.length < 2) return null;
+        // Randomly swap the order so the same anchor does not always open.
+        const [a, b] = Math.random() < 0.5
+            ? [seats[0], seats[1]]
+            : [seats[1], seats[0]];
+
+        const lines = [];
+        const opener = castLine('openers', a.id)
+            || fillGeneric(pickFrom(CREW_ASIDES, ''), story);
+        lines.push({ who: a, text: opener });
+
+        const reaction = castLine('reactions', b.id)
+            || fillGeneric(pickFrom(CREW_ASIDES, ''), story);
+        lines.push({ who: b, text: reaction });
+
+        // A longer form: one more volley before closing. Chosen by chance
+        // so the same shape does not repeat every time a beat lands.
+        if (chance(0.5)) {
+            const follow = castLine('reactions', a.id);
+            if (follow) lines.push({ who: a, text: follow });
+        }
+
+        const close = castLine('closers', b.id)
+            || pickFrom(TOSSES, 'We move on.');
+        lines.push({ who: b, text: close });
+
+        return lines;
+    }
+
+    /**
+     * A single-line aside from whoever is reading — the beat after a
+     * story when there is no exchange. Same shape as before this change;
+     * the two-anchor form lives in `banterBeat()`.
      *
      * `who` is a cast entry. Without one the line has no owner and the
-     * machine pool is left alone, because a line that only a robot can say
-     * is worse than a bland one when a person says it.
+     * machine pool is left alone, because a line that only a robot can
+     * say is worse than a bland one when a person says it.
      *
      * The tic branch used to fire on every 8% roll regardless of whether
      * the tic had already been said, so a broadcast with the same two
      * anchors at the desk — which is the default — heard the same tic five
      * or six times an hour. It now skips if the tic is in the recent buffer
-     * and falls through to the next option, which means it can only fire
-     * once per forty lines of banter.
+     * and falls through to the next option.
      */
     function banter(story, who) {
         const machine = !!(who && who.machine);
@@ -410,7 +611,10 @@ const GNNScript = (() => {
                 pickFrom(machine ? ROBOT_ASIDES : CREW_ASIDES, ''), story);
         }
         if (roll < 0.62) return fillGeneric(pickFrom(CONTEXT_LINES, ''), story);
-        if (roll < 0.74) return pickFrom(OPENERS, '');
+        if (roll < 0.74) {
+            const castOpener = who ? castLine('openers', who.id) : null;
+            return castOpener || pickFrom(OPENERS, '');
+        }
         if (roll < 0.82 && who && who.tic && !hasSaidRecently(who.tic)) {
             return remember(who.tic);
         }
@@ -597,7 +801,7 @@ const GNNScript = (() => {
 
     return {
         properNouns, numbers, keywords, sourceText,
-        sectorWire, banter, toss, hold,
+        sectorWire, banter, banterBeat, toss, hold,
         ident, signoff, commercial, promo,
         showOpen, intoBreak, outOfBreak, showClose, exchange, desk,
         twoWay,

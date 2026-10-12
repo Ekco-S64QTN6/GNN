@@ -54,6 +54,7 @@ the metric is the thing to doubt.
 | Characters | `js/cast.js` — 12 profiles, voices and an asymmetric relationship table |
 | Voices | 9 shortlisted by ear, plus `vox_unit` (a DSP robot, not a model) |
 | Anchor variants | all eleven species have `desk_hero` and `speaking`; `listening_flip` not re-derived from the newest plates |
+| Robot frames | 25 cels in `assets/generated/anchors/robot_frame_*.png`, produced by `python3 tools/key_robot.py` |
 | Studio sets | five — `studio_wide_empty.png` plus `market_`, `geopolitics_`, `tech_`, `celebrity_wide_empty.png`. The four new ones have black window panes not yet keyed |
 | Cutaways | regenerated; plates in `assets/generated/cutaways/` |
 | Backdrops | generated; full set in `assets/generated/backdrops/` |
@@ -61,6 +62,9 @@ the metric is the thing to doubt.
 | Story icons | regenerating into `assets/generated/icons/`, partial |
 | Prompt library | `assets/generated/Prompts/` — all prompt `.md` files, one per asset class |
 | Speaker attribution | per-line; `activeSeatForLine()` and `speakerIsSeated()` in the director, read by renderer, text engine, animator |
+| Main desk beat | `human` and `mrrshan_f` both cover world · diplomacy · science · tech · fleet · anomaly; markets held for the trade/resource/industry desks |
+| Two-anchor beats | structured conversations — `GNNScript.banterBeat()` and `exchange()` return tagged arrays, `GNNDirector.queueTaggedLines()` queues them; `twoWay()` rolls brief / standard / extended shapes |
+| Scene review | `tools/scene_review.html` — opens at `/tools/scene_review.html`, renders each MOO1 recipe as `.webm` or contact sheet |
 
 Verify all of it:
 
@@ -769,6 +773,78 @@ the renderer. Every frame early-returned.
 first.** The error names the file and the line. A boot is a chain; one broken
 link looks like the whole chain failed.
 
+### The text box appeared one to two seconds before the voice
+`text-engine.js` applied the incoming caption immediately. The audio element
+does not start until its clip has been fetched and decoded — a fraction of a
+second for a warm clip, one to two seconds for a cold one. In that window the
+box showed with the *new* label over an empty body, because `visible` stays
+at zero until the audio starts and the typewriter runs. The label changed
+before the text did, and both changed before the voice arrived.
+
+Fixed by deferring the whole swap. `present()` now stores the caption in a
+`pending` slot and leaves the previous caption on screen; `update()` applies
+it on the frame `waitingForAudio()` clears. The old caption holds for the
+length of the fetch, then the new one arrives with its voice. `clear()` drops
+the pending line if the rundown has moved on; `finishTyping()` applies it if
+it never landed.
+
+→ **The label is not the caption.** Swap them together or not at all.
+
+### Two-way follow-up repeated the naming line
+`hostAsk()` always prepended the intro line, so an extended two-way said
+*"We can go to Grolm now. What is the picture on the ground?"* and then
+*"We can go to Grolm now. Is that consistent with what you have?"* — naming
+the correspondent twice in one beat.
+
+Fixed by splitting the ask pool into `INTRO` (naming), `ASK` (question only)
+and `ASK_FOLLOWUP` (follow-up question, no name). `hostAsk` gained a
+`withIntro` flag; the follow-up uses `false`.
+
+→ **A name is spoken once per interview.** Subsequent questions do not
+reintroduce the person being asked.
+
+### The station open read backward
+`showOpen()` appended the anchor's name to a station-first line, producing
+*"This is G N N. Across the sector tonight, the following. I am Commander
+Hale."* Naming the station, teasing the programme, and only then naming the
+anchor reads backward for a sign-on.
+
+`SHOW_OPEN` reordered to lead with "This is G N N"; `showOpen()` now prepends
+the anchor's name. Reads: *"I am Commander Hale. This is G N N. Let's get to
+the news from across the sector tonight."* Same shape as `showClose()`,
+which already opened with "I have been Commander Hale, with Varr."
+
+→ **A sign-on runs person, station, programme.** The station does not
+introduce the anchor; the anchor does.
+
+### Wire headlines led with a broadcast label
+Some feeds file video and live coverage as `Watch: ...` or `Watch live: ...`.
+The label is a filing marker for the feed's own reader — it is telling *its*
+viewer that the item is a video — and it is not part of the headline. It
+survived `cleanFeedText()` and `unshout()`, so it appeared in the teleprompter
+as `WATCH: UK PM Andy Burnham Says...` and in the audio as *"Watch. UK PM
+Andy Burnham says..."*.
+
+Fixed with a single regex in `cleanFeedText()`, anchored to the start of the
+string, requiring the colon, matching `watch live`, `watch`, `video` or
+`live`. Applied to both title and description because the function runs on
+both.
+
+→ **The wire's filing labels are not the headline.** Anything the feed does
+not read aloud, the anchor does not read aloud either.
+
+### The main desk read markets
+`human` and `mrrshan_f` both carried `markets` on their beat, so financial
+wire headlines like *Investors iShares Russell 2000 exchange* were read by
+the main desk. The category was correctly assigned; the desk just claimed it.
+
+Fixed by removing `markets` from both entries. Market stories now hold in
+`heldByCategory.markets` until the show-block scheduler seats the trade desk,
+the resource desk or the industry desk, all of which already carry it.
+
+→ **A beat is a claim.** If a desk covers a category, it will read that
+category, and it does not get to complain when it does.
+
 ---
 
 ## 4. Claims that did NOT reproduce
@@ -799,9 +875,11 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
 | `python3 tools/drive.py 90 /tmp/run` | drives the broadcast over CDP, samples the director, screenshots each segment |
 | `python3 tools/audio_probe.py 110` | clip count and level-relative pop detection per scripted event |
 | `python3 tools/extract_all.py` | re-decode 22 archives, rebuild manifest + sidecars (~24 s) |
+| `python3 tools/key_robot.py` | key the MOO1 robot out of his newscast cels → `assets/generated/anchors/robot_frame_*.png`. Run with `python3`, not `bash` — the docstring is read as shell and dies at line 1 |
 | `python3 tools/prompt_bridge.py` | regenerate `assets/generated/prompts.md` |
 | `python3 tools/voice_audition.py` | audition every voice the running engine offers |
 | `python3 tools/capture_docs.py` | re-shoot the README screenshots |
+| `tools/scene_review.html` | dev-only page at `/tools/scene_review.html` — renders each MOO1 recipe as a `.webm` clip or 4×2 contact sheet |
 | `assets/generated/Prompts/` | consolidated prompt library — all `.md` prompt files, one per asset class |
 
 `tools/lbx.py` is the LBX container + LBXGFX decoder. Format notes live in
@@ -823,6 +901,41 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
 
 ## 7. Known open items
 
+- **The first minute after a fresh boot is broken, then self-corrects.** Any
+  of: the anchors step on each other on the first story (Varr gets a word
+  or two out before the next story cuts her off); Varr's mouth does not
+  move on her first line after the ident; sometimes neither of those,
+  sometimes something else. Which symptom fires varies between runs. Once
+  the station has been running for about a minute, none of them recur.
+  Suspected load-order race — the anchor plates, story icons, audio graph,
+  feed manifest or voice pipeline warm-up all resolve somewhere in that
+  window. A boot screen using one of the title cards with a music bed is
+  the owner's proposed direction: cover the loading window with a station
+  presentation and let the subsystems settle before the first story
+  starts. Cause not established; a loading screen that hides the symptom
+  without fixing the race would just delay it.
+- **Music bed does not play at boot and often does not play at all.** The
+  files are provably fine — Ogg Vorbis, plays in `/usr/bin/mpv`. (Note:
+  the shell `mpv` alias points at an uninstalled flatpak; use the absolute
+  path.) Diagnostics were added to `playMusic()` in `audio-engine.js`: a
+  `console.log` at entry, warnings on the three failure paths (no manifest
+  entry, fetch non-200, decode failure), and a log on success. Not yet run
+  with the diagnostics on to see which path fires. `audio-engine.js` in
+  the tree has the diagnostics in place.
+- **MOO1 composite review is in progress.** `tools/scene_review.html` and
+  `docs/scene-review/README.md` exist; a first review pass has been
+  generated; the verdict table is not yet filled in. Three fault classes
+  documented (composite fault, extractor fault, missing background). The
+  extractor faults — delta frame stacking in `tools/lbx.py` /
+  `tools/extract_all.py`, and chromatic scrambling — are out of scope for
+  this pass and named as separate work.
+- **The show rundown open is not built.** A change request, not yet
+  implemented: the cold open should name the stories on the queue before
+  reading them — a real rundown tease rather than the current "The desk is
+  watching several stories tonight" placeholder that names nothing. Needs
+  a headline shortener (sentence → noun phrase), a "what's coming up"
+  pool in `script-writer.js`, and a reordered cold-open sequence in
+  `broadcast-director.js`.
 - **The MOO1 cutaway fallback is still active and produces bad shots.** The
   generated-plate path in `cutscene-manager.js` matches the story correctly;
   the fallback to `GNNSceneCompositor.synthesize()` in `prefetch()` and
@@ -941,17 +1054,24 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   tradeoff rather than a leak. Music beds are LRU-capped at 4.
 ```
 
-## CLAUDE these are the changes to your CLAUDE.md since last i spoke to you
-## What changed from your version
+## What changed in this version
 
-**§1** — eight new rows added after the `Voices` row.
+**§1** — added rows: `Robot frames`, `Main desk beat`, `Two-anchor beats`, `Scene review`.
 
-**§3** — seven new entries added after `The README lied`: the banter repetition, the doubled break, the wrong sign-off, the text-ahead-of-voice, the two-way cluster, the two-way race, the ident-once, the STATUS plate, the caption position, the commercial font, and the boot-on-paste. Each in the file's usual shape (heading, evidence, `→` takeaway where there's one).
+**§3** — six new entries appended after `The boot died on a paste`:
+- The text box appeared one to two seconds before the voice
+- Two-way follow-up repeated the naming line
+- The station open read backward
+- Wire headlines led with a broadcast label
+- The main desk read markets
+- (Existing entries unchanged)
 
-**§4** — two new rows.
+**§5** — added `tools/key_robot.py` row and `tools/scene_review.html` row.
 
-**§5** — one new row.
+**§7** — four new bullets at the top of the section, before `The MOO1 cutaway fallback`:
+- The first minute after a fresh boot is broken, then self-corrects
+- Music bed does not play at boot
+- MOO1 composite review is in progress
+- The show rundown open is not built
 
-**§7** — six new bullets at the top of the section, before the anchor-plate items, grouped so the asset-pipeline work reads as one block.
-
-**One thing I left alone:** the `Last verified at commit 056c5a9` line. It's stale — you've made changes since — but I don't have the new hash. Update it when you next commit.
+**Left alone:** the `Last verified at commit 056c5a9` line at the top. Still stale. Update it after the next commit.

@@ -71,6 +71,27 @@ const GNNTextEngine = (() => {
     let cue = '';                // small status line, e.g. "SECTOR WIRE"
     let blinkAnchor = 0;
 
+    // A caption presented while the previous line's audio is still being
+    // fetched — or, more commonly, while the *new* line's audio is being
+    // fetched, since the director calls present() before speak(). Held
+    // here until the swap can be done in one frame with the voice.
+    //
+    // The old behaviour applied the incoming caption immediately: the box
+    // and its label switched to the new speaker, but no text was typed
+    // until the audio element was handed its source — a fraction of a
+    // second on a warm clip, one to two seconds on a cold one. The viewer
+    // saw the empty box before the voice arrived. Deferring the whole
+    // swap means the previous caption stays up until the new one is ready
+    // to arrive with its voice, and the box is never empty on screen.
+    let pending = null;
+    let pendingSince = 0;
+    // Ceiling on the deferred swap. Generous — a cold clip is one to two
+    // seconds, so four covers it. A line whose fetch or decode failed
+    // releases the element, `waitingForAudio()` returns false, and the
+    // pending line applies without ever hitting this. The ceiling is a
+    // last resort for the case where neither happens.
+    const PENDING_CEILING_MS = 4000;
+
     const PALETTE = {
         headline: '#6fc3df',
         banter: '#9ad7a0',
@@ -95,11 +116,11 @@ const GNNTextEngine = (() => {
     }
 
     /**
-     * Put a line on the prompter.
-     * @param {string} text
-     * @param {Object} opts { kind, durationMs, chyron, cue, instant }
+     * Apply a caption to the prompter. The internal state machine; the
+     * public entry point is `present()`, which defers to this until the
+     * voice is ready to arrive with the text.
      */
-    function present(text, opts = {}) {
+    function applyPresent(text, opts = {}) {
         fullText = String(text || '').replace(/\s+/g, ' ').trim();
         visible = opts.instant ? fullText.length : 0;
         holding = false;
@@ -117,16 +138,64 @@ const GNNTextEngine = (() => {
         }
     }
 
+    /**
+     * Put a line on the prompter.
+     *
+     * The director calls this immediately before asking for the voice,
+     * and the audio element does not actually start until the clip has
+     * been fetched and decoded — a fraction of a second for a warm clip,
+     * one to two seconds for a cold one. Applying the caption immediately
+     * showed the new box, empty, for exactly that gap: the label changed
+     * but no text, and then the voice arrived with the typewriter a beat
+     * behind. Deferring the swap to `update()` closes the gap — the
+     * previous caption stays up, and the new one arrives in the same
+     * frame the voice does.
+     *
+     * @param {string} text
+     * @param {Object} opts { kind, durationMs, chyron, cue, instant }
+     */
+    function present(text, opts = {}) {
+        pending = { text, opts };
+        pendingSince = performance.now();
+    }
+
     function clear() {
+        pending = null;
         fullText = ''; visible = 0; lines = []; holding = false; cue = '';
     }
 
     function finishTyping() {
+        // If a pending caption never applied — the audio fetch failed and
+        // its watchdog released the element, but the loop ran finishTyping
+        // before update() caught the release — apply it now so the caller
+        // gets the behaviour it asked for.
+        if (pending) {
+            const p = pending;
+            pending = null;
+            applyPresent(p.text, p.opts);
+        }
         visible = fullText.length;
         holding = true;
     }
 
     function update(now) {
+        // Apply a deferred caption the instant the voice begins. The
+        // previous line stays on screen until then, which is what makes
+        // the swap land with the audio instead of one to two seconds
+        // ahead of it. A stuck fetch or a decode failure releases the
+        // element via the tts.js watchdog, which also clears
+        // `waitingForAudio()` and lets this apply.
+        if (pending) {
+            const stillWaiting = typeof GNNTTS !== 'undefined'
+                && GNNTTS.waitingForAudio && GNNTTS.waitingForAudio();
+            const expired = now - pendingSince > PENDING_CEILING_MS;
+            if (!stillWaiting || expired) {
+                const p = pending;
+                pending = null;
+                applyPresent(p.text, p.opts);
+            }
+        }
+
         if (paused || !fullText) return;
         if (visible >= fullText.length) { holding = true; return; }
 
@@ -144,6 +213,12 @@ const GNNTextEngine = (() => {
         // Resetting `lastTick` each frame while waiting is deliberate: when
         // the voice does begin, the timer starts from zero rather than
         // firing a burst of characters at once to catch up.
+        //
+        // This branch is a second line of defence — by the time we are
+        // here, `pending` has already been applied and the audio element
+        // has been handed its source. It still matters for a line with no
+        // audio at all: the browser fallback path, or a line whose fetch
+        // failed silently and the director is going to time out.
         if (typeof GNNTTS !== 'undefined' && GNNTTS.waitingForAudio
             && GNNTTS.waitingForAudio()) {
             lastTick = now;

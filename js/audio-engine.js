@@ -239,7 +239,7 @@ const GNNAudio = (() => {
             // resume() is async. Anything that must wait for a *running*
             // context has to chain off it rather than re-check state on this
             // same tick, or it will silently take the not-ready path.
-            ctx.resume().then(notifyRunning, () => {});
+            ctx.resume().then(notifyRunning, () => { });
         } else {
             notifyRunning();
         }
@@ -252,7 +252,7 @@ const GNNAudio = (() => {
 
     // Single source of truth for what gets warmed up before air.
     const CORE_SFX = ['sfx_06', 'sfx_36', 'sfx_03', 'sfx_14', 'sfx_05',
-                      'intro_sfx_01', 'intro_sfx_02'];
+        'intro_sfx_01', 'intro_sfx_02'];
     const CORE_ROLES = ['servo', 'sweep', 'blast', 'drone', 'beep', 'chirp', 'zap'];
 
     /**
@@ -437,21 +437,55 @@ const GNNAudio = (() => {
         } catch (_) { /* already stopped */ }
     }
 
+    /**
+     * Start a music bed.
+     *
+     * The fetch and decode used to fail silently — a 404 on the .ogg, or a
+     * decode error, both landed in a bare `catch { return; }` and the bed
+     * simply never played with no indication why. Three warnings now cover
+     * the three ways this can fail: no manifest entry, a fetch that is not
+     * 200, a decode that throws. A log at entry tells you the function was
+     * even called, which was not knowable from the outside when the whole
+     * thing was silent.
+     *
+     * Remove the diagnostics once music is confirmed playing; they are loud
+     * and per-call, not per-startup.
+     */
     async function playMusic(trackId, opts = {}) {
+        console.log('[GNN Audio] playMusic called', trackId, opts);
         ensureContext();
-        if (!ctx || muted) return;
-        if (currentTrack === trackId && musicSource) return;
+        if (!ctx || muted) {
+            console.warn('[GNN Audio] playMusic aborted:',
+                !ctx ? 'no context' : 'muted');
+            return;
+        }
+        if (currentTrack === trackId && musicSource) {
+            console.log('[GNN Audio] playMusic skipped: already playing', trackId);
+            return;
+        }
         const meta = (typeof GNNAssets !== 'undefined')
             ? GNNAssets.musicTracks().find((m) => m.id === trackId)
             : null;
-        if (!meta) return;
+        if (!meta) {
+            console.warn('[GNN Audio] playMusic: no manifest entry for', trackId);
+            return;
+        }
         let buf = buffers.get(trackId);
         if (!buf) {
             try {
                 const r = await fetch(meta.file);
+                if (!r.ok) {
+                    console.warn('[GNN Audio] music fetch failed',
+                        meta.file, r.status, r.statusText);
+                    return;
+                }
                 buf = await ctx.decodeAudioData(await r.arrayBuffer());
                 buffers.set(trackId, buf);
-            } catch (err) { return; }
+            } catch (err) {
+                console.warn('[GNN Audio] music decode failed',
+                    meta.file, err && err.message ? err.message : err);
+                return;
+            }
         }
         rememberMusic(trackId);
         stopMusic(opts.crossfade === false ? 0.05 : 1.0);
@@ -468,6 +502,8 @@ const GNNAudio = (() => {
             Math.max(0.0001, musicBaseGain * musicDuck),
             ctx.currentTime + (opts.fadeIn || 1.4));
         musicSource = src; musicGain = g; currentTrack = trackId;
+        console.log('[GNN Audio] music started', trackId,
+            'base', musicBaseGain, 'duck', musicDuck);
     }
 
     /**

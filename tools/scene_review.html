@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <base href="/">
+    <title>GNN Scene Review</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #08080c;
+            color: #e0e0ec;
+            font-family: ui-monospace, 'JetBrains Mono', monospace;
+            margin: 0;
+            padding: 0;
+        }
+
+        #wrap {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            height: 100vh;
+        }
+
+        #side {
+            border-right: 1px solid #1f1f2e;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        #side h1 {
+            font-size: 0.9rem;
+            letter-spacing: 0.1em;
+            margin: 0 0 1.2em;
+            color: #6fc3df;
+        }
+
+        #side button {
+            display: block;
+            width: 100%;
+            margin-bottom: 8px;
+            padding: 10px;
+            font-family: inherit;
+            font-size: 0.75rem;
+            background: #14141e;
+            color: #e0e0ec;
+            border: 1px solid #2a2a3e;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        #side button:hover:not(:disabled) {
+            background: #1e1e2e;
+            border-color: #6fc3df;
+        }
+
+        #side button:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+        #side button.active {
+            background: #0a2540;
+            border-color: #6fc3df;
+        }
+
+        #side hr {
+            border: 0;
+            border-top: 1px solid #1f1f2e;
+            margin: 16px 0;
+        }
+
+        #controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        #controls button {
+            background: #1a3a4a;
+            border-color: #2a5a6e;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        #main {
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        #stage {
+            display: block;
+            background: #000;
+            image-rendering: pixelated;
+            border: 1px solid #2a2a3e;
+            max-width: 100%;
+        }
+
+        #status {
+            margin-top: 1em;
+            font-size: 0.75rem;
+            line-height: 1.6;
+            color: #9a9ab0;
+            white-space: pre-wrap;
+        }
+
+        #results {
+            margin-top: 1em;
+            font-size: 0.75rem;
+            line-height: 1.8;
+        }
+
+        #results a {
+            color: #6fc3df;
+            text-decoration: none;
+        }
+
+        #results a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="wrap">
+        <aside id="side">
+            <h1>SCENE REVIEW</h1>
+            <div id="controls">
+                <button id="render-video" disabled>Render all → video (.webm)</button>
+                <button id="render-sheet" disabled>Render all → contact sheet (.png)</button>
+                <button id="stop" disabled>Stop</button>
+            </div>
+            <hr>
+            <div id="recipe-list"></div>
+        </aside>
+        <main id="main">
+            <canvas id="stage" width="640" height="400"></canvas>
+            <div id="status">Loading assets…</div>
+            <div id="results"></div>
+        </main>
+    </div>
+
+    <script src="/js/asset-registry.js"></script>
+    <script src="/js/scene-compositor.js"></script>
+    <script>
+        'use strict';
+
+        // The nine recipes, in the order they appear in scene-compositor.js.
+        // The note is shown as a tooltip on the sidebar button.
+        const RECIPES = [
+            { name: 'convoy', note: 'Freighter convoy crossing a skyline' },
+            { name: 'tactical', note: 'Tactical plot: starfield + drifting target' },
+            { name: 'survey', note: 'Orbital survey: planet + scan bar' },
+            { name: 'council', note: 'Council floor with delegate cut-ins' },
+            { name: 'interview', note: 'Interview two-shot' },
+            { name: 'industry', note: 'Industrial floor: colony panels + machinery' },
+            { name: 'anomaly', note: 'Gravitic anomaly: vortex + inward debris' },
+            { name: 'cyber', note: 'Data centre: espionage plates' },
+            { name: 'deepfield', note: 'Deep field: nebula stack' },
+        ];
+
+        // Renders per recipe. The recipes are randomised, so two renders of the
+        // same recipe do not look alike. Two is enough to see variety without
+        // turning the review into a chore.
+        const REPEATS = 2;
+
+        const VIDEO_FPS = 30;
+        const SHEET_COLS = 4;
+        const SHEET_ROWS = 2;
+        const SHEET_CELL_W = 640;
+        const SHEET_CELL_H = 400;
+
+        const $ = (id) => document.getElementById(id);
+        const stage = $('stage');
+        const stageCtx = stage.getContext('2d');
+        stageCtx.imageSmoothingEnabled = false;
+
+        const statusEl = $('status');
+        const resultsEl = $('results');
+        const listEl = $('recipe-list');
+        const btnVideo = $('render-video');
+        const btnSheet = $('render-sheet');
+        const btnStop = $('stop');
+
+        let stopping = false;
+
+        function setStatus(msg) { statusEl.textContent = msg; }
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        /** Draw the scene's shared buffer into the preview canvas. */
+        function previewScene(buf) {
+            stageCtx.clearRect(0, 0, stage.width, stage.height);
+            stageCtx.drawImage(buf, 0, 0, stage.width, stage.height);
+        }
+
+        async function loadAssets() {
+            await GNNAssets.init();
+        }
+
+        /**
+         * Render a scene into the preview canvas over its full duration, at
+         * real-time speed. `onFrame` is optional and gets the buffer and the
+         * frame index on each tick.
+         */
+        async function playScene(scene, onFrame) {
+            const duration = scene.duration || 8000;
+            const frameMs = 1000 / VIDEO_FPS;
+            const totalFrames = Math.ceil(duration / frameMs);
+
+            for (let i = 0; i < totalFrames; i++) {
+                if (stopping) return;
+                const elapsed = i * frameMs;
+                const buf = GNNSceneCompositor.draw(scene, elapsed);
+                previewScene(buf);
+                if (onFrame) onFrame(buf, i);
+                await sleep(frameMs);
+            }
+        }
+
+        /** Record one scene as a .webm via MediaRecorder. */
+        async function recordScene(name) {
+            const scene = await GNNSceneCompositor.synthesize(name);
+            if (!scene) return null;
+
+            const stream = stage.captureStream(VIDEO_FPS);
+            const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+                ? 'video/webm;codecs=vp9'
+                : 'video/webm';
+            const rec = new MediaRecorder(stream, {
+                mimeType: mime,
+                videoBitsPerSecond: 4000000,
+            });
+            const chunks = [];
+            rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+
+            const stopped = new Promise(r => { rec.onstop = r; });
+            rec.start(200);
+
+            await playScene(scene);
+
+            rec.stop();
+            await stopped;
+
+            return new Blob(chunks, { type: 'video/webm' });
+        }
+
+        /** Render a scene as a grid of stills across its duration. */
+        async function contactSheetScene(name) {
+            const scene = await GNNSceneCompositor.synthesize(name);
+            if (!scene) return null;
+
+            const cols = SHEET_COLS, rows = SHEET_ROWS;
+            const cw = SHEET_CELL_W, ch = SHEET_CELL_H;
+            const sheet = document.createElement('canvas');
+            sheet.width = cols * cw;
+            sheet.height = rows * ch;
+            const sctx = sheet.getContext('2d');
+            sctx.imageSmoothingEnabled = false;
+            sctx.fillStyle = '#000';
+            sctx.fillRect(0, 0, sheet.width, sheet.height);
+
+            const duration = scene.duration || 8000;
+            const n = cols * rows;
+
+            for (let i = 0; i < n; i++) {
+                if (stopping) return null;
+                const t = (duration - 1) * (i / (n - 1));
+                const buf = GNNSceneCompositor.draw(scene, t);
+                previewScene(buf);
+                const cx = (i % cols) * cw;
+                const cy = Math.floor(i / cols) * ch;
+                sctx.drawImage(buf, cx, cy, cw, ch);
+                sctx.strokeStyle = '#2a2a3e';
+                sctx.lineWidth = 1;
+                sctx.strokeRect(cx + 0.5, cy + 0.5, cw - 1, ch - 1);
+                await sleep(30);
+            }
+            return sheet;
+        }
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }
+
+        function noteResult(name, blob, ext) {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${name}.${ext}`;
+            link.textContent = `${name}.${ext} — ${(blob.size / 1024).toFixed(0)} KB`;
+            const line = document.createElement('div');
+            line.appendChild(link);
+            resultsEl.appendChild(line);
+        }
+
+        async function renderAll(mode) {
+            stopping = false;
+            btnVideo.disabled = true;
+            btnSheet.disabled = true;
+            btnStop.disabled = false;
+            resultsEl.innerHTML = '';
+
+            for (const recipe of RECIPES) {
+                for (let r = 0; r < REPEATS; r++) {
+                    if (stopping) break;
+                    const suffix = REPEATS > 1 ? `_r${r + 1}` : '';
+                    setStatus(`Rendering ${recipe.name}${suffix} …`);
+
+                    if (mode === 'video') {
+                        const blob = await recordScene(recipe.name);
+                        if (blob && blob.size) {
+                            downloadBlob(blob, `${recipe.name}${suffix}.webm`);
+                            noteResult(`${recipe.name}${suffix}`, blob, 'webm');
+                        }
+                    } else {
+                        const sheet = await contactSheetScene(recipe.name);
+                        if (sheet) {
+                            const blob = await new Promise(r => sheet.toBlob(r, 'image/png'));
+                            downloadBlob(blob, `${recipe.name}${suffix}.png`);
+                            noteResult(`${recipe.name}${suffix}`, blob, 'png');
+                        }
+                    }
+                    // A beat between downloads — the browser will queue them otherwise.
+                    await sleep(400);
+                }
+            }
+
+            setStatus(stopping
+                ? 'Stopped.'
+                : 'Done. Files are in your Downloads folder.');
+            btnVideo.disabled = false;
+            btnSheet.disabled = false;
+            btnStop.disabled = true;
+        }
+
+        function buildRecipeList() {
+            listEl.innerHTML = '';
+            for (const r of RECIPES) {
+                const b = document.createElement('button');
+                b.textContent = r.name;
+                b.title = r.note;
+                b.addEventListener('click', async () => {
+                    document.querySelectorAll('#recipe-list button')
+                        .forEach(x => x.classList.remove('active'));
+                    b.classList.add('active');
+                    setStatus(`Previewing ${r.name} …`);
+                    const scene = await GNNSceneCompositor.synthesize(r.name);
+                    if (scene) await playScene(scene);
+                    setStatus(`Finished ${r.name}.`);
+                });
+                listEl.appendChild(b);
+            }
+        }
+
+        btnVideo.addEventListener('click', () => renderAll('video'));
+        btnSheet.addEventListener('click', () => renderAll('sheet'));
+        btnStop.addEventListener('click', () => {
+            stopping = true;
+            btnStop.disabled = true;
+        });
+
+        (async () => {
+            buildRecipeList();
+            try {
+                await loadAssets();
+                btnVideo.disabled = false;
+                btnSheet.disabled = false;
+                setStatus(
+                    'Ready.\n\n' +
+                    'Click a recipe on the left to preview it in place.\n' +
+                    'Or render all to video, or all to contact sheets.\n\n' +
+                    'Note: recipes are randomised — every render is a fresh scene. ' +
+                    `The tool renders each recipe ${REPEATS} times so you see variety.\n\n` +
+                    'Files land in your browser\'s Downloads folder. Move them into ' +
+                    'docs/scene-review/ when done.'
+                );
+            } catch (err) {
+                setStatus('Asset load failed: ' + err.message);
+                console.error(err);
+            }
+        })();
+    </script>
+</body>
+
+</html>

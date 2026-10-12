@@ -56,6 +56,12 @@ const GNNDirector = (() => {
     let holdUntil = 0;
 
     let queue = [];
+    // Stories that arrived while a desk was on air that does not cover their
+    // category. Held rather than dropped — the show-block scheduler drains a
+    // bucket when it seats a desk whose beat includes that category. Until
+    // the scheduler exists, sports stories land here and stay.
+    const heldByCategory = Object.create(null);
+    const HELD_CAP = 40;
     let current = null;
     let storiesRead = 0;
     let sinceBreak = 0;
@@ -190,6 +196,49 @@ const GNNDirector = (() => {
         speechDeadline = performance.now() + est * 2.4 + 8000;
         pump();
         return est;
+    }
+
+    /**
+     * Queue a whole tagged beat — a script-writer sequence of
+     * `{who, text}` objects — each line in its own speaker's voice.
+     *
+     * The pump plays them one at a time in order, so queueing them all at
+     * once is correct; the pre-queue code used per-line `setTimeout`s to
+     * space them out, which left stale lines in the pipeline when the beat
+     * was cancelled mid-flight. This is used by both anchor-to-anchor
+     * exchanges and any other multi-line beat from `script-writer.js`.
+     *
+     * `opts.pitch` may be a number (all lines) or a function
+     * `(speakerId) => number` for beats with per-speaker prosody, like a
+     * two-way. `opts.drivesDesk` may be a boolean or a function
+     * `(speakerId) => boolean`, same idea.
+     *
+     * Returns the summed estimated duration, so callers can pace the hold
+     * that follows.
+     */
+    function queueTaggedLines(lines, opts = {}) {
+        let total = 0;
+        for (const line of lines || []) {
+            if (!line || !line.who || !line.text) continue;
+            const speaker = line.who;
+            const pitch = typeof opts.pitch === 'function'
+                ? opts.pitch(speaker.id)
+                : (opts.pitch !== undefined ? opts.pitch : -3);
+            const drivesDesk = typeof opts.drivesDesk === 'function'
+                ? opts.drivesDesk(speaker.id)
+                : (opts.drivesDesk !== undefined ? opts.drivesDesk : true);
+            total += say(line.text, {
+                voice: speaker.voice,
+                pitch,
+                speakerId: speaker.id,
+                caption: {
+                    kind: opts.kind || 'banter',
+                    cue: speaker.name.toUpperCase()
+                },
+                drivesDesk,
+            });
+        }
+        return total;
     }
 
     /**
@@ -340,11 +389,63 @@ const GNNDirector = (() => {
         return out;
     }
 
+    /**
+     * Every feed category the current desk covers, as a Set.
+     *
+     * The desk is whoever is seated — the two anchors `main.js` pinned. Their
+     * beats are unioned. If nothing is seated yet, or no seat carries a beat,
+     * this returns null and `enqueueAll` skips the filter entirely, which is
+     * the behaviour that existed before this change.
+     *
+     * When the show-block scheduler lands, a block's own `targetCategories`
+     * can take precedence — this function is the right seam to override. The
+     * scheduler will set `currentBlock` before `beginRead` runs and the beat
+     * can be read from there instead.
+     */
+    function deskBeat() {
+        if (typeof GNNRenderer === 'undefined' || !GNNRenderer.seatedIds) return null;
+        if (typeof GNNCast === 'undefined') return null;
+        const ids = GNNRenderer.seatedIds();
+        if (!ids.length) return null;
+        const set = new Set();
+        let anyBeat = false;
+        for (const id of ids) {
+            const who = GNNCast.get(id);
+            if (who && Array.isArray(who.beat)) {
+                anyBeat = true;
+                for (const b of who.beat) set.add(b);
+            }
+        }
+        return anyBeat ? set : null;
+    }
+
     function enqueueAll(items) {
+        const beat = deskBeat();
         for (const it of items || []) {
             if (!it || !it.title) continue;
             if (queue.some((q) => q.title === it.title)) continue;
             if (current && current.title === it.title) continue;
+
+            // Beat filter. A story whose category the current desk does not
+            // cover is held, not dropped. Sport at the main desk is the case
+            // this exists for; when the show-block scheduler seats a sports
+            // desk, that desk's beat will include 'sport' and the bucket will
+            // drain normally.
+            //
+            // No category, or no beat, means we cannot decide, and the item
+            // goes through. That preserves the old behaviour for anything the
+            // feed manager has not tagged.
+            if (beat && it.category && !beat.has(it.category)) {
+                const bucket = heldByCategory[it.category] ||
+                    (heldByCategory[it.category] = []);
+                bucket.push(it);
+                // Cap per bucket so a long session cannot grow one category
+                // without bound. Oldest goes first — the newest is the most
+                // likely to still be relevant when a matching desk comes on.
+                while (bucket.length > HELD_CAP) bucket.shift();
+                continue;
+            }
+
             queue.push(it);
         }
         // Re-scored on every top-up, not just at ingest, so items already
@@ -549,87 +650,95 @@ const GNNDirector = (() => {
     /**
      * Two anchors talking to each other instead of at the camera.
      *
-     * `GNNScript.exchange()` returns a jab and a reply drawn from the
-     * asymmetric relationship table in `js/cast.js`, each tagged with who
-     * says it, so each line goes out in that character's own voice. This
-     * was written and then never called, which is why the desk only ever
-     * talked about the wire.
+     * `GNNScript.exchange()` draws from the asymmetric relationship table
+     * in `js/cast.js` — the specific opinion one anchor holds of another,
+     * with an optional follow and close now that the entries carry them.
+     * A quick entry produces a two-line beat; an extended one produces
+     * four. Each line is tagged with who says it, so each goes out in
+     * that character's own voice and the animating plate follows.
+     *
+     * Queue all the lines at once. The pump plays them one at a time in
+     * order, with the 420 ms beat of air between them. The old per-line
+     * `setTimeout` approach was a workaround from before the queue
+     * existed — it left stale lines in the pipeline whenever the beat was
+     * cancelled mid-flight, and its token guard only checked the token
+     * once, at the moment it queued the follow-up line.
+     *
+     * Returns true when the beat was queued.
      */
     function beginExchange(now) {
         const lines = GNNScript.exchange();
         if (!lines || lines.length < 2) return false;
         banterStreak++;
         setState(S.BANTER, now);
-        const jab = lines[0];
-        const reply = lines[1];
-        const estA = say(jab.text, {
-            voice: jab.who.voice, pitch: -3,
-            speakerId: jab.who.id,
-            caption: { kind: 'banter', cue: jab.who.name.toUpperCase() }
-        });
-        // The reply waits for the jab to finish, then speaks in the other
-        // anchor's voice. Both lines through `say()` at once would talk
-        // over each other — one voice path, one speaker at a time.
-        // Guarded by the speech token, not just by the state.
-        //
-        // The state can be BANTER again for a different beat by the time
-        // this fires, and then the stale reply speaks over whatever is
-        // being said — which is how the commander's intro got cut off by
-        // the other anchor. `speechToken` changes on every new line, so
-        // comparing it catches exactly the case the state check misses.
-        const myToken = speechToken;
-        setTimeout(() => {
-            if (state !== S.BANTER || speechToken !== myToken || speaking) return;
-            const estB = say(reply.text, {
-                voice: reply.who.voice, pitch: -3,
-                speakerId: reply.who.id,
-                caption: {
-                    kind: 'banter',
-                    cue: reply.who.name.toUpperCase()
-                }
-            });
-            holdUntil = performance.now() + estB + 600;
-        }, estA + 350);
-        holdUntil = now + estA + 1200;
+        const total = queueTaggedLines(lines);
+        holdUntil = now + total + 1200;
+        return true;
+    }
+
+    /**
+     * A structured beat between the two anchors — separate from
+     * `beginExchange()`, which draws on the relationship table for a
+     * specific opinion. This one uses each anchor's own banks on the cast
+     * sheet (`openers`, `reactions`, `closers`) to build a short
+     * conversation: opener, reaction, optionally one more volley, close.
+     *
+     * The point is to make the desk feel inhabited rather than reading
+     * single canned asides. `banter()` is still called when the beat is
+     * just one line — this is the two-anchor path.
+     *
+     * Returns true when the beat was queued.
+     */
+    function beginStructuredBeat(now) {
+        if (typeof GNNScript.banterBeat !== 'function') return false;
+        const lines = GNNScript.banterBeat(current);
+        if (!lines || lines.length < 2) return false;
+        banterStreak++;
+        setState(S.BANTER, now);
+        const total = queueTaggedLines(lines);
+        holdUntil = now + total + 1000;
         return true;
     }
 
     /**
      * A remote two-way. The correspondent appears in the monitor and the
-     * three lines go out in order through the speech queue, so the anchor
+     * lines go out in order through the speech queue, so the anchor
      * finishes asking before the reporter starts answering — which is the
      * whole reason the queue exists.
      *
-     * The correspondent's answering line is tagged `drivesDesk: false`, so
-     * the anchor's mouth stays shut while the correspondent talks. It also
-     * carries `speakerId: correspondent.id`, so the caption label reads the
-     * right name and `activeSeatForLine()` can return -1 to tell the
-     * renderer and the text engine that no anchor is speaking.
+     * `GNNScript.twoWay()` now returns one of three shapes — brief (2
+     * lines), standard (3 lines), or extended (5 lines) — and this
+     * function queues however many come back without caring which. The
+     * brief shape is the quick consult that existed before; the extended
+     * shape is the interview the change request asked for.
+     *
+     * The correspondent's answering lines are tagged `drivesDesk: false`,
+     * so the anchor's mouth stays shut while the correspondent talks. They
+     * also carry `speakerId`, so the caption label reads the right name
+     * and `activeSeatForLine()` can return -1 to tell the renderer and the
+     * text engine that no anchor is speaking.
      */
     function beginTwoWay(now) {
         const tw = GNNScript.twoWay();
         if (!tw) return false;
-        // Queue the three lines first, synchronously, so `speaking` is
-        // true before any frame can run. Then open the cutaway async.
-        let total = 0;
-        for (const line of tw.lines) {
-            const fromDesk = line.who.id !== tw.correspondent.id;
-            total += say(line.text, {
-                voice: line.who.voice,
-                pitch: line.who.id === tw.correspondent.id ? -1 : -3,
-                speakerId: line.who.id,
-                caption: {
-                    kind: 'banter',
-                    cue: line.who.name.toUpperCase()
-                },
-                drivesDesk: fromDesk,
-            });
-        }
+        // Queue all the lines first, synchronously, so `speaking` is true
+        // before any frame can run. Then open the cutaway async.
+        const correspondentId = tw.correspondent.id;
+        const total = queueTaggedLines(tw.lines, {
+            // The correspondent's lines sit a little lower in pitch — a
+            // field reporter through a monitor, not an anchor at the desk.
+            pitch: (id) => id === correspondentId ? -1 : -3,
+            // Only the anchor's lines turn the desk; the correspondent's do
+            // not, because they are not at the desk to turn.
+            drivesDesk: (id) => id !== correspondentId,
+        });
         const kind = current ? GNNCutsceneManager.routeFor(current) : null;
         GNNCutsceneManager.openTwoWay(
             tw.correspondent.id, kind, performance.now(),
             tw.correspondent.name.toUpperCase());
         // Drop the monitor once the exchange is over, not on a timer.
+        // Ceiling scales with the beat length so an extended five-line
+        // two-way is not cut short by a hardcoded timeout.
         drainSpeech(total * 3 + 15000).then(() => {
             if (GNNCutsceneManager.isTwoWay()) GNNCutsceneManager.endCutaway();
         });
@@ -640,6 +749,15 @@ const GNNDirector = (() => {
     function beginBanter(now) {
         // Some anchor beats are a remote two-way, some are the pair
         // talking to each other, the rest a comment on the story.
+        //
+        // Order matters. The two-way is the most structured and the
+        // longest; it comes first. Then the relationship exchange — the
+        // specific opinion one anchor holds of another, which can now
+        // extend to four lines when the entry carries a follow and close.
+        // Then the bank-driven structured beat, which builds from each
+        // anchor's own openers / reactions / closers. Only if none of
+        // those produce a beat does it fall through to a single-line
+        // aside.
         if (Math.random() < PACE.twoWayShare) {
             // Reserve BANTER *before* the async two-way opens.
             // `openTwoWay` awaits image loads; in the meantime the
@@ -651,7 +769,13 @@ const GNNDirector = (() => {
             beginTwoWay(now);
             return;
         }
-        if (Math.random() < PACE.exchangeShare && beginExchange(now)) return;
+        if (Math.random() < PACE.exchangeShare) {
+            if (beginExchange(now)) return;
+            // No relationship between this pair worth airing — the table
+            // is deliberately sparse. Fall through to the bank-driven
+            // beat before the single-line path.
+            if (beginStructuredBeat(now)) return;
+        }
         beginPlainBanter(now);
     }
 
@@ -996,6 +1120,21 @@ const GNNDirector = (() => {
         getQueue: () => queue,
         isSpeaking: () => speaking,
         report,
+        /**
+         * Stories held because the current desk does not cover their
+         * category. Read by the show-block scheduler when a desk changes.
+         * Nothing drains these yet — the bucket is a holding area until the
+         * scheduler lands and seats a desk whose beat matches.
+         */
+        heldFor: (category) => (heldByCategory[category] || []).slice(),
+        /** How many stories are held, per category. Diagnostics only. */
+        heldCounts: () => {
+            const out = {};
+            for (const cat of Object.keys(heldByCategory)) {
+                out[cat] = heldByCategory[cat].length;
+            }
+            return out;
+        },
         set onStateChange(fn) { onStateChange = fn; },
         set onStory(fn) { onStory = fn; },
     };

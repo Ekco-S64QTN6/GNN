@@ -41,8 +41,8 @@ const GNNFeedManager = (() => {
 
         // --- Morning Index: markets and money ---
         { url: 'https://feeds.bbci.co.uk/news/business/rss.xml', cat: 'markets' },
-        { url: 'https://search.cnbc.com/rs/search/combinednewsletter/rss?partnerId=wrss01&id=100003114', cat: 'markets' },
         { url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', cat: 'markets' },
+        { url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', cat: 'markets' }, // Replaced failing CNBC feed
 
         // --- Diplomatic Hour ---
         { url: 'https://news.un.org/feed/subscribe/en/news/all/rss.xml', cat: 'diplomacy' },
@@ -126,6 +126,13 @@ const GNNFeedManager = (() => {
     function cleanFeedText(str) {
         if (!str) return '';
         let cleaned = stripHtml(str)
+            // Broadcast labels that some feeds put in front of a headline.
+            // The BBC's video and live-coverage stories lead with "Watch:",
+            // "Watch live:" or "Live:" — the wire is telling its own reader
+            // that the item is a video, and the label survives into the
+            // anchor's mouth where it reads as a stutter ("Watch. UK PM
+            // Andy Burnham says..."). Not part of the headline; not read.
+            .replace(/^\s*(watch\s*live|watch|video|live)\s*:\s*/i, '')
             .replace(/Article URL:.*$/i, '')
             .replace(/Comments$/i, '')
             .replace(/—\s*Comments$/i, '')
@@ -156,31 +163,31 @@ const GNNFeedManager = (() => {
      * Ordered most specific first: a Starship story is SPACEX, not SPACE.
      */
     const TOPIC_ENTITIES = [
-        ['SPACEX',   ['spacex', 'starship', 'falcon 9', 'falcon heavy', 'starlink', 'raptor']],
-        ['NASA',     ['nasa', 'artemis', 'jwst', 'james webb', 'perseverance', 'voyager', 'ingenuity']],
-        ['ESA',      ['esa', 'european space agency', 'ariane', 'rosalind franklin']],
+        ['SPACEX', ['spacex', 'starship', 'falcon 9', 'falcon heavy', 'starlink', 'raptor']],
+        ['NASA', ['nasa', 'artemis', 'jwst', 'james webb', 'perseverance', 'voyager', 'ingenuity']],
+        ['ESA', ['esa', 'european space agency', 'ariane', 'rosalind franklin']],
         ['BLUEORIGIN', ['blue origin', 'new glenn', 'new shepard']],
-        ['OPENAI',   ['openai', 'chatgpt', 'gpt-4', 'gpt-5', 'sam altman']],
+        ['OPENAI', ['openai', 'chatgpt', 'gpt-4', 'gpt-5', 'sam altman']],
         ['ANTHROPIC', ['anthropic', 'claude']],
-        ['GOOGLE',   ['google', 'alphabet', 'deepmind', 'gemini', 'android', 'pixel']],
-        ['APPLE',    ['apple', 'iphone', 'ipad', 'macos', 'vision pro']],
+        ['GOOGLE', ['google', 'alphabet', 'deepmind', 'gemini', 'android', 'pixel']],
+        ['APPLE', ['apple', 'iphone', 'ipad', 'macos', 'vision pro']],
         ['MICROSOFT', ['microsoft', 'windows', 'azure', 'copilot', 'xbox']],
-        ['META',     ['meta', 'facebook', 'instagram', 'whatsapp', 'zuckerberg']],
-        ['AMAZON',   ['amazon', 'aws', 'kuiper']],
-        ['NVIDIA',   ['nvidia', 'cuda', 'blackwell']],
-        ['TESLA',    ['tesla', 'cybertruck', 'robotaxi']],
-        ['AI',       ['artificial intelligence', 'machine learning', 'neural network',
-                      'large language model', ' llm ', 'chatbot']],
-        ['UKRAINE',  ['ukraine', 'ukrainian', 'kyiv', 'zelensky']],
-        ['MIDEAST',  ['gaza', 'israel', 'hamas', 'hezbollah', 'palestinian', 'west bank']],
-        ['CHINA',    ['china', 'chinese', 'beijing', 'taiwan', 'xi jinping']],
-        ['RUSSIA',   ['russia', 'russian', 'moscow', 'kremlin', 'putin']],
-        ['CLIMATE',  ['climate', 'emissions', 'global warming', 'carbon', 'wildfire', 'hurricane']],
-        ['QUANTUM',  ['quantum', 'qubit']],
-        ['FUSION',   ['fusion', 'tokamak', 'iter ', 'plasma confinement']],
-        ['CRYPTO',   ['bitcoin', 'ethereum', 'crypto', 'blockchain']],
+        ['META', ['meta', 'facebook', 'instagram', 'whatsapp', 'zuckerberg']],
+        ['AMAZON', ['amazon', 'aws', 'kuiper']],
+        ['NVIDIA', ['nvidia', 'cuda', 'blackwell']],
+        ['TESLA', ['tesla', 'cybertruck', 'robotaxi']],
+        ['AI', ['artificial intelligence', 'machine learning', 'neural network',
+            'large language model', ' llm ', 'chatbot']],
+        ['UKRAINE', ['ukraine', 'ukrainian', 'kyiv', 'zelensky']],
+        ['MIDEAST', ['gaza', 'israel', 'hamas', 'hezbollah', 'palestinian', 'west bank']],
+        ['CHINA', ['china', 'chinese', 'beijing', 'taiwan', 'xi jinping']],
+        ['RUSSIA', ['russia', 'russian', 'moscow', 'kremlin', 'putin']],
+        ['CLIMATE', ['climate', 'emissions', 'global warming', 'carbon', 'wildfire', 'hurricane']],
+        ['QUANTUM', ['quantum', 'qubit']],
+        ['FUSION', ['fusion', 'tokamak', 'iter ', 'plasma confinement']],
+        ['CRYPTO', ['bitcoin', 'ethereum', 'crypto', 'blockchain']],
         ['SECURITY', ['ransomware', 'data breach', 'vulnerability', 'zero-day', 'malware']],
-        ['HEALTH',   ['vaccine', 'outbreak', 'cancer', 'alzheimer', 'clinical trial', 'fda ']],
+        ['HEALTH', ['vaccine', 'outbreak', 'cancer', 'alzheimer', 'clinical trial', 'fda ']],
     ];
 
     /**
@@ -203,28 +210,28 @@ const GNNFeedManager = (() => {
     function calculateImportance(title, desc) {
         let score = 0;
         const text = `${title} ${desc}`.toUpperCase();
-        
+
         // Priority news keywords
         const priorityKeywords = [
-            'BREAKING', 'CRITICAL', 'DISCOVERY', 'ANNOUNCES', 'FIRST TIME', 'REVEALS', 'LAUNCH', 
+            'BREAKING', 'CRITICAL', 'DISCOVERY', 'ANNOUNCES', 'FIRST TIME', 'REVEALS', 'LAUNCH',
             'THREAT', 'DANGER', 'COLLISION', 'OUTBREAK', 'SABOTAGE', 'WAR ', 'INVASION', 'DISASTER',
             'NEW MODEL', 'AI', 'QUANTUM', 'FUSION', 'SUPERCONDUCTOR', 'NASA', 'ESA', 'SPACE', 'HISTORIC'
         ];
-        
+
         priorityKeywords.forEach(kw => {
             if (text.includes(kw)) score += 10;
         });
 
         // Add small random weight to avoid deterministic ordering for same-priority items
         score += Math.random() * 5;
-        
+
         return score;
     }
 
     /** Fetch single feed via rss2json */
     async function fetchFeed(url, retries = 2) {
         const apiUrl = `${RSS2JSON_API}?rss_url=${encodeURIComponent(url)}`;
-        
+
         for (let attempt = 0; attempt <= retries; attempt++) {
             try {
                 const resp = await fetch(apiUrl);
@@ -248,7 +255,7 @@ const GNNFeedManager = (() => {
                     const importance = calculateImportance(title, desc);
                     const timestamp = Date.parse(item.pubDate || new Date().toISOString()) || Date.now();
                     const topic = extractTopic(rawTitle, rawDesc);
-                    
+
                     validItems.push({
                         title,
                         // Keep the original casing: the script writer mines
