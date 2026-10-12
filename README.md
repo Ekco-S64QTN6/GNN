@@ -1,4 +1,3 @@
-```markdown
 <div align="center">
 
 # GNN — Galactic News Network
