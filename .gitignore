@@ -32,3 +32,7 @@ assets/generated/_inbox/
 
 # one-off bug capture, large; the fix and its measurements are in CLAUDE.md
 docs/*.webm
+# scene-review render output — regenerated locally with
+# tools/scene_review.html; the README stays, the renders do not.
+docs/scene-review/*.png
+docs/scene-review/*.webm
