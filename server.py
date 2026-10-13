@@ -9,6 +9,7 @@ Routes
     /                 static files from the project directory
     /api/tts          edge-tts synthesis  ->  audio/mpeg
     /api/status       what the station has available
+    /api/log          browser diagnostics append to gnn-server.log
 
 The TTS route streams Microsoft neural voices through the local
 `edge-tts` package. No account, no key, nothing leaves the machine
@@ -33,6 +34,11 @@ import urllib.parse
 PORT = int(os.environ.get('GNN_PORT', 8080))
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 PIDFILE = os.path.join(DIRECTORY, '.gnn-server.pid')
+# The same file --bg redirects the server's stdout and stderr into. The
+# /api/log route writes to it explicitly rather than relying on the shell
+# redirect, so browser-side diagnostic lines land here even when the
+# server runs in the foreground and its own output goes to the terminal.
+LOG = os.path.join(DIRECTORY, 'gnn-server.log')
 
 ALLOWED_VOICE = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_')
 MAX_TEXT = 1200
@@ -421,6 +427,11 @@ def normalize(mp3):
 class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
+    # Ceiling on a single browser log line, in bytes. A diagnostic line is
+    # a couple of hundred bytes at most; anything larger is either an
+    # accident or abuse and gets rejected rather than written.
+    LOG_LINE_MAX = 2000
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
@@ -451,6 +462,58 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
         if parsed.path.rstrip('/') == '/api/localnews':
             return self.handle_localnews()
         return super().do_GET()
+
+    def do_POST(self):
+        # The only POST route this server serves. Anything else is a 404
+        # rather than a fall-through to SimpleHTTPRequestHandler, which
+        # only implements GET and HEAD and would give a confusing error.
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.rstrip('/') == '/api/log':
+            return self.handle_log()
+        return self.send_bytes(b'{"error":"not found"}', 'application/json', 404)
+
+    # -- browser log sink ---------------------------------------
+    #
+    # The client-side diagnostics — the [TTS] lines that trace the boot
+    # race — happen in the browser and have no way to reach a file on
+    # this machine's disk without being told to. This endpoint is that
+    # telling: the browser POSTs one line per call, the server appends
+    # it to gnn-server.log, and the line lands in the same file the
+    # Python side already writes to.
+    #
+    # Deliberately best-effort. A log call that fails is not worth failing
+    # a page load over, and the browser's own console.log still works
+    # regardless of whether this route is reachable.
+
+    def handle_log(self):
+        try:
+            length = int(self.headers.get('Content-Length', '0'))
+        except ValueError:
+            length = 0
+        if length <= 0 or length > self.LOG_LINE_MAX:
+            return self.send_bytes(b'{"ok":false}', 'application/json', 400)
+        try:
+            raw = self.rfile.read(length)
+            line = raw.decode('utf-8', 'replace').rstrip('\r\n')
+        except (OSError, UnicodeError):
+            return self.send_bytes(b'{"ok":false}', 'application/json', 400)
+        if not line:
+            return self.send_bytes(b'{"ok":true}', 'application/json')
+
+        # Append to gnn-server.log. O_APPEND is atomic for writes under a
+        # few KB on every filesystem this project runs on, so interleaving
+        # with the shell's own redirect of the server's stdout and stderr
+        # is safe — lines do not splice.
+        try:
+            import datetime
+            stamp = datetime.datetime.now().strftime('%H:%M:%S')
+            with open(LOG, 'a', encoding='utf-8') as fh:
+                fh.write('[%s] [Browser] %s\n' % (stamp, line))
+        except OSError:
+            # Disk full, permissions, whatever — the browser still has its
+            # console and the page is not worth breaking over a log.
+            pass
+        return self.send_bytes(b'{"ok":true}', 'application/json')
 
     # rss2json has a daily cap, and when it is reached every feed returns an
     # error and the channel has nothing to read. The Kaiacord project drops a
