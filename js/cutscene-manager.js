@@ -15,6 +15,26 @@
       sound design, and hard cuts or dissolves between them.
       Every break is assembled at runtime, so two breaks never
       look the same.
+
+   ------------------------------------------------------------
+   Recent fix:
+
+   The `cyber` route was renamed to `hack`. `cyber` used to
+   name both a route and a compositor recipe; the recipe was
+   deleted (it was a single SPIES portrait with no overlays,
+   identical to `interview` minus the room), but the route was
+   left in place and still pointed at it. When the generated
+   plate for a hacking story was missing, `prefetch()` and
+   `triggerCutaway()` fell through to `synthesize('cyber')`
+   and — before the fix in scene-compositor.js — were handed a
+   random recipe instead. With the fixed synthesize() that path
+   now returns null and the cutaway is skipped, which is what
+   the scene-review docs said a deleted recipe should do.
+
+   The route is kept, renamed, and pointed only at the
+   generated plates. There is no composite fallback for a hack
+   story any more; either the plate loads or the story reads
+   without a cutaway.
    ============================================================ */
 
 const GNNCutsceneManager = (() => {
@@ -40,10 +60,14 @@ const GNNCutsceneManager = (() => {
     // Story -> scene routing
     // ---------------------------------------------------------
 
+    // A route is a *subject*, not a recipe name. Most routes share a name
+    // with a compositor recipe because the recipe was written for that
+    // subject; `hack` does not, because the recipe was deleted. A route
+    // with no recipe and no generated plate simply produces no cutaway.
     const ROUTES = [
         { kind: 'convoy', words: ['launch', 'rocket', 'spacex', 'nasa', 'artemis', 'starship', 'orbit', 'satellite', 'cargo', 'shipping', 'fleet', 'convoy', 'flight', 'aviation', 'boeing', 'airbus'] },
         { kind: 'anomaly', words: ['quantum', 'physics', 'anomaly', 'black hole', 'wormhole', 'gravity', 'particle', 'collider', 'antimatter', 'relativity', 'singularity', 'fusion'] },
-        { kind: 'cyber', words: ['hack', 'hacked', 'cyber', 'breach', 'ransomware', 'malware', 'leak', 'exploit', 'phishing', 'botnet', 'zero-day', 'encryption', 'password', 'spyware'] },
+        { kind: 'hack', words: ['hack', 'hacked', 'cyber', 'breach', 'ransomware', 'malware', 'leak', 'exploit', 'phishing', 'botnet', 'zero-day', 'encryption', 'password', 'spyware'] },
         { kind: 'council', words: ['senate', 'parliament', 'congress', 'election', 'vote', 'treaty', 'summit', 'council', 'minister', 'president', 'diplomat', 'sanctions', 'legislation'] },
         { kind: 'survey', words: ['telescope', 'exoplanet', 'astronomy', 'webb', 'hubble', 'asteroid', 'comet', 'mars', 'moon', 'jupiter', 'saturn', 'galaxy', 'nebula', 'star'] },
         { kind: 'industry', words: ['factory', 'manufacturing', 'mining', 'chip', 'semiconductor', 'steel', 'energy', 'reactor', 'battery', 'supply chain', 'plant', 'refinery'] },
@@ -73,14 +97,20 @@ const GNNCutsceneManager = (() => {
     // Fourteen of these were conditioned into assets/generated/cutaways/
     // and nothing referenced them, which is why every cut still landed on
     // a MOO1 screen. They are full-bleed pictures of the thing being
-    // reported, which is what a cutaway is for; the composited MOO1 scenes
-    // stay as the fallback for a route with no plate.
+    // reported, which is what a cutaway is for.
+    //
+    // A route with an entry here draws the plate when it loads and is
+    // skipped entirely when it does not — there is no compositor recipe
+    // behind `hack` to fall back to, and the compositor no longer
+    // substitutes a random scene for a name it does not recognise. That
+    // is deliberate: a missing cutaway is a small loss, a wrong one is
+    // worse than none.
     const GENERATED = {
         convoy: ['station_trade', 'starship_battle', 'starship_battle_02'],
         tactical: ['starship_battle', 'starship_battle_02', 'planet_invasion',
             'planet_invasion_02'],
         council: ['council_vote'],
-        cyber: ['hacker_code', 'spy_infiltration'],
+        hack: ['hacker_code', 'spy_infiltration'],
         anomaly: ['space_vortex', 'space_vortex_02', 'black_hole',
             'solar_flare'],
         survey: ['black_hole', 'solar_flare', 'asteroid_mining'],
@@ -105,6 +135,11 @@ const GNNCutsceneManager = (() => {
      * Returns null when the route has no plate or the file is missing, and
      * the caller falls back to the composited MOO1 scene — so dropping a
      * better picture in later is the whole of the change needed.
+     *
+     * A route with no compositor recipe behind it (`hack`) returns null
+     * here and the caller skips the cutaway. That is the correct outcome:
+     * the alternative is a random recipe shown under a story it has
+     * nothing to do with.
      */
     async function generatedScene(kind) {
         const names = GENERATED[kind];
@@ -264,11 +299,15 @@ const GNNCutsceneManager = (() => {
 
     function isTwoWay() { return !!(cutaway && cutaway.twoWay); }
 
-    /** Sound design that matches the visual recipe. */
+    // Sound design that matches the visual recipe. Keyed by the scene's
+    // own `kind`, which for a generated plate is the route name and for
+    // a composited scene is the recipe name. A route with no key here
+    // (`hack` on a machine with no `hacker_code.png`) never reaches this
+    // table, because no cutaway is created in the first place.
     const SCENE_AUDIO = {
         convoy: [{ role: 'rumble', gain: 0.5 }, { role: 'servo', gain: 0.35, delay: 0.6 }],
         anomaly: [{ role: 'drone', gain: 0.5 }, { role: 'sweep', gain: 0.4, delay: 1.1 }],
-        cyber: [{ role: 'beep', gain: 0.45 }, { role: 'chirp', gain: 0.4, delay: 0.35 }, { role: 'zap', gain: 0.3, delay: 0.9 }],
+        hack: [{ role: 'beep', gain: 0.45 }, { role: 'chirp', gain: 0.4, delay: 0.35 }, { role: 'zap', gain: 0.3, delay: 0.9 }],
         council: [{ role: 'thud', gain: 0.5 }, { role: 'chirp', gain: 0.3, delay: 0.5 }],
         survey: [{ role: 'sweep', gain: 0.4 }, { role: 'blip', gain: 0.35, delay: 0.8 }],
         industry: [{ role: 'servo', gain: 0.5 }, { role: 'rumble', gain: 0.4, delay: 0.4 }],
@@ -282,10 +321,20 @@ const GNNCutsceneManager = (() => {
     // Cutaways
     // ---------------------------------------------------------
 
-    /** Warm a scene for the current story so the cut is instant. */
+    /**
+     * Warm a scene for the current story so the cut is instant.
+     *
+     * Tries the generated plate first; falls back to the compositor only
+     * for routes the compositor still knows how to build. A route with
+     * neither (a hack story on a machine whose `hacker_code.png` did not
+     * condition) yields null and `triggerCutaway()` skips the cut. That
+     * is the correct behaviour — a hack story on a station with no hacking
+     * plate reads without one, rather than being shown a picture of a
+     * convoy because the router asked the compositor for a recipe that
+     * does not exist.
+     */
     async function prefetch(story) {
         const kind = routeFor(story);
-        // Prefer a generated plate; fall back to a composited MOO1 scene.
         pendingScene = (kind && await generatedScene(kind))
             || await GNNSceneCompositor.synthesize(kind || undefined);
         return pendingScene;

@@ -24,6 +24,22 @@ const GNNTTS = (() => {
     // last one and the server refuses every one of them.
     const SESSION = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
 
+    // Boot-race diagnostics. Every line is prefixed [TTS] so it can be
+    // grepped out once the load-order fault is understood. Flip to false
+    // to silence without editing every site; leave it true for now.
+    //
+    // These are not decoration. The boot race has several candidate causes
+    // — an autoplay refusal, a guard timer firing before `onended`, an
+    // estimate that misses the actual duration, a superseding speak() that
+    // never resolves the outgoing promise — and each of them logs a
+    // different shape. One boot with the console open will narrow it.
+    const DEBUG = true;
+    function log(...args) {
+        if (!DEBUG) return;
+        // eslint-disable-next-line no-console
+        console.log('[TTS]', ...args);
+    }
+
     /**
      * The *Multilingual* voices are a later generation than the plain
      * Neural ones and are audibly less synthetic; they lead the list and
@@ -144,9 +160,11 @@ const GNNTTS = (() => {
             mediaSource.connect(analyser);
             analyser.connect(voiceGain);
             voiceGain.connect(GNNAudio.getVoiceBus());
+            log('analyser connected');
         } catch (err) {
             // Some browsers refuse a second MediaElementSource; playback still works.
             mediaSource = null; analyser = null;
+            log('analyser connect failed', err && err.message);
         }
     }
 
@@ -173,6 +191,7 @@ const GNNTTS = (() => {
         el.muted = false;
         el.currentTime = 0;
         attachAnalyser();
+        log('unlocked');
     }
 
     // ---------------------------------------------------------
@@ -371,7 +390,8 @@ const GNNTTS = (() => {
         if (typeof window !== 'undefined' && window.speechSynthesis) {
             try { window.speechSynthesis.cancel(); } catch (_) { }
         }
-        finish();
+        log('stop()');
+        finish('stop');
     }
 
     /** Bring the voice stage back up for a new line, from silence. */
@@ -385,8 +405,29 @@ const GNNTTS = (() => {
         voiceGain.gain.linearRampToValueAtTime(1, t + 0.03);
     }
 
-    function finish() {
+    /**
+     * Settle the current line and release the director's promise.
+     *
+     * `reason` names the path that got us here so the console shows which
+     * one fired — `onended` is a clean end, `guard` is a watchdog timeout,
+     * `autoplay` is a play() refusal, `noblob` is a fetch or decode failure,
+     * `stop` is a supersede, `error` is an element error. In a healthy
+     * session every line settles from `onended`; in the boot race the
+     * suspect is `guard` or `autoplay`.
+     */
+    function finish(reason = 'unknown') {
         if (!speaking) { resolveNow(); return; }
+        if (audioEl) {
+            log('finish',
+                'reason=' + reason,
+                'id=' + requestId,
+                't=' + (audioEl.currentTime || 0).toFixed(2),
+                'dur=' + (isFinite(audioEl.duration) ? audioEl.duration.toFixed(2) : 'NaN'),
+                'ready=' + audioEl.readyState,
+                'paused=' + audioEl.paused);
+        } else {
+            log('finish', 'reason=' + reason, 'id=' + requestId, 'no element');
+        }
         speaking = false;
         awaitingAudio = false;
         if (typeof GNNAudio !== 'undefined') GNNAudio.duckUnderVoice(false);
@@ -524,6 +565,14 @@ const GNNTTS = (() => {
         if (!handoverMs) cutElement();
         resolveNow();
 
+        const est = estimateMs(clean);
+        log('speak start',
+            'id=' + id,
+            'chars=' + clean.length,
+            'est=' + est + 'ms',
+            'handover=' + handoverMs + 'ms',
+            'voice=' + (opts.voice || voice));
+
         speaking = true;
         // We are now waiting for a clip to arrive. Cleared the moment
         // `el.play()` is called, so the text engine knows not to run ahead
@@ -548,7 +597,10 @@ const GNNTTS = (() => {
                 // flag before the utterance so the text engine starts
                 // typing along with it.
                 awaitingAudio = false;
-                browserFallback(clean, id).then(() => { if (id === requestId) finish(); });
+                log('speak: web speech fallback', 'id=' + id);
+                browserFallback(clean, id).then(() => {
+                    if (id === requestId) finish('webspeech');
+                });
                 return;
             }
 
@@ -556,11 +608,19 @@ const GNNTTS = (() => {
             // Hard watchdog: whatever happens to the clip — a stalled fetch,
             // a decode failure, an autoplay refusal — the director gets its
             // callback.
+            const guardMs = est * 2.2 + 6000;
             const guard = setTimeout(() => {
                 if (id !== requestId) return;
+                log('guard fired',
+                    'id=' + id,
+                    'guardMs=' + guardMs,
+                    't=' + (el.currentTime || 0).toFixed(2),
+                    'dur=' + (isFinite(el.duration) ? el.duration.toFixed(2) : 'NaN'),
+                    'paused=' + el.paused,
+                    'ready=' + el.readyState);
                 cutElement();
-                finish();
-            }, estimateMs(clean) * 2.2 + 6000);
+                finish('guard');
+            }, guardMs);
             const clearGuard = () => clearTimeout(guard);
 
             // Hand over a beat after the element reports the end rather than
@@ -571,28 +631,35 @@ const GNNTTS = (() => {
             el.onended = () => {
                 clearGuard();
                 if (id !== requestId) return;
-                setTimeout(() => { if (id === requestId) finish(); }, TAIL_MS);
+                setTimeout(() => { if (id === requestId) finish('onended'); }, TAIL_MS);
             };
             el.onerror = () => {
                 clearGuard();
-                if (id === requestId) finish();
+                if (id === requestId) finish('error');
             };
 
             fetchClip(clean, opts, id).then((blob) => {
                 if (id !== requestId) { clearGuard(); return; }
                 if (!blob) {
                     clearGuard();
+                    log('speak: no blob',
+                        'id=' + id,
+                        'available=' + available);
                     if (available === false) {
                         // Same fallback path as above; no element to wait for.
                         awaitingAudio = false;
                         browserFallback(clean, id).then(() => {
-                            if (id === requestId) finish();
+                            if (id === requestId) finish('webspeech');
                         });
                     } else {
-                        finish();
+                        finish('noblob');
                     }
                     return;
                 }
+                log('speak: blob arrived',
+                    'id=' + id,
+                    'size=' + blob.size,
+                    'blobType=' + blob.type);
                 const begin = () => {
                     if (id !== requestId) { clearGuard(); return; }
                     setSource(URL.createObjectURL(blob));
@@ -605,14 +672,37 @@ const GNNTTS = (() => {
                     // element never produces a duration).
                     awaitingAudio = false;
                     const p = el.play();
-                    if (p && p.catch) {
-                        p.catch(() => {
+                    if (p && p.then) {
+                        p.then(() => {
+                            if (id !== requestId) return;
+                            // Now playing. Log the real duration so the
+                            // estimate can be compared against it.
+                            log('speak: play() resolved',
+                                'id=' + id,
+                                'dur=' + (isFinite(el.duration) ? el.duration.toFixed(2) : 'NaN'),
+                                'est=' + est + 'ms');
+                        }).catch((err) => {
                             clearGuard();
                             if (id !== requestId) return;
+                            log('speak: play() refused',
+                                'id=' + id,
+                                'err=' + (err && err.message ? err.message : err));
                             // Autoplay still locked — keep the clock honest by
                             // running the segment on the estimated read length.
-                            setTimeout(() => { if (id === requestId) finish(); },
-                                estimateMs(clean));
+                            setTimeout(() => {
+                                if (id === requestId) finish('autoplay');
+                            }, est);
+                        });
+                    } else if (p && p.catch) {
+                        p.catch((err) => {
+                            clearGuard();
+                            if (id !== requestId) return;
+                            log('speak: play() refused',
+                                'id=' + id,
+                                'err=' + (err && err.message ? err.message : err));
+                            setTimeout(() => {
+                                if (id === requestId) finish('autoplay');
+                            }, est);
                         });
                     }
                 };

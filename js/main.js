@@ -13,6 +13,73 @@
     const RENDER_FPS = 20;
     const FRAME_MS = 1000 / RENDER_FPS;
 
+    // Boot diagnostics. Every line is sent to the browser console (live,
+    // for a watch) and to the server's gnn-server.log via /api/log (for
+    // reading after the fact, next to the Python side's own `[GNN]`
+    // lines). The POST is fire-and-forget — a failed log call is not
+    // worth breaking a page load over, and the console copy always works
+    // regardless of whether the endpoint is reachable.
+    //
+    // The boot race this is here to diagnose: the first line of the
+    // broadcast sometimes has its mouth not move, and the first story
+    // sometimes has the anchors stepping on each other. Both resolve
+    // after about a minute. Watch the `[GNN Boot] audio state=` lines
+    // and the `[TTS]` lines from tts.js in the same file to see whether
+    // the context is running when the first clip plays.
+    function log(...args) {
+        const line = args.map((a) => {
+            if (a === null) return 'null';
+            if (a === undefined) return 'undefined';
+            if (typeof a === 'object') {
+                try { return JSON.stringify(a); } catch (e) { return String(a); }
+            }
+            return String(a);
+        }).join(' ');
+        // eslint-disable-next-line no-console
+        console.log('[GNN Boot]', line);
+        try {
+            fetch('api/log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: '[GNN Boot] ' + line,
+                keepalive: true,
+            }).catch(() => { /* console copy already worked */ });
+        } catch (err) {
+            // fetch can throw synchronously on a bad URL or in odd
+            // sandboxed contexts. Still not worth breaking the page.
+        }
+    }
+
+    /**
+     * Watch the AudioContext state during boot.
+     *
+     * The trace suspects the context may be suspended when the first
+     * clip plays, which would leave the analyser unattached (so the
+     * mouth does not track the voice) and the music bed silent (the
+     * music bus is inside the same context). Every 500ms during the
+     * first 30 seconds is logged so the boot window is fully captured;
+     * after that only state *changes* are logged, so a long session
+     * does not accumulate thousands of identical lines but a late
+     * transition still shows up.
+     */
+    function watchAudioContext() {
+        let lastState = null;
+        const start = performance.now();
+        setInterval(() => {
+            const ctx = GNNAudio.getContext();
+            const state = ctx ? ctx.state : 'none';
+            const elapsed = Math.round(performance.now() - start);
+            const duringBoot = elapsed < 30000;
+            if (duringBoot || state !== lastState) {
+                log('audio',
+                    'state=' + state,
+                    'elapsed=' + elapsed + 'ms',
+                    ctx ? 't=' + ctx.currentTime.toFixed(2) : 'no-ctx');
+            }
+            lastState = state;
+        }, 500);
+    }
+
     const $ = (id) => document.getElementById(id);
 
     const canvas = $('gnnCanvas');
@@ -63,7 +130,7 @@
         // plate is a look rather than a failure.
         const GEN = `${ASSET_DIR}/generated`;
         const [set, desk] = await Promise.all([
-            GNNAssets.loadImage(`${GEN}/set/studio_wide_empty.png`),
+            GNNAssets.loadImage(`${GEN}/set/studio_wide_empty.png?v=2`),
             GNNAssets.loadImage(`${GEN}/set/desk_oval_front.png`),
         ]);
 
@@ -149,6 +216,10 @@
                 `${s.sfx} effects · ${s.music} music beds · ${s.bulletins} archive bulletins`;
         }
         statusText.textContent = 'Studio ready';
+        log('assets',
+            'set=' + (set ? 'ok' : 'NULL'),
+            'backdrop=' + (backdrop ? 'ok' : 'NULL'),
+            'window=' + (setWindow ? JSON.stringify(setWindow) : 'NULL'));
         return {
             set, desk, seated, backdrop, window: setWindow,
             deskVoice: seated.length ? seated[0].voice : null,
@@ -172,6 +243,10 @@
         if (timestamp - lastRender < FRAME_MS) return;
         lastRender = timestamp;
         frameCount++;
+
+        // First frame is a boot milestone: the render loop is actually
+        // running and the canvas is being drawn to. Logged once.
+        if (frameCount === 1) log('boot', 'game loop first frame at ' + Math.round(now) + 'ms');
 
         try {
             GNNGlitch.update(now);
@@ -365,6 +440,7 @@
             GNNAudio.ensureContext();
             GNNTTS.unlock();
             GNNAudio.preload(GNNAudio.CORE_SFX);
+            log('boot', 'user gesture: audio unlocked');
         };
         document.addEventListener('click', unlock, { once: true });
         document.addEventListener('keydown', unlock, { once: true });
@@ -496,6 +572,15 @@
     async function init() {
         watchPointerIdle();
         wireSettingsKey();
+
+        // Start watching the AudioContext from the very beginning of boot.
+        // The AudioContext does not exist yet — `getContext()` returns null
+        // — so the first samples will read `state=none`. That is expected
+        // and useful: it tells us the moment the context is actually
+        // created, and whether it comes up running or suspended.
+        watchAudioContext();
+        log('boot', 'init start');
+
         try {
             try {
                 if (document.fonts && document.fonts.load) {
@@ -509,11 +594,14 @@
             // selector is built, so the two can never disagree.
             const catalogue = await GNNTTS.loadCatalogue();
             if (catalogue && catalogue.engine) {
-                console.log('[GNN] voice engine: %s (%s)', catalogue.engine,
-                    catalogue.cloud ? 'cloud' : 'local');
+                log('boot', 'voice engine:',
+                    catalogue.engine, catalogue.cloud ? 'cloud' : 'local');
             }
 
             const assets = await loadAllAssets();
+            log('boot', 'assets loaded',
+                'seated=' + assets.seated.length,
+                'robot=' + (assets.robot ? assets.robot.frames.length : 0));
             GNNRenderer.init(canvas, assets);
 
             // The anchor in the first seat reads, so the station speaks with
@@ -529,12 +617,16 @@
 
             GNNFeedManager.start();
             requestAnimationFrame(gameLoop);
+            log('boot', 'on air',
+                'voice=' + GNNTTS.getVoice(),
+                'engine=' + (GNNTTS.getEngine() || 'unknown'));
 
             iconPlay.classList.add('hidden');
             iconPause.classList.remove('hidden');
         } catch (err) {
             bootError = true;
             console.error('[GNN] initialization failed:', err);
+            log('boot', 'FAILED', err && err.message ? err.message : String(err));
             statusText.textContent = 'Error loading assets — see console';
             statusDot.className = 'error';
             try {

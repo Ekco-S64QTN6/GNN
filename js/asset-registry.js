@@ -11,6 +11,24 @@
    path; everything queries this module, which is what makes the
    full 873-item library reachable instead of the 9 items the
    old bumper rotation used.
+
+   ------------------------------------------------------------
+   Recent fix:
+
+   find()   A numeric ceiling an item cannot answer is no longer
+            satisfied by default. `e.coverage > q.maxCoverage`
+            tests false when `e.coverage` is `undefined`, so an
+            item whose manifest entry is missing `coverage`,
+            `noise`, `lum`, `w`, `h` or `frames` was passing every
+            query that named a bound on that field. The COLONIES
+            sky panels — fully opaque, coverage 1.00 where the
+            manifest has it, and no entry at all on some of the
+            older items — reached a query that asked for
+            `maxCoverage 0.6, maxNoise 40` and drew as a hard
+            magenta rectangle in the bottom-left of the `industry`
+            cutaway. The check now requires the field to be a
+            number, in both directions: a min filter needs a real
+            value to pass, and a max filter needs one to fail on.
    ============================================================ */
 
 const GNNAssets = (() => {
@@ -57,6 +75,14 @@ const GNNAssets = (() => {
         byId = new Map();
         for (const dir of Object.keys(gfx)) {
             for (const e of gfx[dir]) {
+                // `aspect` and `area` are derived here from the real
+                // dimensions so a caller cannot accidentally read a value
+                // the manifest did not supply. Every other field — `role`,
+                // `coverage`, `lum`, `noise`, `hero`, `pools` — is left
+                // exactly as the manifest wrote it, because `find()` now
+                // distinguishes "field has this value" from "field is not
+                // present", and defaulting a missing field to zero would
+                // collapse those two cases back together.
                 e.aspect = e.w / Math.max(e.h, 1);
                 e.area = e.w * e.h;
                 e.animated = e.frames > 1;
@@ -123,15 +149,50 @@ const GNNAssets = (() => {
     // ---------------------------------------------------------
 
     /**
+     * Test a numeric bound against an entry.
+     *
+     * Two things this function fixes over a bare `e.field > q.bound`:
+     *
+     *   1. A missing field on the entry fails the test in *both*
+     *      directions. `undefined > 0.6` is false, so the naive version
+     *      let an item with no `coverage` field pass a max-coverage
+     *      query — the exact hole that put an opaque sky panel into the
+     *      `industry` plate rect. `undefined < 0.6` is also false, so
+     *      the naive version accidentally rejected missing fields on
+     *      min queries — which was correct by luck, not by design. This
+     *      makes the intent explicit: a bound an item cannot answer is
+     *      a bound the item does not satisfy.
+     *
+     *   2. The comparison is named, so a caller reading `find()` sees
+     *      what it is doing rather than a chain of inline inequalities.
+     *
+     * `q` carries the constraints; `key` names the field on `q` being
+     * read (`'maxW'`, `'minCoverage'`); `field` is the entry field it
+     * tests (`'w'`, `'coverage'`); `dir` is `'min'` or `'max'`.
+     */
+    function boundOk(entry, q, key, field, dir) {
+        if (q[key] === undefined) return true;
+        const v = entry[field];
+        if (typeof v !== 'number' || !isFinite(v)) return false;
+        return dir === 'min' ? v >= q[key] : v <= q[key];
+    }
+
+    /**
      * Filter the library.
      * @param {Object} q - { pool, dir, dirs, role, roles, minW, minH, maxW,
      *                       maxH, animated, minFrames, maxNoise, minCoverage,
-     *                       exclude }
+     *                       maxCoverage, minLum, exclude }
      *
      * `pool` is the admission gate from the extraction pipeline: an item only
      * carries a pool if it passed that pool's size, palette-richness and
      * interface checks. Querying by pool is what keeps a 7x3 tactical chip or
      * an empty menu frame out of a cutaway window.
+     *
+     * Every numeric bound here rejects an entry whose manifest entry does
+     * not carry that field. See `boundOk()` above and the note at the top
+     * of this file — the previous version let a missing field satisfy any
+     * max bound, which is how an opaque COLONIES sky panel reached a rect
+     * that asked for a cut-out.
      */
     function find(q = {}) {
         const dirs = q.dirs || (q.dir ? [q.dir] : null);
@@ -142,16 +203,24 @@ const GNNAssets = (() => {
             if (dirs && dirs.indexOf(e.dir) < 0) return false;
             if (roles && roles.indexOf(e.role) < 0) return false;
             if (exclude && exclude.has(e.id)) return false;
-            if (q.minW !== undefined && e.w < q.minW) return false;
-            if (q.minH !== undefined && e.h < q.minH) return false;
-            if (q.maxW !== undefined && e.w > q.maxW) return false;
-            if (q.maxH !== undefined && e.h > q.maxH) return false;
+
+            if (!boundOk(e, q, 'minW', 'w', 'min')) return false;
+            if (!boundOk(e, q, 'maxW', 'w', 'max')) return false;
+            if (!boundOk(e, q, 'minH', 'h', 'min')) return false;
+            if (!boundOk(e, q, 'maxH', 'h', 'max')) return false;
+
+            if (!boundOk(e, q, 'minFrames', 'frames', 'min')) return false;
+
+            if (!boundOk(e, q, 'maxNoise', 'noise', 'max')) return false;
+            if (!boundOk(e, q, 'minCoverage', 'coverage', 'min')) return false;
+            if (!boundOk(e, q, 'maxCoverage', 'coverage', 'max')) return false;
+            if (!boundOk(e, q, 'minLum', 'lum', 'min')) return false;
+
+            // `animated` is a boolean, and the test is `!==`, so a missing
+            // field already filters out (`undefined !== false` is true).
+            // Left as-is; the fix above is for the numeric fields only.
             if (q.animated !== undefined && e.animated !== q.animated) return false;
-            if (q.minFrames !== undefined && e.frames < q.minFrames) return false;
-            if (q.maxNoise !== undefined && e.noise > q.maxNoise) return false;
-            if (q.minCoverage !== undefined && e.coverage < q.minCoverage) return false;
-            if (q.maxCoverage !== undefined && e.coverage > q.maxCoverage) return false;
-            if (q.minLum !== undefined && e.lum < q.minLum) return false;
+
             return true;
         });
     }
@@ -183,8 +252,12 @@ const GNNAssets = (() => {
     function pickSfx(roles, opts = {}) {
         const list = (Array.isArray(roles) ? roles : [roles]);
         let pool = audio.sfx.filter((s) => list.indexOf(s.role) >= 0);
-        if (opts.minDur) pool = pool.filter((s) => s.dur >= opts.minDur);
-        if (opts.maxDur) pool = pool.filter((s) => s.dur <= opts.maxDur);
+        if (opts.minDur !== undefined) {
+            pool = pool.filter((s) => typeof s.dur === 'number' && s.dur >= opts.minDur);
+        }
+        if (opts.maxDur !== undefined) {
+            pool = pool.filter((s) => typeof s.dur === 'number' && s.dur <= opts.maxDur);
+        }
         if (!pool.length) pool = audio.sfx;
         return pool.length ? pool[(Math.random() * pool.length) | 0] : null;
     }

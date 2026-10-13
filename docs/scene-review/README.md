@@ -93,15 +93,15 @@ marked **delete** is one where the parts do not go together at all.
 
 | Recipe | Verdict | Notes |
 | :--- | :--- | :--- |
-| `convoy` | | |
-| `tactical` | | |
-| `survey` | | |
-| `council` | | |
-| `interview` | | |
-| `industry` | | |
-| `anomaly` | | |
-| `cyber` | | |
-| `deepfield` | | |
+| `convoy` | keep | Both renders clean. Ships at depth over LANDING skylines via `cross` motion with bounded scales. Working as intended. |
+| `tactical` | keep | Chrome plates already removed (`plates = []`). Starfield + drifting hull reads as surveillance feed. Clean. |
+| `survey` | keep | Planet body with orbiting probe and scan bar. Both renders clean. |
+| `council` | **fix** | `portrait` pool delegates produce ornamental framed race cards, not cut-in figures. Reads as posters nailed to a wall. **Delegate layers removed**; backdrop alone is an establishing shot. |
+| `interview` | keep | SPIES fullscreen portraits fill contain-fit against EMBASSY/BACKGRND room backdrops. Reads as "live interview" / surveillance photo. |
+| `industry` | keep | Plate query now `maxCoverage:0.6, maxNoise:40, animated:false`. The twenty cov-1.00 sky panels no longer reach the rect. Phantom rectangle gone. |
+| `anomaly` | keep | Best-looking recipe. Vortex core + `approach` debris creates genuine depth. Both renders vivid. |
+| `cyber` | **delete** | `rack = []` — loop never runs. Recipe is a single SPIES portrait with no overlays, identical to `interview` minus the room backdrop. **Deleted from RECIPES.** |
+| `deepfield` | keep | Recipe logic sound (nebula stack + starfield). Grey square artefacts in r1 are **delta-frame stacking** — extractor fault, not compositor. Will clean up when extractor is fixed. |
 
 ## Salvage cases observed so far
 

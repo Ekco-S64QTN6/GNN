@@ -922,13 +922,15 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   entry, fetch non-200, decode failure), and a log on success. Not yet run
   with the diagnostics on to see which path fires. `audio-engine.js` in
   the tree has the diagnostics in place.
-- **MOO1 composite review is in progress.** `tools/scene_review.html` and
-  `docs/scene-review/README.md` exist; a first review pass has been
-  generated; the verdict table is not yet filled in. Three fault classes
-  documented (composite fault, extractor fault, missing background). The
-  extractor faults — delta frame stacking in `tools/lbx.py` /
-  `tools/extract_all.py`, and chromatic scrambling — are out of scope for
-  this pass and named as separate work.
+- **MOO1 composite review is complete.** `docs/scene-review/README.md`
+  verdict table is filled in. Fixes applied to `scene-compositor.js`:
+  `council` delegate layers removed (portrait pool produces ornamental
+  race cards, not cut-in figures), `industry` fallback background query
+  added, `cyber` recipe deleted (rack was always `[]`, identical to
+  `interview` without the room backdrop). Remaining faults are extractor-
+  side: delta-frame stacking in `deepfield` and chromatic scrambling.
+  Eight recipes survive: convoy, tactical, survey, council, interview,
+  industry, anomaly, deepfield.
 - **The show rundown open is not built.** A change request, not yet
   implemented: the cold open should name the stories on the queue before
   reading them — a real rundown tease rather than the current "The desk is
@@ -936,17 +938,16 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   a headline shortener (sentence → noun phrase), a "what's coming up"
   pool in `script-writer.js`, and a reordered cold-open sequence in
   `broadcast-director.js`.
-- **The MOO1 cutaway fallback is still active and produces bad shots.** The
-  generated-plate path in `cutscene-manager.js` matches the story correctly;
-  the fallback to `GNNSceneCompositor.synthesize()` in `prefetch()` and
-  `triggerCutaway()` does not. Three known faults, all in the composite path:
-  delta frames stack instead of replacing (extractor — `tools/lbx.py` /
-  `extract_all.py`), assets from different pools composite at incompatible
-  scales (`MOTION.approach` in particular scales across an 18× range), and
-  some pool queries return empty so the layer is dropped, leaving black (the
-  `interview()` room query, and probably siblings). **Decide what to do with
-  the fallback** — comment it out, fix the recipes, or keep it. The code
-  change has not been made either way.
+- **The MOO1 cutaway fallback is still active.** The review is done (see
+  above); composite faults in `council`, `industry` and `cyber` are fixed
+  or deleted. Two extractor faults remain: delta-frame stacking (visible
+  in `deepfield` and the `animation phantoms` screenshots) and chromatic
+  scrambling (visible in the `Mrrshan Stealth Optics` commercial). Both
+  are in `tools/lbx.py` / `tools/extract_all.py` and affect every animated
+  LBX asset, not just the compositor. The SPECIFICATION phantom overlay
+  (a translucent rectangle in the bottom-left of commercial hero shots)
+  is a separate issue from the recipe review — it comes through the
+  `single()` path in `cutscene-manager.js`, not through a named recipe.
 - **All eleven species have `desk_hero` and `speaking`.** `listening_flip` has
   not been re-derived from the newest plates. Without it the renderer falls
   back to the unflipped `listening` plate, which faces the wrong way for a
@@ -1075,3 +1076,18 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
 - The show rundown open is not built
 
 **Left alone:** the `Last verified at commit 056c5a9` line at the top. Still stale. Update it after the next commit.
+- **Two COLONIES items decode with a scattered-pixel sky.** `COLONIES/item_02`
+  and `COLONIES/item_03` — and possibly others in other archives not yet
+  examined — contain bytes in the 0xC0–0xDF band that the two-band RLE in
+  `lbx.py` does not account for. The good items in the same archive
+  (`item_00`, `item_01`, `item_04`, `item_05`) contain **zero** bytes in
+  that band; the two broken items contain 2–3% of their payload there, and
+  nothing else distinguishes them. They decode as a legible mountain shape
+  with single-pixel dots scattered across what should be transparent sky.
+  Both alternative readings of the band were tried: as opaque runs the dots
+  become solid vertical bars, as transparent runs they become holes punched
+  through the mountain. Neither is what the encoder wrote. The correct
+  expansion requires the LBXGFX spec. Until it is found, those two items
+  are excluded from every query by `COLONIES_SCRAMBLED` in
+  `scene-compositor.js`; the exclusion is id-based, documented, and
+  reversible in one edit when the format is understood.

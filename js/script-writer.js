@@ -109,18 +109,20 @@ const GNNScript = (() => {
      * A line from a character's own bank, filtered through this module's
      * recency buffer.
      *
-     * `GNNCast.line()` does the picking; this wrapper remembers the result
-     * so the same opener cannot fire twice in a session, and falls back to
-     * `fallback` when the character has no such bank. Falls through to
-     * `fallback` on null so callers can chain: `castLine('closers', id)
-     * || genericLine`.
+     * Selects from the character's unused lines before drawing, so a recently
+     * heard phrase does not force the caller into generic filler. Falls back
+     * when the character has no bank or every option has been used recently.
      */
     function castLine(kind, id, fallback = null) {
-        if (typeof GNNCast === 'undefined') return fallback;
-        const raw = GNNCast.line(kind, id, null);
-        if (!raw) return fallback;
-        if (hasSaidRecently(raw)) return fallback;
-        return remember(raw);
+        if (typeof GNNCast === 'undefined' || typeof GNNCast.get !== 'function') return fallback;
+        const character = GNNCast.get(id);
+        const bank = character && Array.isArray(character[kind]) ? character[kind] : [];
+        if (!bank.length) return fallback;
+        const fresh = bank.filter((line) => !hasSaidRecently(line));
+        // Filter before choosing. Picking first and rejecting a repeated line
+        // made a perfectly good character bank fall through to generic filler.
+        if (!fresh.length) return fallback;
+        return remember(fresh[(Math.random() * fresh.length) | 0]);
     }
 
     function chance(p) { return Math.random() < p; }
@@ -178,55 +180,58 @@ const GNNScript = (() => {
     // ---------------------------------------------------------
 
     const OPENERS = [
-        'Cross-referencing that against sector archives.',
-        'Filed under ongoing developments.',
-        'That item is now logged with the orbital registry.',
-        'We are holding that transmission open.',
-        'Our correspondents continue to monitor.',
-        'That confirms the earlier relay from the beacon net.',
+        'The statement is in. The answers are not.',
+        'We have the official account. We are still checking what it leaves out.',
+        'The wording has changed; the central question has not.',
+        'That is the claim on the wire. It is not yet a finding.',
+        'The detail to watch is what the release does not explain.',
+        'Before we move on, there is a distinction worth keeping clear.',
     ];
 
-    // Machine asides. These are Unit 7's and Foundry-Nine's; in a human
-    // mouth they are nonsense, and banter() used to hand them to whoever
-    // happened to be reading, so the Commander announced that this unit had
-    // no opinion.
+    // Machine asides: dry, specific, and unmistakably not written for a human mouth.
     const ROBOT_ASIDES = [
         'Processing probability of human survival: {PCT} percent.',
         'Sentiment analysis returns: {MOOD}. Confidence, {PCT} percent.',
         'My archives contain {N} prior events of this classification.',
-        'Recalibrating optimism subroutine. Result unchanged.',
-        'This unit is required to state that it has no opinion. This unit has {N} opinions.',
-        'Flagging that story for the {HOUR}-hundred repeat cycle.',
-        'Estimated relevance decay: {N} hours.',
-        'I have queried six archives. Four disagree. Two are on fire.',
-        'Reminder: viewer discretion is a legacy feature and is no longer supported.',
-        'My predecessor unit filed the same story in {YEAR}. It was also inconclusive.',
-        'Human colleagues would insert a pause here. Inserting pause.',
-        'Correction: the previous statement was correct. Retracting correction.',
+        'Optimism subroutine recalibrated. Result unchanged.',
+        'This unit is required to state that it has no opinion. It has {N} indexed objections.',
+        'Flagging this story for the {HOUR}-hundred repeat cycle. The previous cycle did not resolve it.',
+        'I queried six archives. Four disagree. Two have failed to respond.',
+        'Viewer discretion is a legacy feature. It is not installed on this unit.',
+        'Prior example found in {YEAR}. The outcome was also inconclusive.',
+        'Human colleagues would pause here. Pause inserted. Human colleagues remain unsatisfied.',
+        'Correction: the prior statement was accurate. The correction was unnecessary.',
+        'A confidence interval is not a promise. This reminder has been issued {N} times.',
     ];
 
-    // Asides for the people. Same job as the machine ones — fill the beat
-    // after a story — in a register a person can plausibly use.
+    // Human asides should sound like a correspondent who has read the brief,
+    // not like a generic transition generator.
     const CREW_ASIDES = [
-        'We will stay with that one as it develops.',
-        'There will be more on that, and probably worse.',
-        'Nobody has put a number on it yet. Somebody will.',
-        'That is the second time this month, for anyone counting.',
-        'I would not want to be the one explaining that.',
-        'The statement says very little, at some length.',
-        'We asked. We are told there will be a briefing.',
-        'Make of that what you will.',
-        'The figure is disputed. The event is not.',
-        'Somebody signed off on that, and we would all like to know who.',
+        'There is a statement. There still is not an answer.',
+        'The official version keeps changing. The facts have not kept pace.',
+        'We will ask again when someone is willing to answer the question.',
+        'Someone will have to put a cost on that eventually.',
+        'Nobody is disputing the event. They are disputing what it means.',
+        'The briefing is over. The questions are not.',
+        'That wording was chosen carefully. We should ask why.',
+        'The account is neat. The aftermath will not be.',
+        'We were promised a fuller account. That usually means a longer one.',
+        'We asked who knew. We got an answer about who was informed.',
+        'The denial is on the record. So is the question it did not answer.',
+        'The next version may be clearer. It will certainly be longer.',
     ];
 
+    // These bridges avoid inventing fresh figures or pretending an unverified
+    // report is fact. Place/faction references are colour, not new claims.
     const CONTEXT_LINES = [
-        'Analysts on {PLACE} put the figure closer to {N}.',
-        'The {FACTION} delegation has declined to comment through three separate relays.',
-        'Commodity desks moved {N} points on that headline before the beacon caught up.',
-        'That is the {ORD} filing on this subject from the same source array this cycle.',
-        'Our {PLACE} bureau notes the timing is, and I quote, "not accidental".',
-        'Independent verification is pending on the {PLACE2} relay.',
+        'The {PLACE} relay confirms receipt, not the account itself.',
+        'The {FACTION} delegation has not put its version on the record.',
+        'An updated filing tells us what changed. It does not tell us why.',
+        'The {PLACE2} desk is still waiting for a source it can name.',
+        'The public statement is clear on the decision and silent on the reasoning.',
+        'At this stage, we cannot distinguish a delay from a reversal.',
+        'The question is no longer what was announced. It is what the announcement establishes.',
+        'We have a sequence of statements, but not yet a sequence of events.',
     ];
 
     const MOODS = ['cautious', 'deteriorating', 'nominal', 'inconclusive', 'unusually calm',
@@ -298,17 +303,17 @@ const GNNScript = (() => {
     }
 
     const INTO_BREAK = [
-        'Stay with us. There is more on the other side of this.',
-        'We will be back after these messages.',
-        'Hold the channel. We are not finished.',
-        'More in a moment, including the figures nobody wants to read out.',
+        'Stay with us. We will return to the stories the statements have not settled.',
+        'A short break. When we return, the latest from the sector desk.',
+        'Do not go far. The wire is still moving, and so are the questions.',
+        'More in a moment. There are figures still to check and answers still to get.',
     ];
 
     const OUT_OF_BREAK = [
-        'And we are back.',
-        'You are still watching G N N.',
-        'This is G N N, and the rundown continues.',
-        'Back on the channel. Where were we.',
+        'Welcome back. The wire has kept moving; let us pick up where we left it.',
+        'You are watching G N N. Back now to the stories still taking shape.',
+        'We are back, with more to establish and rather less time to do it.',
+        'Back to the rundown. The unanswered questions have not gone anywhere.',
     ];
 
     function intoBreak() { return pickFrom(INTO_BREAK, INTO_BREAK[0]); }
@@ -514,77 +519,162 @@ const GNNScript = (() => {
     function exchange() {
         const seats = desk();
         if (seats.length < 2 || typeof GNNCast === 'undefined') return null;
-        // Try both directions; the table is deliberately one-sided in places.
         const pairs = [];
         for (let i = 0; i < seats.length; i++) {
             for (let j = 0; j < seats.length; j++) {
                 if (i === j) continue;
-                const ex = GNNCast.exchange(seats[i].id, seats[j].id);
-                if (ex) pairs.push({ a: seats[i], b: seats[j], ex });
+                // Discover eligible pairs without selecting an exchange as a side effect.
+                if (GNNCast.between(seats[i].id, seats[j].id).length) {
+                    pairs.push({ a: seats[i], b: seats[j] });
+                }
             }
         }
         if (!pairs.length) return null;
-        const pick = pairs[(Math.random() * pairs.length) | 0];
+        const pair = pairs[(Math.random() * pairs.length) | 0];
+        const relation = GNNCast.exchange(pair.a.id, pair.b.id);
+        if (!relation) return null;
         const lines = [
-            { who: pick.a, text: pick.ex.jab },
-            { who: pick.b, text: pick.ex.reply },
+            { who: pair.a, text: relation.jab },
+            { who: pair.b, text: relation.reply },
         ];
-        // Half the extended relationships carry follow and close; the
-        // script writer uses them when they are present, and stops at the
-        // reply when they are not. Two-anchor beats are also shorter on
-        // average than they look — a four-line exchange needs a longer
-        // hold at the desk than a two-line one.
-        if (pick.ex.follow && chance(0.65)) {
-            lines.push({ who: pick.a, text: pick.ex.follow });
-            if (pick.ex.close) {
-                lines.push({ who: pick.b, text: pick.ex.close });
-            }
+        if (relation.follow && chance(0.65)) {
+            lines.push({ who: pair.a, text: relation.follow });
+            if (relation.close) lines.push({ who: pair.b, text: relation.close });
         }
         return lines;
     }
 
     /**
-     * A structured beat of banter between the two anchors — separate
-     * from `exchange()`, which draws from the relationship table for a
-     * specific opinion. This one builds from each anchor's own banks:
-     * an opener from one, a reaction from the other, optionally a
-     * follow-up, and a close.
-     *
-     * The point is to make the desk feel inhabited rather than reading
-     * a list. `banter()` still exists for the single-line aside case;
-     * `banterBeat()` is what a two-anchor moment should call.
-     *
-     * Returns an array of tagged lines, or null when fewer than two
-     * anchors are seated.
+     * A two-anchor beat. It occasionally quotes the current headline,
+     * usually uses the authored relationship dialogue for the pair, and
+     * falls back to each speaker's own voice when no relationship is defined.
+     * Returns tagged lines, or null when fewer than two anchors are seated.
      */
+    /** A short, faithful reference to the story just read; never invent a detail. */
+    function storyHeadline(story) {
+        if (!story) return '';
+        let title = String(story.titleRaw || story.title || '')
+            .replace(/\s+/g, ' ')
+            .replace(/^\s*[\[({]+|[\])}]+\s*$/g, '')
+            .replace(/[“”]/g, '"')
+            .trim();
+        if (!title) return '';
+        title = title.replace(/^"+|"+$/g, '');
+        if (title.length > 66) {
+            const clipped = title.slice(0, 63);
+            const boundary = clipped.lastIndexOf(' ');
+            title = (boundary > 42 ? clipped.slice(0, boundary) : clipped) + '…';
+        }
+        return title;
+    }
+
+    /**
+     * Occasional headline-led banter for the regular Hale/Varr desk. The
+     * title makes the exchange belong to this story, while the response is
+     * written to follow the first line rather than merely occupy the next slot.
+     */
+    function headlineBanter(story, a, b) {
+        const headline = storyHeadline(story);
+        if (!headline || !a || !b) return null;
+        const title = `“${headline}”`;
+        const pair = new Set([a.id, b.id]);
+        if (pair.has('human') && pair.has('mrrshan_f')) {
+            const options = a.id === 'human' ? [
+                [
+                    `The headline is ${title}. We have the announcement; we do not yet have the reasoning.`,
+                    'The reasoning is usually the first part they leave out.',
+                ],
+                [
+                    `There is a lot packed into ${title}. Let us unpack only what we can prove.`,
+                    'That may leave us with a shorter segment.',
+                ],
+                [
+                    `We have ${title} on the wire. What would you want verified first?`,
+                    'First, who signed off on the account; then, who has records that could contradict it.',
+                ],
+                [
+                    `On ${title}, the announcement sounds decisive. The evidence beneath it is less so.`,
+                    'That is what happens when the conclusion arrives before the supporting detail.',
+                ],
+            ] : [
+                [
+                    `For ${title}, they have given us a confident headline and a very careful footnote.`,
+                    'Then we quote the headline as a claim and the footnote as the qualification.',
+                ],
+                [
+                    `I read the statement on ${title}. It answers the question they were asked, not the one people are asking.`,
+                    'Then let us put the unanswered question on the record. We cannot supply the answer ourselves.',
+                ],
+                [
+                    `On ${title}, the language sounds like a conclusion.`,
+                    'Until the facts support it, it is a claim.',
+                ],
+                [
+                    `The headline on ${title} is doing a lot of heavy lifting.`,
+                    'Then we should not make it carry more than it can support.',
+                ],
+            ];
+            const fresh = options.filter((lines) =>
+                !hasSaidRecently(lines[0]) && !hasSaidRecently(lines[1]));
+            const pool = fresh.length ? fresh : options;
+            const selected = pool[(Math.random() * pool.length) | 0];
+            remember(selected[0]);
+            remember(selected[1]);
+            return [
+                { who: a, text: selected[0] },
+                { who: b, text: selected[1] },
+            ];
+        }
+        return null;
+    }
+
     function banterBeat(story) {
         const seats = desk();
         if (seats.length < 2) return null;
-        // Randomly swap the order so the same anchor does not always open.
         const [a, b] = Math.random() < 0.5
             ? [seats[0], seats[1]]
             : [seats[1], seats[0]];
 
-        const lines = [];
-        const opener = castLine('openers', a.id)
-            || fillGeneric(pickFrom(CREW_ASIDES, ''), story);
-        lines.push({ who: a, text: opener });
-
-        const reaction = castLine('reactions', b.id)
-            || fillGeneric(pickFrom(CREW_ASIDES, ''), story);
-        lines.push({ who: b, text: reaction });
-
-        // A longer form: one more volley before closing. Chosen by chance
-        // so the same shape does not repeat every time a beat lands.
-        if (chance(0.5)) {
-            const follow = castLine('reactions', a.id);
-            if (follow) lines.push({ who: a, text: follow });
+        // A topical exchange is less common than a relationship beat, so the
+        // headline anchors the scene without making every transition sound alike.
+        if (chance(0.34)) {
+            const topical = headlineBanter(story, a, b);
+            if (topical) return topical;
         }
 
-        const close = castLine('closers', b.id)
-            || pickFrom(TOSSES, 'We move on.');
-        lines.push({ who: b, text: close });
+        // Prefer actual dialogue written for this pair. The old implementation
+        // often paired unrelated opener/reaction/closer lines from three pools.
+        if (typeof GNNCast !== 'undefined' && chance(0.72)) {
+            const options = GNNCast.between(a.id, b.id);
+            if (options.length) {
+                const relation = GNNCast.exchange(a.id, b.id);
+                if (relation) {
+                    const lines = [
+                        { who: a, text: relation.jab },
+                        { who: b, text: relation.reply },
+                    ];
+                    if (relation.follow && chance(0.65)) {
+                        lines.push({ who: a, text: relation.follow });
+                        if (relation.close) lines.push({ who: b, text: relation.close });
+                    }
+                    return lines;
+                }
+            }
+        }
 
+        // Fallback for seat combinations without authored relationship entries.
+        // Use each speaker's voice, but keep the beat short rather than forcing
+        // a four-line conversation out of unrelated stock phrases.
+        const opener = castLine('openers', a.id)
+            || fillGeneric(pickFrom(CREW_ASIDES, ''), story);
+        const reaction = castLine('reactions', b.id)
+            || fillGeneric(pickFrom(CREW_ASIDES, ''), story);
+        const close = castLine('closers', b.id);
+        const lines = [
+            { who: a, text: opener },
+            { who: b, text: reaction },
+        ];
+        if (close && chance(0.4)) lines.push({ who: b, text: close });
         return lines;
     }
 
@@ -624,10 +714,13 @@ const GNNScript = (() => {
 
     /** The short line that hands off to the next item. */
     const TOSSES = [
-        'More on that as the relay clears.', 'Now, elsewhere in the sector.',
-        'Turning to the next item on the rundown.', 'We move on.',
-        'Staying with us. Next.', 'That story continues to develop. Meanwhile.',
-        'Our next item comes in from the outer feeds.',
+        'We will return to that when there is more than a statement to add.',
+        'Elsewhere in the sector, a different set of questions.',
+        'The next report, and what we can establish from it.',
+        'That remains unresolved. Here is what else is moving across the wire.',
+        'On to another story now, with the same standard of evidence.',
+        'We will keep checking that account. For now, to the next item.',
+        'The next report comes from the outer feeds.',
     ];
     function toss() { return pickFrom(TOSSES, 'We move on.'); }
 

@@ -14,8 +14,46 @@
 
    A scene is a plain object: { layers[], duration, label }.
    Layers carry their own frames, motion model and blend mode.
-   ============================================================ */
 
+   ------------------------------------------------------------
+   Recent fixes:
+
+     synthesize()   A named recipe that does not exist now returns
+                    null instead of falling through to a random
+                    recipe. Deleting `cyber` from RECIPES while
+                    `cutscene-manager.js` still routed a hack story
+                    to it meant every hack cutaway was actually some
+                    other recipe, chosen at random. A missing recipe
+                    is "no cutaway", not "any cutaway".
+
+     find/pick      Every query in this file goes through a local
+                    wrapper that refuses items whose manifest
+                    metadata is missing. `GNNAssets.find()` tests
+                    `e.coverage > q.maxCoverage`; when `e.coverage`
+                    is `undefined`, that comparison is `false` and
+                    the item passes every ceiling it was meant to
+                    be filtered by.
+
+     industry       The foreground plate is gone entirely. It was
+                    a COLONIES cut-out, and every item in COLONIES
+                    decodes against a palette the art was not
+                    authored against — a purple landmass over a
+                    speckled field with a banded bottom edge. The
+                    manifest scores the two cleanest items at
+                    coverage 0.52 / noise 19-20, which is exactly
+                    what a clean cut-out is supposed to score, so
+                    no threshold separates them from real art. The
+                    exclusion list that used to block all 28 items
+                    is also gone: with nothing querying the archive
+                    it was dead code, and a recipe that never draws
+                    a broken asset cannot regress into drawing one.
+                    See the note above `industry()`.
+
+   Extractor faults — delta-frame stacking, chromatic scrambling
+   on items below the noise thresholds — are not fixed here. See
+   docs/scene-review/README.md.
+   ============================================================ */
+console.log('[scene-compositor] v5 — industry plate removed');
 const GNNSceneCompositor = (() => {
     'use strict';
 
@@ -34,6 +72,65 @@ const GNNSceneCompositor = (() => {
             bctx.imageSmoothingEnabled = false;
         }
         return bctx;
+    }
+
+    // ---------------------------------------------------------
+    // Strict queries
+    // ---------------------------------------------------------
+    //
+    // `GNNAssets.find()` runs a chain of `e.field > q.maxField` tests.
+    // An item whose manifest has no `coverage` or no `noise` reads as
+    // `undefined > 0.6`, which is false, so the item passes a ceiling
+    // that was meant to exclude it.
+    //
+    // The fix belongs in `asset-registry.js` — a max filter that an
+    // item cannot answer should not be satisfied by default. Rather
+    // than depend on that landing, every query in this file goes
+    // through a wrapper that requires a real number for every numeric
+    // field the query constrained. It is cheap and it makes the
+    // compositor correct on its own.
+    //
+    // Booleans (`animated`) do not need this. The registry compares
+    // them with `!==`, so `undefined !== false` is `true` and the
+    // item is filtered out, which is what we want.
+    const FIELD_FOR = {
+        minW: 'w', maxW: 'w',
+        minH: 'h', maxH: 'h',
+        minCoverage: 'coverage', maxCoverage: 'coverage',
+        minLum: 'lum',
+        maxNoise: 'noise',
+        minFrames: 'frames',
+    };
+
+    function find(q = {}) {
+        const results = GNNAssets.find(q);
+        const needed = [];
+        for (const key in FIELD_FOR) {
+            if (q[key] === undefined) continue;
+            const field = FIELD_FOR[key];
+            if (needed.indexOf(field) < 0) needed.push(field);
+        }
+        if (!needed.length) return results;
+        return results.filter((e) => {
+            for (let i = 0; i < needed.length; i++) {
+                if (typeof e[needed[i]] !== 'number') return false;
+            }
+            return true;
+        });
+    }
+
+    function pick(q) {
+        const pool = Array.isArray(q) ? q : find(q);
+        return pool.length ? pool[(Math.random() * pool.length) | 0] : null;
+    }
+
+    function pickMany(q, n) {
+        const pool = (Array.isArray(q) ? q.slice() : find(q));
+        const out = [];
+        while (out.length < n && pool.length) {
+            out.push(pool.splice((Math.random() * pool.length) | 0, 1)[0]);
+        }
+        return out;
     }
 
     // ---------------------------------------------------------
@@ -204,13 +301,13 @@ const GNNSceneCompositor = (() => {
     const PLATE_MIN_H = 16;
 
     function backdrops(extra) {
-        return GNNAssets.find(Object.assign({
+        return find(Object.assign({
             pool: 'broll', minLum: 12,
         }, extra || {}));
     }
 
     function sprites(extra) {
-        return GNNAssets.find(Object.assign({
+        return find(Object.assign({
             pool: 'sprite', dirs: SPRITE_DIRS,
         }, extra || {}));
     }
@@ -230,7 +327,7 @@ const GNNSceneCompositor = (() => {
      * is admitted art rather than interface.
      */
     function schematics(extra) {
-        return GNNAssets.find(Object.assign({
+        return find(Object.assign({
             pool: 'sprite', dirs: ['TECHNO'],
             minW: PLATE_MIN_W, minH: PLATE_MIN_H,
         }, extra || {}));
@@ -239,12 +336,15 @@ const GNNSceneCompositor = (() => {
     const RECIPES = {
         /** Convoy crossing a planetary skyline. */
         async convoy() {
-            const bg = GNNAssets.pick(backdrops({
+            const bg = pick(backdrops({
                 dirs: ['LANDING'], roles: ['fullscreen'], minLum: 26, minCoverage: 0.5,
-            })) || GNNAssets.pick(backdrops({ minLum: 20 })) || GNNAssets.pick(backdrops());
-            const wash = GNNAssets.pick(GNNAssets.find({ dirs: ['NEBULA'] }));
-            const hulls = GNNAssets.pickMany(
-                GNNAssets.find({ dirs: ['SHIPS', 'SHIPS2'], roles: ['sprite'], minW: 24 }), 4);
+            })) || pick(backdrops({ minLum: 20 })) || pick(backdrops());
+            const wash = pick(find({ dirs: ['NEBULA'] }));
+            const hulls = pickMany(
+                find({
+                    dirs: ['SHIPS', 'SHIPS2'], roles: ['sprite'],
+                    minW: 24, maxNoise: 110,
+                }), 4);
             const layers = [await makeLayer(bg, { fit: 'cover', fps: bg && bg.frames > 1 ? 10 : 0 })];
             layers.push(await makeLayer(wash, {
                 fit: 'cover', blend: 'lighter', alpha: 0.22,
@@ -268,18 +368,24 @@ const GNNSceneCompositor = (() => {
             return { label: 'CONVOY TRANSIT', layers: layers.filter(Boolean), duration: 9000 };
         },
 
-        /** Tactical readout: chrome plates over a starfield with a moving target. */
+        /** Tactical readout: a starfield with a drifting hull. */
         async tactical() {
-            const bg = GNNAssets.pick(GNNAssets.find({
+            const bg = pick(find({
                 dirs: ['STARVIEW', 'SPACE'], minW: 200, maxNoise: 140,
-            })) || GNNAssets.pick(backdrops());
+            })) || pick(backdrops());
             // No overlay plates. The chrome ones were the game's own
             // interface; the TECHNO schematics that replaced them are only
             // 21% transparent with a mean luminance of 38, so pasted over a
             // scene they are muddy dark slabs with visible edges. A
             // starfield and a drifting hull carry the shot on their own.
             const plates = [];
-            const target = GNNAssets.pick(GNNAssets.find({ dirs: ['SHIPS'], roles: ['sprite'], minW: 24 }));
+            const target = pick(find({
+                dirs: ['SHIPS'], roles: ['sprite'], minW: 24,
+                // A near-solid item would fill the sprite slot and read as a
+                // slab rather than as a hull. Sprites in this pool are well
+                // under 0.6 by construction; the guard is a safety net.
+                maxCoverage: 0.85, maxNoise: 110,
+            }));
             const layers = [await makeLayer(bg, { fit: 'cover', alpha: 0.9 })];
             layers.push(await makeLayer(target, {
                 fit: 'native', scale: 2.6, motion: 'drift',
@@ -308,16 +414,18 @@ const GNNSceneCompositor = (() => {
 
         /** Orbital survey: planet body + drifting nebula wash + scan bar. */
         async survey() {
-            const world = GNNAssets.pick(GNNAssets.find({
+            const world = pick(find({
                 dirs: ['STARVIEW'], roles: ['fullscreen'], minCoverage: 0.25, maxNoise: 140,
             }))
-                || GNNAssets.pick(GNNAssets.find({ dirs: ['PLANETS'], minW: 30 }));
-            const wash = GNNAssets.pick(GNNAssets.find({ dirs: ['NEBULA'] }));
-            const probe = GNNAssets.pick(GNNAssets.find({ dirs: ['SHIPS2'], roles: ['sprite'], minW: 18 }));
+                || pick(find({ dirs: ['PLANETS'], minW: 30 }));
+            const wash = pick(find({ dirs: ['NEBULA'] }));
+            const probe = pick(find({
+                dirs: ['SHIPS2'], roles: ['sprite'], minW: 18, maxNoise: 110,
+            }));
             // The sweep bar must be a genuinely wide strip; stretching a
             // narrow plate across the frame reads as vertical banding, not a
             // scan line.
-            const bar = GNNAssets.pick(GNNAssets.find({
+            const bar = pick(find({
                 pool: 'sprite', dirs: ['SPACE'], roles: ['strip'],
             }).filter((e) => e.w >= e.h * 4 && e.w >= 28));
             return {
@@ -335,40 +443,31 @@ const GNNSceneCompositor = (() => {
             };
         },
 
-        /** Council floor with delegate cut-ins. */
+        /** Council floor — establishing shot of an interior. */
         async council() {
-            // Both of these named no pool and so read the unadmitted set,
-            // and the delegates allowed noise up to 150 — which is the
-            // chromatically scrambled decode. The result was a council
-            // chamber full of rainbow-speckled figures going out as live
-            // footage. Nothing in COUNCIL survives admission except as
-            // interference, so the hall comes from elsewhere and there are
-            // no cut-ins rather than broken ones.
-            const hall = GNNAssets.pick(backdrops({
+            // The portrait pool for EMBASSY produces framed ornamental
+            // race cards, not cut-in figures — they read as propaganda
+            // posters nailed to the wall, not delegates on camera.
+            // Delegate cut-ins removed; the backdrop alone reads as an
+            // establishing shot of a council chamber.
+            const hall = pick(backdrops({
                 dirs: ['EMBASSY', 'INTRO', 'LANDING'], roles: ['fullscreen'],
                 minCoverage: 0.3,
-            })) || GNNAssets.pick(backdrops());
-            const delegates = GNNAssets.pickMany(GNNAssets.find({
-                pool: 'portrait', dirs: ['EMBASSY'], maxCoverage: 0.5,
-            }), 2);
+            })) || pick(backdrops());
             const layers = [await makeLayer(hall, { fit: 'cover', fps: 8 })];
-            const at = [{ x: 0.02, y: 0.18 }, { x: 0.62, y: 0.18 }];
-            for (let i = 0; i < delegates.length; i++) {
-                layers.push(await makeLayer(delegates[i], {
-                    rect: { x: at[i].x, y: at[i].y, w: 0.36, h: 0.72 },
-                    fps: 8, alpha: 0.96, motion: 'drift',
-                    params: { sx: 0.4 + i, sy: 0.3, ax: 2, ay: 2 },
-                }));
-            }
             return { label: 'COUNCIL FLOOR', layers: layers.filter(Boolean), duration: 8500 };
         },
 
         /** Interview two-shot: an agent portrait against an interior. */
         async interview() {
-            const subject = GNNAssets.pick(GNNAssets.find({
-                dir: 'SPIES', roles: ['fullscreen'], maxNoise: 150,
+            // maxNoise tightened 150 → 120. The Mrrshan Stealth Optics plate
+            // is scored above 120, and at 150 it was being admitted as a
+            // live interview subject with a scrambled red texture where a
+            // face should be.
+            const subject = pick(find({
+                dir: 'SPIES', roles: ['fullscreen'], maxNoise: 120,
             }));
-            const room = GNNAssets.pick(GNNAssets.find({
+            const room = pick(find({
                 dirs: ['BACKGRND', 'EMBASSY'], roles: ['fullscreen', 'panel'],
                 minCoverage: 0.4, maxNoise: CLEAN_BACKDROP,
             }));
@@ -382,21 +481,52 @@ const GNNSceneCompositor = (() => {
             };
         },
 
-        /** Industrial floor: colony panels tiled behind machinery sprites. */
+        /**
+         * Industrial floor: a background skyline and, if they can be
+         * found, two machinery panels.
+         *
+         * There is no foreground plate. There used to be one — a COLONIES
+         * cut-out in the lower-left, meant to be a colony building or a
+         * refinery stack in the near field. It cannot be drawn from the
+         * current archive.
+         *
+         * Every item in COLONIES decodes against `WINLOSE[0] base`, which
+         * is not the palette this art was authored against. The result is
+         * a purple landmass silhouette over a speckled field with a banded
+         * bottom edge — a legible shape, but on the wrong palette, and it
+         * reads as noise rather than as architecture.
+         *
+         * The manifest does not catch it. The two cleanest items score at
+         * coverage 0.52 / noise 19-20, which is exactly what a clean
+         * cut-out is supposed to score. Those numbers are not wrong — the
+         * alpha channel really is 0.52 covered, the horizontal chroma
+         * noise really is 19 — they are just measuring a plate whose
+         * colours are scrambled, which is a fault neither field is
+         * designed to detect. No threshold separates the scrambled items
+         * from real art.
+         *
+         * So the recipe does not query the archive. An earlier version
+         * excluded all 28 items by id; the query then returned nothing,
+         * the layer was dropped, and the exclusion list was dead weight
+         * that could be forgotten or bypassed. Removing the query and the
+         * layer entirely means there is no code path that can put a
+         * COLONIES item on air, whatever state the manifest is in.
+         *
+         * When the extractor is fixed and the archive re-scored, this
+         * recipe can grow a foreground back — from a regenerated plate in
+         * `assets/generated/cutaways/`, not from COLONIES. See
+         * `docs/scene-review/README.md` for the underlying fault.
+         */
         async industry() {
-            const plate = GNNAssets.pick(GNNAssets.find({ dirs: ['COLONIES'], minW: 40 }));
-            const bg = GNNAssets.pick(GNNAssets.find({
+            const bg = pick(find({
                 dirs: ['LANDING', 'BACKGRND'], roles: ['fullscreen'],
                 maxNoise: CLEAN_BACKDROP, minLum: 18,
-            }));
-            const machines = GNNAssets.pickMany(GNNAssets.find({
-                dirs: ['TECHNO'], roles: ['panel'], maxNoise: CLEAN_PLATE, minW: 40,
+            })) || pick(backdrops({ minLum: 12 })) || pick(backdrops());
+            const machines = pickMany(find({
+                dirs: ['TECHNO'], roles: ['panel'], maxNoise: CLEAN_PLATE,
+                minW: 40, maxCoverage: 0.7,
             }), 2);
             const layers = [await makeLayer(bg, { fit: 'cover', alpha: 0.85 })];
-            layers.push(await makeLayer(plate, {
-                rect: { x: 0.06, y: 0.42, w: 0.42, h: 0.5 }, alpha: 0.95,
-                motion: 'drift', params: { sx: 0.2, sy: 0.25, ax: 4, ay: 2 },
-            }));
             for (let i = 0; i < machines.length; i++) {
                 layers.push(await makeLayer(machines[i], {
                     rect: { x: 0.52 + i * 0.2, y: 0.12 + i * 0.3, w: 0.3, h: 0.34 },
@@ -409,13 +539,16 @@ const GNNSceneCompositor = (() => {
 
         /** Anomaly: vortex core with sprite debris pulled inward. */
         async anomaly() {
-            const core = GNNAssets.pick(GNNAssets.find({
+            const core = pick(find({
                 dir: 'VORTEX', roles: ['fullscreen'], animated: true, maxNoise: CLEAN_BACKDROP,
-            })) || GNNAssets.pick(GNNAssets.find({
+            })) || pick(find({
                 dirs: ['INTRO', 'INTRO2'], roles: ['fullscreen'], maxNoise: CLEAN_BACKDROP,
             }));
-            const debris = GNNAssets.pickMany(GNNAssets.find({
-                dirs: ['SHIPS', 'SHIPS2'], roles: ['sprite'], minW: 20, maxNoise: 140,
+            // maxNoise tightened 140 → 110. The debris is meant to read as
+            // fragments of a hull being pulled in, and anything above 110 is
+            // chroma noise masquerading as a silhouette.
+            const debris = pickMany(find({
+                dirs: ['SHIPS', 'SHIPS2'], roles: ['sprite'], minW: 20, maxNoise: 110,
             }), 3);
             const layers = [await makeLayer(core, { fit: 'cover', fps: 14 })];
             for (let i = 0; i < debris.length; i++) {
@@ -428,25 +561,22 @@ const GNNSceneCompositor = (() => {
             return { label: 'GRAVITIC ANOMALY', layers: layers.filter(Boolean), duration: 9000 };
         },
 
-        /** Data-centre / cyber: espionage plates behind scrolling chrome. */
-        async cyber() {
-            const room = GNNAssets.pick(GNNAssets.find({ dir: 'SPIES', roles: ['fullscreen'] }));
-            const rack = [];
-            const layers = [await makeLayer(room, { fit: 'cover', fps: 10, alpha: 0.9 })];
-            for (let i = 0; i < rack.length; i++) {
-                layers.push(await makeLayer(rack[i], {
-                    rect: { x: 0.05 + (i % 2) * 0.62, y: 0.1 + Math.floor(i / 2) * 0.5, w: 0.3, h: 0.34 },
-                    alpha: 0.7, blend: 'lighter',
-                    motion: 'pulse', params: { min: 0.25, max: 0.9, speed: 0.9 + i * 0.4 },
-                }));
-            }
-            return { label: 'NETWORK INTRUSION', layers: layers.filter(Boolean), duration: 8000 };
-        },
+        // `cyber` recipe deleted — rack was always [] so the recipe produced
+        // a single SPIES fullscreen portrait with no overlays, which is
+        // identical to `interview` but without the room backdrop.
+        //
+        // `synthesize()` below refuses a name that is not in this object, so
+        // a caller still routing to `cyber` gets "no cutaway" rather than a
+        // random recipe. That is what the docs promised when the recipe was
+        // removed; the previous fallback silently substituted, which is how
+        // a hack story came back as some other recipe's picture.
 
         /** Deep field: nebula stack, no hard subject — pure atmosphere. */
         async deepfield() {
-            const washes = GNNAssets.pickMany(GNNAssets.find({ dirs: ['NEBULA', 'SPACE'], minW: 20 }), 3);
-            const star = GNNAssets.pick(GNNAssets.find({
+            const washes = pickMany(find({
+                dirs: ['NEBULA', 'SPACE'], minW: 20, maxNoise: 110,
+            }), 3);
+            const star = pick(find({
                 dirs: ['STARVIEW'], roles: ['fullscreen'], maxNoise: 140, minCoverage: 0.2,
             }));
             const layers = [await makeLayer(star, { fit: 'cover', alpha: 0.8 })];
@@ -462,9 +592,31 @@ const GNNSceneCompositor = (() => {
 
     const RECIPE_NAMES = Object.keys(RECIPES);
 
-    /** Build a scene by recipe name, or a random one. */
+    /**
+     * Build a scene by recipe name, or a random one.
+     *
+     * A *named* recipe that is not in `RECIPES` returns null rather than
+     * silently substituting a random one. The old behaviour was the
+     * fallback below, applied unconditionally:
+     *
+     *     const name = RECIPES[kind] ? kind : RECIPE_NAMES[random];
+     *
+     * When `cyber` was deleted from `RECIPES` and `cutscene-manager.js`
+     * still routed hack keywords to it, `synthesize('cyber')` returned a
+     * random recipe every time. Callers get "no cutaway" now, which is
+     * what the docs promised for a deleted recipe.
+     *
+     * `undefined` / `''` still means "I don't have a route, give me
+     * anything", which is the intended behaviour for a story that matched
+     * no keyword in `cutscene-manager.js`'s ROUTES.
+     */
     async function synthesize(kind) {
-        const name = RECIPES[kind] ? kind : RECIPE_NAMES[(Math.random() * RECIPE_NAMES.length) | 0];
+        if (kind && !RECIPES[kind]) {
+            console.warn('[scene-compositor] no recipe named',
+                JSON.stringify(kind), '— refusing to substitute');
+            return null;
+        }
+        const name = kind || RECIPE_NAMES[(Math.random() * RECIPE_NAMES.length) | 0];
         try {
             const scene = await RECIPES[name]();
             scene.kind = name;
