@@ -9,9 +9,41 @@
     'use strict';
 
     const ASSET_DIR = 'assets';
-    const TOTAL_FRAMES = 25;
     const RENDER_FPS = 20;
     const FRAME_MS = 1000 / RENDER_FPS;
+    // Boot sequence. The station opens on a title card with a music bed
+    // and does not go on air until the track ends. During that window
+    // every async load settles — the TTS pipeline warms on the server,
+    // the first feed poll lands, the anchor and icon plates finish — so
+    // the first line of the broadcast is not fighting the startup for
+    // resources, which is what caused the first-minute weirdness that
+    // has been on the open-items list since the project began.
+    const BOOT_CARD = 'assets/generated/titlecards/main_desk_05.png';
+    const BOOT_TRACK = 'track_09';
+    const BOOT_FADE_S = 3;         // seconds of crossfade before the track ends
+    const BOOT_FALLBACK_MS = 12000; // hold this long if the track will not load
+
+    // The ten studio sets the conditioner produces, in the order it lists
+    // them. Every one is a full newsroom in a single plate — the desk is
+    // drawn into the room, not composited on from a separate image — and
+    // every one has its window pane cut out by condition_plates.py, whose
+    // rect is read back from layout.json's `windows` map.
+    //
+    // A set whose PNG is missing is simply skipped; the rotation falls
+    // back to whatever loaded. The first entry is the station's default
+    // and is what the renderer shows until the first block swap.
+    const SET_FILES = [
+        'studio_wide_empty.png',
+        'market_wide_empty.png',
+        'geopolitics_wide_empty.png',
+        'tech_wide_empty.png',
+        'celebrity_wide_empty.png',
+        'sports_wide_empty.png',
+        'diplomatic_wide_empty.png',
+        'anomaly_wide_empty.png',
+        'weather_wide_empty.png',
+        'archive_wide_empty.png',
+    ];
 
     // Boot diagnostics. Every line is sent to the browser console (live,
     // for a watch) and to the server's gnn-server.log via /api/log (for
@@ -129,21 +161,104 @@
         // station still goes to air on the MOO1 scene alone, so a missing
         // plate is a look rather than a failure.
         const GEN = `${ASSET_DIR}/generated`;
-        const [set, desk] = await Promise.all([
-            GNNAssets.loadImage(`${GEN}/set/studio_wide_empty.png?v=2`),
-            GNNAssets.loadImage(`${GEN}/set/desk_oval_front.png`),
-        ]);
 
-        // Two at the desk. Three looked like a panel show, and with the
-        // over-the-shoulder box in the corner the third was half hidden
-        // behind it anyway.
+        // The layout file first — it tells us where every set's window is,
+        // which backdrops exist, and where the anchors sit in each set.
+        // Missing it is not fatal: with no layout the sets just load without
+        // a window rect or a desk line, and the renderer draws the room with
+        // its panes black and seats the cast at its own default.
+        let layout = null;
+        try {
+            layout = await fetch(`${GEN}/set/layout.json`).then((r) => r.json());
+        } catch (err) {
+            log('assets', 'no layout.json — window rects, desk lines and '
+                + 'backdrop list unavailable');
+        }
+        const layoutWindows = (layout && layout.windows) || {};
+        const primaryWindow = (layout && layout.window) || null;
+        // Per-set desk lines: the row the anchors sit on in each room.
+        // Written by condition_plates.py alongside the window rects; read
+        // here and passed through to each set entry below, then on to the
+        // renderer. The whole map being missing is fine — the renderer
+        // falls back to its own default — and a missing entry for one set
+        // is fine too, same reason.
+        const layoutDeskLines = (layout && layout.deskLines) || {};
+        const primaryDeskLine = (layout && layout.deskLine) || null;
+
+        // Every set. Each entry carries its own window rect, keyed by the
+        // set's filename stem — `market_wide_empty` for
+        // `market_wide_empty.png`, which is what condition_plates.py writes
+        // into `layout.json.windows` — and its own desk line, keyed the same
+        // way into `layout.json.deskLines`.
         //
-        // Each seat carries its own voice, because the anchor is a
+        // This replaced a single hardcoded pair of `studio_wide_empty.png`
+        // and `desk_oval_front.png`. The desk plate is gone — the desk is
+        // drawn into each room now, so there is no separate plate for the
+        // renderer to draw and no perspective mismatch between the two.
+        const sets = [];
+        for (const name of SET_FILES) {
+            const plate = await GNNAssets.loadImage(`${GEN}/set/${name}`);
+            if (!plate) continue;
+            const key = name.replace(/\.png$/, '');
+            sets.push({
+                name,
+                plate,
+                window: layoutWindows[key] || primaryWindow || null,
+                // The row the anchors sit on in this set — the desk's
+                // front lip. Written by condition_plates.py alongside the
+                // window rects, read here and passed through to the
+                // renderer. Falls back to the primary set's value, and
+                // then to null, in which case the renderer uses its own
+                // default.
+                deskLine: layoutDeskLines[key] || primaryDeskLine || null,
+            });
+        }
+        if (!sets.length) {
+            log('assets', 'no studio sets found — station will show a blank room');
+        }
+
+        // Backdrops, from whatever the conditioner recorded. The previous
+        // version picked from a two-item hardcoded array
+        // (`['earth_globe_dawn', 'orion_shipyard_night']`), so four of the
+        // six backs on disk were never seen. Reading the list means adding
+        // a new backdrop is a data-only change: drop the PNG in the inbox,
+        // re-run the conditioner, reload.
+        const backdropNames = (layout && layout.backdrops) || [];
+        const backdrops = [];
+        for (const name of backdropNames) {
+            const img = await GNNAssets.loadImage(`${GEN}/backdrops/${name}`);
+            if (img) backdrops.push({ name, img });
+        }
+        // Fallback if layout.json did not name any — same two-item list the
+        // old code used, so an older generated/ tree still works.
+        if (!backdrops.length) {
+            for (const name of ['earth_globe_dawn.png', 'orion_shipyard_night.png']) {
+                const img = await GNNAssets.loadImage(`${GEN}/backdrops/${name}`);
+                if (img) backdrops.push({ name, img });
+            }
+        }
+
+        // ---------------------------------------------------------
+        // The cast
+        // ---------------------------------------------------------
+        //
+        // Every species is loaded, not just the two currently at the
+        // desk. Each seat carries its own voice, because the anchor is a
         // character rather than a sprite: one speech model reading for a
         // bear, a cat and a grey alien is the same person wearing masks.
-        // The line-up turns over through the day so there is a morning desk
-        // and a night desk, and rotating by block rather than at random
-        // means a given hour always shows the same team.
+        //
+        // The line-up turns over per show block, so a given block always
+        // shows the same team for the length of a session. The schedule
+        // is defined below as `SHOW_PAIRS` — a fixed list, not a shuffle,
+        // because the station has a standing line-up rather than a random
+        // draw every boot.
+        //
+        // The robot is on the roster with everyone else — he goes through
+        // the same anchor pipeline as every other species
+        // (`robot_desk_hero.png`, `robot_speaking.png`, `robot_listening.png`,
+        // optionally `robot_listening_flip.png`) — but he is not seatable:
+        // he is Station Automation, not a correspondent or an anchor. The
+        // pairing list excludes him.
         const ROSTER = [
             { sid: 'human', voice: 'am_michael' },
             { sid: 'mrrshan_f', voice: 'af_bella' },
@@ -155,57 +270,96 @@
             { sid: 'darlok', voice: 'vox_unit' },
             { sid: 'meklar', voice: 'vox_unit' },
             { sid: 'silicoid', voice: 'bf_isabella' },
-            { sid: 'klackon', voice: 'af_heart' },
+            { sid: 'klackon', voice: 'am_fenrir' },
+            { sid: 'robot', voice: 'vox_unit' },
+            { sid: 'human_f', voice: 'af_heart' },
+            { sid: 'alkari_f', voice: 'bf_lily' },
         ];
-        // The main desk is fixed: the human commander reads and the Mrrshan
-        // matriarch sits beside him. Rotating the whole roster by the hour
-        // put two of whoever came next in the list at the desk, which is not
-        // a newsroom — a channel has anchors, and the rest of the cast are
-        // correspondents who appear elsewhere. The rotation is kept for the
-        // show-block work in docs/ROADMAP.md, which is where it belongs.
-        const lineup = [ROSTER[0], ROSTER[1]];
-        const seated = (await Promise.all(lineup.map(async (who) => {
+
+        // One loader for every species, robot included. Four plates each —
+        // hero, speaking, listening, listening-flip — and the missing ones
+        // fall back to the hero so a partially-conditioned species still
+        // puts a figure on screen rather than dropping out of the desk.
+        async function loadAnchorSet(who) {
             const [hero, speaking, listening, flip] = await Promise.all([
                 GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_desk_hero.png`),
                 GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_speaking.png`),
                 GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_listening.png`),
                 GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_listening_flip.png`),
             ]);
-            return hero ? {
+            if (!hero) return null;
+            return {
                 sid: who.sid, voice: who.voice, hero,
                 speaking: speaking || hero,
                 listening: listening || hero,
-                // Mirrored, for a seat to the right of whoever
-                // is talking. Falls back to the unmirrored
-                // plate, which is better than facing away.
-                listeningFlip: flip || listening || hero
-            } : null;
-        }))).filter(Boolean);
-
-        // What is seen through the studio window. `condition_plates.py`
-        // cuts the glass out of the room plate and records where it was in
-        // layout.json; without a backdrop the hole simply shows black,
-        // which is what it did before any of these existed.
-        let setWindow = null;
-        let backdrop = null;
-        try {
-            const layout = await fetch(`${GEN}/set/layout.json`).then((r) => r.json());
-            setWindow = layout.window || null;
-        } catch (err) { /* no layout, no window */ }
-        if (setWindow) {
-            const views = ['earth_globe_dawn', 'orion_shipyard_night'];
-            const pick = views[(Math.random() * views.length) | 0];
-            backdrop = await GNNAssets.loadImage(`${GEN}/backdrops/${pick}.png`);
+                // Mirrored, for a seat to the right of whoever is talking.
+                // Falls back to the unmirrored plate, which is better than
+                // facing away.
+                listeningFlip: flip || listening || hero,
+            };
         }
 
-        // The robot, cut out of his old newscast scene by tools/key_robot.py.
-        // He keeps his 25-cel lip matrix, which is more than the generated
-        // cast have, so he is loaded as frames rather than as three states.
-        const nums = [];
-        for (let i = 1; i <= TOTAL_FRAMES; i++) nums.push(String(i).padStart(3, '0'));
-        const robotFrames = (await Promise.all(nums.map(
-            (n) => GNNAssets.loadImage(`${GEN}/anchors/robot_frame_${n}.png`)
-        ))).filter(Boolean);
+        // Load every seatable species. The robot is loaded separately,
+        // since he is not seated.
+        const seatable = ROSTER.filter((r) => r.sid !== 'robot');
+        const anchorList = (await Promise.all(
+            seatable.map(loadAnchorSet))).filter(Boolean);
+
+        const robotCfg = ROSTER.find((r) => r.sid === 'robot');
+        const robot = robotCfg ? await loadAnchorSet(robotCfg) : null;
+
+        /**
+         * The show schedule: which two anchors sit at the desk for each of
+         * the ten shows.
+         *
+         * A fixed list, not a shuffle. The station has a standing line-up
+         * — the same show at the same time of day shows the same team —
+         * and a rerun of the station should look like a rerun, not a
+         * different channel. Edit `SHOW_PAIRS` to change the schedule.
+         *
+         * Order matters within a pair: the first entry is the lead, who
+         * reads the sign-on and the sign-off, and whose voice is set when
+         * the block swaps. The second is the co-anchor.
+         *
+         * A pair whose second entry is missing — a species whose plates
+         * failed to load — becomes a one-anchor desk, and the renderer
+         * falls back to centre-seating it. A pair where *both* are
+         * missing is dropped from the rotation rather than taking a slot
+         * with nobody at the desk.
+         *
+         * Counts below. Fourteen seatable species, ten shows, twenty
+         * seatings, so most anchors appear twice and a few appear once.
+         * Keeping the "main desk" pair (Hale + Varr) first is deliberate:
+         * the station opens on the same team a viewer who has seen the
+         * channel before will recognise.
+         */
+        const SHOW_PAIRS = [
+            ['human', 'mrrshan_f'],     // 1 — Hale + Varr, the main desk
+            ['human_f', 'mrrshan'],     // 2 — Vance + Rell
+            ['bulrathi', 'alkari_f'],   // 3 — Grolm + Kira
+            ['psilon', 'sakkra'],       // 4 — Oth + Ssyth
+            ['darlok', 'meklar'],       // 5 — the two machines
+            ['silicoid', 'klackon'],    // 6 — Quarry + Hive-Liaison
+            ['alkari', 'mrrshan_f'],    // 7 — Kesh + Varr
+            ['human', 'human_f'],       // 8 — the two commanders
+            ['bulrathi', 'psilon'],     // 9 — Grolm + Oth
+            ['sakkra', 'silicoid'],     // 10 — Ssyth + Quarry
+        ];
+
+        // Resolve species ids to the loaded anchor entries. Missing plates
+        // drop out, so a species whose assets did not load does not take a
+        // seat and the show runs with however many anchors are available.
+        const anchorById = new Map(anchorList.map((a) => [a.sid, a]));
+        const anchorPairs = SHOW_PAIRS
+            .map((pair) => pair.map((sid) => anchorById.get(sid)).filter(Boolean))
+            .filter((pair) => pair.length > 0);
+
+        // If the disk does not have any of the pairs — an empty assets
+        // tree, a broken load — fall back to whatever anchors did load so
+        // the station still goes to air rather than crashing at boot.
+        if (!anchorPairs.length && anchorList.length) {
+            anchorPairs.push(anchorList.slice(0, 2));
+        }
 
         await GNNIconManager.loadIcons(`${ASSET_DIR}/icons`);
 
@@ -216,16 +370,49 @@
                 `${s.sfx} effects · ${s.music} music beds · ${s.bulletins} archive bulletins`;
         }
         statusText.textContent = 'Studio ready';
+
         log('assets',
-            'set=' + (set ? 'ok' : 'NULL'),
-            'backdrop=' + (backdrop ? 'ok' : 'NULL'),
-            'window=' + (setWindow ? JSON.stringify(setWindow) : 'NULL'));
+            'sets=' + sets.length + '/' + SET_FILES.length,
+            'anchors=' + anchorList.length,
+            'pairs=' + anchorPairs.length,
+            'backdrops=' + backdrops.length,
+            'robot=' + (robot ? 'ok' : 'missing'),
+            'windows=' + Object.keys(layoutWindows).length,
+            'deskLines=' + Object.keys(layoutDeskLines).length);
+
+        // Two shapes in one return.
+        //
+        // The renderer's `init()` reads the top-level singular fields —
+        // `set`, `desk`, `window`, `deskLine`, `backdrop`, `seated`,
+        // `deskVoice` — for the first block, which is what draws before
+        // the director calls `setShowBlock(0)`.
+        //
+        // The plural fields — `sets`, `backdrops`, `anchors`, `anchorPairs`
+        // — are the full bundle, which `GNNRenderer.setShowBlock()` uses
+        // to swap to a different block when the show changes. Each set in
+        // that bundle carries its own `deskLine`, so the renderer seats the
+        // cast at the right height for whichever room is on air.
         return {
-            set, desk, seated, backdrop, window: setWindow,
-            deskVoice: seated.length ? seated[0].voice : null,
-            robot: robotFrames.length
-                ? { sid: 'robot', voice: 'vox_unit', frames: robotFrames }
-                : null,
+            // --- first block, for the initial draw ---
+            set: sets[0] ? sets[0].plate : null,
+            desk: null,                        // the desk is in the set now
+            window: sets[0] ? sets[0].window : null,
+            // The row the anchors sit on in the first block's set. Read
+            // from layout.json via the sets bundle above; the renderer
+            // uses it in place of its own default. Null is fine — the
+            // renderer falls back.
+            deskLine: sets[0] ? sets[0].deskLine : null,
+            backdrop: backdrops[0] ? backdrops[0].img : null,
+            seated: anchorPairs[0] || [],
+            deskVoice: (anchorPairs[0] && anchorPairs[0][0])
+                ? anchorPairs[0][0].voice : null,
+            robot,
+
+            // --- full bundle, for the block rotation ---
+            sets,                              // [{ name, plate, window, deskLine }]
+            backdrops,                         // [{ name, img }]
+            anchors: anchorList,               // [anchor, ...] in ROSTER order
+            anchorPairs,                       // per-block [lead, co-anchor]
         };
     }
 
@@ -272,8 +459,20 @@
 
         if (telemetry && document.body.classList.contains('show-telemetry')) {
             const r = GNNDirector.report();
+            // BLOCK is 1-based for a reader; the internal index is 0-based.
+            // LEFT is the wall-clock remainder of the current show, in
+            // minutes. CORR shows whether the show's one correspondent slot
+            // has been used. HELD is the count of stories sitting in the
+            // beat-filter buckets, which is what tells you at a glance why
+            // the rundown looks empty.
+            const heldTotal = r.held
+                ? Object.values(r.held).reduce((n, x) => n + x, 0)
+                : 0;
             telemetry.textContent =
-                `SEG ${r.state} · RUNDOWN ${r.queued} · READ ${r.storiesRead} · ` +
+                `SEG ${r.state} · BLOCK ${r.block + 1} · ` +
+                `READ ${r.storiesRead} · LEFT ${Math.floor(r.showLeftMs / 60000)}m · ` +
+                `CORR ${r.correspondentUsed ? 'USED' : 'PENDING'} · ` +
+                `RUNDOWN ${r.queued} · HELD ${heldTotal} · ` +
                 `BREAK IN ${Math.max(0, r.nextBreakAt - r.sinceBreak)} · ` +
                 `VOICE ${r.speaking ? 'ON' : 'OFF'} · ` +
                 `PROMPT ${Math.round(GNNTextEngine.progress() * 100)}%/${GNNTextEngine.getText().length}c · ` +
@@ -569,6 +768,145 @@
         wake();
     }
 
+    // =========================================================
+    // Boot sequence
+    // =========================================================
+
+    /**
+     * Show the boot overlay and start the music bed that covers the load.
+     *
+     * Returns when the track has finished and the fade is complete. Along
+     * the way it fires the fade-out three seconds before the track ends,
+     * so the studio is already visible behind the card when the station
+     * goes on air.
+     *
+     * Called from `init()` after the renderer is wired and the game loop
+     * has started — the loop is what draws the studio behind the overlay,
+     * so by the time the fade begins the picture underneath is stable.
+     */
+    async function runBootSequence() {
+        const card = $('boot-card');
+        if (card) card.src = BOOT_CARD;
+
+        // Warm the TTS pipeline while the track plays. The first synthesis
+        // on a cold server is the largest single source of the first-
+        // minute weirdness — the model takes seconds to load, and every
+        // line dispatched before it is ready lands late or fails. This
+        // call is a throwaway whose only job is to force that load. The
+        // result is discarded; by the time the ident speaks, the pipeline
+        // is warm.
+        try { GNNTTS.prefetch('Loading.'); } catch (err) { /* not fatal */ }
+
+        log('boot', 'boot sequence starting');
+
+        let result = null;
+        try {
+            result = await GNNAudio.playBootTrack(BOOT_TRACK, { gain: 0.7 });
+        } catch (err) {
+            log('boot', 'boot track failed', err && err.message ? err.message : err);
+        }
+
+        // Fire the booth ident FROM HERE, not from the director's cold open.
+        //
+        // The ident and the anchor's sign-on used to be queued microseconds
+        // apart inside beginColdOpen(), which is a race: the pump plays them
+        // in order, but the robot's line is the first ever line synthesised
+        // through a cold TTS pipeline, so its speak() promise can settle
+        // early under load and the anchor's line — queued immediately after
+        // it — pre-empts it. That is the "Hale cut off the robot" fault, and
+        // it is non-deterministic because it depends on how long the first
+        // synthesis takes on that particular boot.
+        //
+        // Moving the ident here means it fires 8+ seconds before the anchor's
+        // line is even queued. There is no overlap window for the pump to
+        // mis-order, and the voice is warm by the time the anchor speaks.
+        //
+        // Timing: the ident is scheduled to finish one beat before the
+        // crossfade from the title card to the studio begins, so the viewer
+        // hears the station identify itself and then, as the sounder ends,
+        // watches the picture change. That is a sign-on.
+        function fireBoothIdent() {
+            log('boot', 'booth ident firing');
+            GNNDirector.boothIdent();
+        }
+
+        if (result && result.duration > BOOT_FADE_S + 1) {
+            const fadeMs = (result.duration - BOOT_FADE_S) * 1000;
+
+            // Estimate the ident's length so the ident can be scheduled to
+            // end just as the fade begins. The line is a constant on the
+            // director's side — `BOOTH_IDENT_LINE` — so the estimate is
+            // measured against that same constant here. This is what keeps
+            // the estimate and the spoken line in sync: if the constant
+            // ever changes, both the estimate and the spoken line change
+            // together, and the timing self-corrects.
+            let identLeadMs = 0;
+            try {
+                const identMs = GNNTTS.estimateMs('This is the Galactic News Network.');
+                // 100 ms of margin so the ident is definitely done before
+                // the fade starts. If the estimate is short, the ident
+                // overlaps the fade slightly, which is fine — better than
+                // firing it too early and leaving silence before the
+                // transition.
+                identLeadMs = Math.max(0, fadeMs - identMs - 100);
+                setTimeout(() => {
+                    log('boot', 'booth ident firing, ends '
+                        + ((identMs + 100) / 1000).toFixed(1)
+                        + 's before fade');
+                    GNNDirector.boothIdent();
+                }, identLeadMs);
+            } catch (err) {
+                log('boot', 'booth ident scheduling failed',
+                    err && err.message ? err.message : err);
+                // No estimate available. Fire the ident a fixed five seconds
+                // before the fade — enough runway for a short line to
+                // finish, short enough that it does not leave a gap.
+                setTimeout(fireBoothIdent, Math.max(0, fadeMs - 5000));
+            }
+
+            log('boot', 'boot track duration='
+                + result.duration.toFixed(2) + 's',
+                'fade in ' + (fadeMs / 1000).toFixed(2) + 's',
+                'ident at ' + (identLeadMs / 1000).toFixed(2) + 's');
+            setTimeout(fadeBootOverlay, fadeMs);
+            await result.stopped;
+        } else if (result) {
+            // Track too short for the fade. Fire the ident now and wait out
+            // the remaining time.
+            fireBoothIdent();
+            await result.stopped;
+            fadeBootOverlay();
+        } else {
+            // No track — autoplay blocked, manifest missing, or decode
+            // failed. Fire the ident mid-hold so there is still a station
+            // sound before the studio comes up, then fall back to a fixed
+            // hold so the warm-up still happens.
+            log('boot', 'no boot track — falling back to '
+                + (BOOT_FALLBACK_MS / 1000) + 's hold');
+            setTimeout(fireBoothIdent,
+                Math.max(500, BOOT_FALLBACK_MS - BOOT_FADE_S * 1000 - 5000));
+            setTimeout(fadeBootOverlay, BOOT_FALLBACK_MS - BOOT_FADE_S * 1000);
+            await new Promise((r) => setTimeout(r, BOOT_FALLBACK_MS));
+        }
+
+        // Track is over. The fade has been running for the last three
+        // seconds of it, so the overlay's alpha is already zero. Take
+        // it out of the DOM entirely so the next frame does not pay for
+        // an invisible element.
+        const overlay = $('boot-overlay');
+        if (overlay) overlay.classList.add('hidden');
+
+        // Release the director. Its S.BOOT case gates on this flag.
+        window.GNNBootReady = true;
+        log('boot', 'boot sequence complete — releasing director');
+    }
+
+    function fadeBootOverlay() {
+        const overlay = $('boot-overlay');
+        if (overlay) overlay.classList.add('fading-out');
+        log('boot', 'studio fade-in started');
+    }
+
     async function init() {
         watchPointerIdle();
         wireSettingsKey();
@@ -600,13 +938,15 @@
 
             const assets = await loadAllAssets();
             log('boot', 'assets loaded',
-                'seated=' + assets.seated.length,
-                'robot=' + (assets.robot ? assets.robot.frames.length : 0));
+                'seated=' + (assets.seated ? assets.seated.length : 0),
+                'robot=' + (assets.robot ? 'ok' : 'missing'));
             GNNRenderer.init(canvas, assets);
 
-            // The anchor in the first seat reads, so the station speaks with
-            // that character's voice rather than whatever the catalogue
-            // happened to list first.
+            // The anchor in the first seat of the first block reads, so the
+            // station speaks with that character's voice rather than
+            // whatever the catalogue happened to list first. The per-block
+            // voice is set by the director inside `beginColdOpen` every
+            // time the block swaps.
             if (assets.deskVoice) GNNTTS.setVoice(assets.deskVoice);
 
             wireModules();
@@ -615,8 +955,23 @@
             const ctx = GNNRenderer.getContext();
             if (ctx) GNNTickerManager.rebuild(ctx, []);
 
-            GNNFeedManager.start();
+            // Start the loop immediately, before the boot sequence — it is
+            // what draws the studio behind the title card, so by the time
+            // the fade begins the picture underneath is already there.
             requestAnimationFrame(gameLoop);
+
+            // Start the feed manager too. Its poll runs in the background
+            // during boot so the queue has stories ready by the time the
+            // director is released. The director does not act on them
+            // until `GNNBootReady` is set, so nothing is spoken early.
+            GNNFeedManager.start();
+
+            // Boot track, crossfade, warm-up window. Resolves when the
+            // station is on air. Everything the first minute used to
+            // fight over — TTS pipeline, icon plates, first feed poll —
+            // has the track's runtime to settle.
+            await runBootSequence();
+
             log('boot', 'on air',
                 'voice=' + GNNTTS.getVoice(),
                 'engine=' + (GNNTTS.getEngine() || 'unknown'));

@@ -59,6 +59,10 @@ const GNNRenderer = (() => {
     let vcanvas = null;
     let vctx = null;
 
+    // --- current show-block contents -------------------------------------
+    // These are what drawViewport() and drawCast() read every frame. They
+    // are set once at init() from the bundle, and re-set by setShowBlock()
+    // when the director swaps the schedule to the next block.
     let setPlate = null;
     // What is seen through the window, and where the glass is.
     let backdrop = null;
@@ -66,6 +70,38 @@ const GNNRenderer = (() => {
     let deskPlate = null;
     let seated = [];
     let robot = null;
+
+    // The row the anchors sit on, as a fraction of frame height, for the
+    // set currently on air. Every set has its own value because every set
+    // is a different room with its own desk at its own height — the studio
+    // and its two near siblings share one, and the rest do not.
+    //
+    // Read from `layout.json` at boot, and swapped on every block change
+    // inside `setShowBlock()`. The default below is only the value to use
+    // when a set has not been measured — an older generated/ tree, a
+    // missing layout.json, a hand-built plate. In any of those cases the
+    // studio's own seat line is the least-wrong guess.
+    let currentDeskLine = 0.468;
+
+    // --- the full bundle --------------------------------------------------
+    // Everything main.js loaded, kept so a block swap has somewhere to swap
+    // *to*. main.js hands these over as `assets.sets`, `assets.backdrops`,
+    // `assets.anchors` and `assets.anchorPairs`; see loadAllAssets().
+    //
+    //   sets         [{ name, plate, window, deskLine }]  ten entries, in order
+    //   backdrops    [{ name, img }]                       whatever layout.json listed
+    //   anchors      [anchor, ...]                         the whole roster, shuffled once
+    //   anchorPairs  [[a, b], [a, b], ...]                 one pair per block
+    //
+    // The rotation is stable within a session: block 3 always has the same
+    // set, pair and backdrop until the page reloads. That is deliberate —
+    // a schedule should not drift while a show is on air — and the shuffle
+    // in main.js is what makes the next boot a different line-up.
+    let setsBundle = [];
+    let backdropsBundle = [];
+    let anchorsBundle = [];
+    let anchorPairsBundle = [];
+    let currentBlock = 0;
 
     /** Resize the frame to the window, keeping the vertical pixel density. */
     function fit() {
@@ -107,13 +143,110 @@ const GNNRenderer = (() => {
         // every proportion in it was wrong. Checking per frame is a few
         // comparisons and cannot get this wrong.
 
+        // Current-block contents, from the singular top-level fields main.js
+        // still sets (so a partially-migrated main.js keeps working).
         setPlate = assets.set || null;
         backdrop = assets.backdrop || null;
         setWindow = assets.window || null;
+        // The desk line for the current set. Falls back to the studio's
+        // own value when the layout did not carry one, which is what a
+        // pre-desk-line generated/ tree looks like.
+        currentDeskLine = assets.deskLine || DESK_LINE;
         deskPlate = assets.desk || null;
         seated = assets.seated || [];
         robot = assets.robot || null;
+
+        // The full bundle, for block swaps.
+        setsBundle = assets.sets || [];
+        backdropsBundle = assets.backdrops || [];
+        anchorsBundle = assets.anchors || [];
+        anchorPairsBundle = assets.anchorPairs || [];
+
+        // If a bundle was handed over but the top-level singulars were not,
+        // fall back to the bundle's first entry. This keeps a main.js that
+        // only knows about the bundle working with no extra glue.
+        if (!setPlate && setsBundle.length) {
+            setPlate = setsBundle[0].plate;
+            setWindow = setsBundle[0].window;
+            currentDeskLine = setsBundle[0].deskLine || DESK_LINE;
+        }
+        if (!backdrop && backdropsBundle.length) {
+            backdrop = backdropsBundle[0].img;
+        }
+        if (!seated.length && anchorPairsBundle.length) {
+            seated = anchorPairsBundle[0];
+        }
     }
+
+    // ---------------------------------------------------------
+    // Show-block swap
+    // ---------------------------------------------------------
+
+    /**
+     * Move the station to a different show block.
+     *
+     * Called by the director at the top of a show, before the anchor's
+     * sign-on is queued. Swaps the set plate, the window rect, the
+     * backdrop, the desk line and the seated pair in one call so the
+     * renderer is never in a half-swapped state mid-frame.
+     *
+     * What it does NOT do:
+     *
+     *   - Change the voice. That is `GNNTTS.setVoice()` and belongs to the
+     *     director, because the voice is a property of the *speaker* and
+     *     the director is what decides who speaks next. The director reads
+     *     the pair it just swapped to (`GNNScript.desk()[0].voice`) and
+     *     calls setVoice() itself.
+     *
+     *   - Reset the fades. `crossfade()` keys off the `person` object and
+     *     resets automatically when it sees a different one, so a swap
+     *     mid-fade cannot smear one anchor's plate into another's.
+     *
+     *   - Trigger any transition. The set plate and the anchors swap in a
+     *     single frame, which is a hard cut. If you want a dissolve between
+     *     shows, that belongs between `beginShowClose` and `beginColdOpen`
+     *     — a bumper or a fade — not here.
+     *
+     * `n` is taken modulo the number of blocks, so the director can just
+     * increment a counter forever and never think about wrapping.
+     */
+    function setShowBlock(n) {
+        if (!setsBundle.length) return;
+        const count = setsBundle.length;
+        currentBlock = ((n % count) + count) % count;
+
+        const set = setsBundle[currentBlock];
+        if (set) {
+            setPlate = set.plate;
+            setWindow = set.window || null;
+            // The anchors' seat line for this room. Every set carries its
+            // own — written by condition_plates.py into layout.json — and
+            // this is what stops the cast floating above or sinking into
+            // the desk of any set that is not the studio's.
+            currentDeskLine = set.deskLine || DESK_LINE;
+        }
+
+        // Backdrop per block. Rotates through whatever layout.json listed;
+        // if there are fewer backdrops than blocks, they repeat, which is
+        // what a channel does with a limited stock of exterior plates.
+        if (backdropsBundle.length) {
+            const bd = backdropsBundle[currentBlock % backdropsBundle.length];
+            if (bd && bd.img) backdrop = bd.img;
+        }
+
+        // Seated pair for the block. The pair entries are the same shape
+        // `loadAnchorSet()` produces — { sid, voice, hero, speaking,
+        // listening, listeningFlip } — so the draw path needs no special
+        // case for the swap.
+        if (anchorPairsBundle.length) {
+            const pair = anchorPairsBundle[currentBlock] ||
+                anchorPairsBundle[0];
+            if (pair && pair.length) seated = pair;
+        }
+    }
+
+    /** The current block index, for anyone who needs to know. */
+    function getShowBlock() { return currentBlock; }
 
     // ---------------------------------------------------------
     // Viewport contents
@@ -314,6 +447,11 @@ const GNNRenderer = (() => {
     // plate lands, not how wide it is. Meeting the front lip, the torso
     // covers the desk's top surface, which is what a person sitting at a
     // desk does to it from a head-on camera.
+    //
+    // `DESK_LINE` is the studio set's own value, kept here as the fallback
+    // for a set that did not carry one from `layout.json`. The live value
+    // is `currentDeskLine`, above, and every draw path reads that. This
+    // constant exists only so the fallback has a name and a comment.
     const DESK_LINE = 0.468;
     const deskTop = () => CAST.seat - DESK.overlap;
 
@@ -330,7 +468,12 @@ const GNNRenderer = (() => {
         // Hands land on the desk's top edge: just under it when the desk is
         // a separate plate drawn over them, just on it when the desk is part
         // of the set and they are drawn over it.
-        const seatY = deskPlate ? CAST.seat : DESK_LINE;
+        //
+        // `currentDeskLine`, not the constant. Every set has its own desk
+        // height — the studio's is one value, the archive room's is
+        // another — and this is the read that lets the cast sit at the
+        // right height for whichever room is on air.
+        const seatY = deskPlate ? CAST.seat : currentDeskLine;
         // Whoever is speaking *this line*, not whoever holds the chair on
         // the rundown.
         //
@@ -617,7 +760,11 @@ const GNNRenderer = (() => {
         const list = seated.slice(0, 3);
         const seats = SEATS[list.length] || SEATS[1];
         const h = CAST.h * VIEW.h;
-        const seatY = deskPlate ? CAST.seat : DESK_LINE;
+        // Same seat line the draw path uses, so a click lands on the face
+        // the renderer actually drew rather than on where the studio's own
+        // desk would have put it. A set whose desk sits higher or lower
+        // than the studio's moves its anchors and its hit regions together.
+        const seatY = deskPlate ? CAST.seat : currentDeskLine;
         return {
             monitor: {
                 x: ICON.x * VIEW.w, y: ICON.y * VIEW.h,
@@ -645,6 +792,18 @@ const GNNRenderer = (() => {
         seatedIds: () => seated.map((p) => p.sid),
         /** Swap what is outside the window. */
         setBackdrop: (img) => { if (img) backdrop = img; },
+        /**
+         * Move to another show block. Swaps the set, the window rect, the
+         * backdrop, the desk line and the seated pair in one call. Does
+         * NOT change the voice — the director does that, because it is
+         * what decides who speaks next. See the long comment on the
+         * function.
+         */
+        setShowBlock,
+        /** Current block index, for anyone who needs to know. */
+        getShowBlock,
+        /** The seat line currently in effect, for anyone who needs it. */
+        getDeskLine: () => currentDeskLine,
         get CANVAS_W() { return CANVAS_W; },
         get CANVAS_H() { return CANVAS_H; },
     };
