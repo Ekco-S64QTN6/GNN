@@ -10,11 +10,28 @@ Routes
     /api/tts          kokoro (local) or edge-tts synthesis
     /api/status       what the station has available
     /api/log          browser diagnostics append to gnn-server.log
+    /api/voices       the running engine's voice catalogue
+    /api/localnews    local digest fallback when RSS is rate-limited
+    /api/market       live market quotes
 
 The TTS route prefers the local Kokoro engine. If Kokoro is missing it
 falls back to edge-tts, and if that is missing too it answers 503 and
 the browser client silently falls back to the Web Speech API, so the
 broadcast never goes mute.
+
+The market route exists because a browser cannot reach the upstream
+sources directly. Yahoo's chart endpoint refuses any client that does
+not present a browser TLS fingerprint — plain urllib, requests and
+httpx all get HTTP 429 regardless of headers — and the CORS gate
+would apply regardless. The server has no such restriction: it fetches
+Yahoo via curl_cffi (a real Chrome handshake), falls back to CoinGecko
+for crypto when curl_cffi is not installed, and hands the parsed quotes
+back to the browser. Same pattern as /api/localnews.
+
+    pip install curl_cffi
+
+Without it, the equities are absent and only crypto shows on the
+crawl. With it, the full row is present.
 """
 
 import asyncio
@@ -28,7 +45,9 @@ import socketserver
 import subprocess
 import sys
 import threading
+import time
 import urllib.parse
+import urllib.request
 
 PORT = int(os.environ.get('GNN_PORT', 8080))
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -48,6 +67,18 @@ try:
 except ImportError:
     edge_tts = None
     HAVE_TTS = False
+
+# curl_cffi is the only reliable way past Yahoo's TLS-fingerprint gate.
+# It wraps libcurl with a genuine Chrome handshake, so the request looks
+# like a browser at the layer Yahoo actually inspects. Optional: if it is
+# not installed, the market route falls back to CoinGecko for crypto and
+# leaves the equities off the crawl rather than refusing to start.
+try:
+    from curl_cffi import requests as curl_requests
+    HAVE_CURL_CFFI = True
+except ImportError:
+    curl_requests = None
+    HAVE_CURL_CFFI = False
 
 # --- synthesis quality -------------------------------------------------
 #
@@ -494,6 +525,151 @@ def normalize(mp3):
     return mp3, 'audio/mpeg'
 
 
+# --- market quotes -----------------------------------------------------
+#
+# Yahoo Finance's chart endpoint refuses any client without a browser TLS
+# fingerprint. Plain urllib, requests and httpx all get HTTP 429 on every
+# query regardless of headers, cookies or crumb — the gate is at the TLS
+# layer, so a cookie/crumb handshake does not get past it.
+#
+# curl_cffi presents a genuine Chrome TLS handshake, which is what the
+# endpoint checks. With it installed, all eight symbols come from Yahoo.
+# Without it, the equities are absent and the crypto comes from CoinGecko
+# so the crawl still carries something real.
+#
+# A sixty-second cache means the eight symbol requests are one batch per
+# minute, not one per crawl rebuild.
+
+_ALL_SYMBOLS = ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'TSLA', 'SPY',
+                'BTC-USD', 'ETH-USD']
+_CRYPTO_IDS = {'BTC-USD': 'bitcoin', 'ETH-USD': 'ethereum'}
+_MARKET_TTL_S = 60.0
+_market_cache = {'t': 0.0, 'quotes': []}
+_market_lock = threading.Lock()
+
+
+def _fetch_yahoo(symbol):
+    """One quote from Yahoo Finance via curl_cffi. Returns a dict or None.
+
+    The chart endpoint returns a result object with a `meta` block. The
+    price is `regularMarketPrice`; the previous close is either
+    `chartPreviousClose` or `previousClose`, depending on the range
+    parameter's own semantics. Percentage change is computed against
+    whichever is present.
+    """
+    if not HAVE_CURL_CFFI:
+        return None
+    url = ('https://query1.finance.yahoo.com/v8/finance/chart/'
+           + urllib.parse.quote(symbol) + '?range=1d&interval=1m')
+    r = curl_requests.get(url, impersonate='chrome', timeout=8)
+    if r.status_code != 200:
+        raise RuntimeError('HTTP %d' % r.status_code)
+    data = r.json()
+    result = (data.get('chart', {}).get('result') or [None])[0]
+    if not result:
+        return None
+    meta = result.get('meta') or {}
+    price = meta.get('regularMarketPrice')
+    if not isinstance(price, (int, float)):
+        return None
+    prev = meta.get('chartPreviousClose')
+    if not isinstance(prev, (int, float)):
+        prev = meta.get('previousClose')
+    if isinstance(prev, (int, float)) and prev:
+        change_pct = (price - prev) / prev * 100.0
+    else:
+        change_pct = 0.0
+    return {
+        'symbol': symbol,
+        'price': float(price),
+        'changePct': float(change_pct),
+        'currency': meta.get('currency') or 'USD',
+    }
+
+
+def _fetch_coingecko(ids):
+    """Crypto quotes from CoinGecko, batched into one request.
+
+    The fallback for when curl_cffi is not installed. Returns a dict
+    keyed by CoinGecko id, each value `{price, changePct, currency}`. A
+    missing id is absent from the dict; the caller drops the symbol.
+    """
+    url = ('https://api.coingecko.com/api/v3/simple/price'
+           '?ids=' + ','.join(ids)
+           + '&vs_currencies=usd&include_24hr_change=true')
+    req = urllib.request.Request(
+        url, headers={'User-Agent': 'GNN-Newsroom/1.0'})
+    with urllib.request.urlopen(req, timeout=8) as resp:
+        data = json.loads(resp.read().decode('utf-8', 'replace'))
+    out = {}
+    for cg_id in ids:
+        entry = data.get(cg_id) or {}
+        price = entry.get('usd')
+        if not isinstance(price, (int, float)):
+            continue
+        change = entry.get('usd_24h_change')
+        if not isinstance(change, (int, float)):
+            change = 0.0
+        out[cg_id] = {
+            'price': float(price),
+            'changePct': float(change),
+            'currency': 'USD',
+        }
+    return out
+
+
+def _refresh_market():
+    """Fetch every symbol and return the quotes that came back.
+
+    Two passes. First, Yahoo via curl_cffi for all eight symbols. Any
+    crypto that came back missing is then filled in from CoinGecko, so a
+    partial Yahoo failure does not leave a gap on the crawl. If curl_cffi
+    is not installed at all, the second pass is the only one that runs,
+    and the equities are simply absent.
+
+    Runs on the request thread. Eight serial requests plus one CoinGecko
+    batch is a fraction of a second worst case, and the sixty-second
+    cache keeps this off the hot path.
+    """
+    quotes = []
+    seen = set()
+
+    if HAVE_CURL_CFFI:
+        for sym in _ALL_SYMBOLS:
+            try:
+                q = _fetch_yahoo(sym)
+                if q:
+                    quotes.append(q)
+                    seen.add(sym)
+            except Exception as err:                      # noqa: BLE001
+                sys.stderr.write(
+                    '[GNN] market %s failed: %s\n' % (sym, err))
+    else:
+        sys.stderr.write(
+            '[GNN] market: curl_cffi not installed — '
+            'equities unavailable (pip install curl_cffi)\n')
+
+    missing_crypto = [s for s in _CRYPTO_IDS if s not in seen]
+    if missing_crypto:
+        try:
+            cg = _fetch_coingecko(
+                [_CRYPTO_IDS[s] for s in missing_crypto])
+            for sym in missing_crypto:
+                entry = cg.get(_CRYPTO_IDS[sym])
+                if entry:
+                    quotes.append({
+                        'symbol': sym,
+                        'price': entry['price'],
+                        'changePct': entry['changePct'],
+                        'currency': entry['currency'],
+                    })
+        except Exception as err:                          # noqa: BLE001
+            sys.stderr.write(
+                '[GNN] market coingecko failed: %s\n' % err)
+
+    return quotes
+
+
 class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
@@ -531,6 +707,8 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self.handle_voices()
         if parsed.path.rstrip('/') == '/api/localnews':
             return self.handle_localnews()
+        if parsed.path.rstrip('/') == '/api/market':
+            return self.handle_market()
         return super().do_GET()
 
     def do_POST(self):
@@ -647,6 +825,41 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
                            'items': items}).encode()
         return self.send_bytes(body, 'application/json')
 
+    # -- market quotes ------------------------------------------
+    #
+    # The response carries `ok`, `quotes` and `t` — the epoch seconds of
+    # the last successful fetch. When a refresh fails partway through,
+    # the previous quotes are returned with their original timestamp, so
+    # the client can label them delayed without inventing a time.
+
+    def handle_market(self):
+        now = time.time()
+        with _market_lock:
+            fresh = (_market_cache['quotes']
+                     and now - _market_cache['t'] < _MARKET_TTL_S)
+            if fresh:
+                payload = {'ok': True,
+                           'quotes': list(_market_cache['quotes']),
+                           't': int(_market_cache['t'])}
+                return self.send_bytes(json.dumps(payload).encode(),
+                                       'application/json')
+
+        quotes = _refresh_market()
+        with _market_lock:
+            if quotes:
+                _market_cache['quotes'] = quotes
+                _market_cache['t'] = now
+            payload = {
+                'ok': bool(quotes),
+                'quotes': list(quotes or _market_cache['quotes']),
+                't': int(_market_cache['t'] or now),
+            }
+        if not quotes:
+            sys.stderr.write('[GNN] market: no quotes this cycle, '
+                             'serving %d stale\n' % len(payload['quotes']))
+        return self.send_bytes(json.dumps(payload).encode(),
+                               'application/json')
+
     def send_bytes(self, payload, ctype, code=200):
         self.send_response(code)
         self.send_header('Content-Type', ctype)
@@ -680,6 +893,7 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             },
             'format': EDGE_FORMAT,
             'normalise': bool(shutil.which('ffmpeg')),
+            'market': HAVE_CURL_CFFI,
             'music': len([f for f in os.listdir(os.path.join(assets, 'audio', 'music'))
                           if f.endswith('.ogg')]) if os.path.isdir(
                               os.path.join(assets, 'audio', 'music')) else 0,
@@ -780,6 +994,9 @@ def run_server():
         else:
             engine = 'UNAVAILABLE - start with ./start.sh so the venv is used'
         print('[GNN Server] voice engine: %s' % engine)
+        print('[GNN Server] market: %s'
+              % ('yahoo (curl_cffi) + coingecko' if HAVE_CURL_CFFI
+                 else 'coingecko only — pip install curl_cffi for equities'))
         print('[GNN Server] stop with Ctrl-C, or ./stop.sh')
         try:
             httpd.serve_forever()
