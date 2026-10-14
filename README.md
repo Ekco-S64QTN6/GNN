@@ -14,7 +14,9 @@ in a studio that keeps the game's archive as its footage library.
 [![Voice](https://img.shields.io/badge/voice-kokoro--82M_local-ff9de2?style=flat-square)](#)
 [![Cast](https://img.shields.io/badge/cast-12_characters_·_11_generated-ffb454?style=flat-square)](#)
 
-<img src="docs/hero.png" alt="The GNN newsroom: two alien anchors at a lit desk reading a live RSS headline, story monitor over one shoulder, market crawl along the bottom" width="820">
+<a href="https://www.youtube.com/watch?v=oadzStDgup0">
+  <img src="assets/generated/titlecards/main_desk_05.png" alt="The GNN newsroom — click to watch the full broadcast on YouTube" width="820">
+</a>
 
 </div>
 
