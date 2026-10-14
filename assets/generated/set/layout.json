@@ -14,12 +14,168 @@
       "role": "room",
       "x": 0,
       "y": 0
+    },
+    "market_wide_empty.png": {
+      "w": 1280,
+      "h": 720,
+      "role": "room",
+      "x": 0,
+      "y": 0
+    },
+    "geopolitics_wide_empty.png": {
+      "w": 1280,
+      "h": 720,
+      "role": "room",
+      "x": 0,
+      "y": 0
+    },
+    "tech_wide_empty.png": {
+      "w": 1280,
+      "h": 720,
+      "role": "room",
+      "x": 0,
+      "y": 0
+    },
+    "celebrity_wide_empty.png": {
+      "w": 1280,
+      "h": 720,
+      "role": "room",
+      "x": 0,
+      "y": 0
+    },
+    "sports_wide_empty.png": {
+      "w": 1280,
+      "h": 720,
+      "role": "room",
+      "x": 0,
+      "y": 0
+    },
+    "diplomatic_wide_empty.png": {
+      "w": 1280,
+      "h": 720,
+      "role": "room",
+      "x": 0,
+      "y": 0
+    },
+    "anomaly_wide_empty.png": {
+      "w": 1280,
+      "h": 720,
+      "role": "room",
+      "x": 0,
+      "y": 0
+    },
+    "weather_wide_empty.png": {
+      "w": 1280,
+      "h": 720,
+      "role": "room",
+      "x": 0,
+      "y": 0
+    },
+    "archive_wide_empty.png": {
+      "w": 1280,
+      "h": 720,
+      "role": "room",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "windows": {
+    "studio_wide_empty": {
+      "x0": 0.1516,
+      "y0": 0.1194,
+      "x1": 0.8484,
+      "y1": 0.4403
+    },
+    "market_wide_empty": {
+      "x0": 0.1914,
+      "y0": 0.1208,
+      "x1": 0.8055,
+      "y1": 0.4403
+    },
+    "geopolitics_wide_empty": {
+      "x0": 0.1773,
+      "y0": 0.1222,
+      "x1": 0.8227,
+      "y1": 0.4403
+    },
+    "tech_wide_empty": {
+      "x0": 0.1375,
+      "y0": 0.0917,
+      "x1": 0.8625,
+      "y1": 0.4611
+    },
+    "celebrity_wide_empty": {
+      "x0": 0.1523,
+      "y0": 0.1319,
+      "x1": 0.8469,
+      "y1": 0.5014
+    },
+    "sports_wide_empty": {
+      "x0": 0.1523,
+      "y0": 0.1361,
+      "x1": 0.8469,
+      "y1": 0.4722
+    },
+    "diplomatic_wide_empty": {
+      "x0": 0.1914,
+      "y0": 0.1347,
+      "x1": 0.8086,
+      "y1": 0.5222
+    },
+    "anomaly_wide_empty": {
+      "x0": 0.2078,
+      "y0": 0.1528,
+      "x1": 0.7906,
+      "y1": 0.5056
+    },
+    "weather_wide_empty": {
+      "x0": 0.1617,
+      "y0": 0.1278,
+      "x1": 0.8383,
+      "y1": 0.4583
+    },
+    "archive_wide_empty": {
+      "x0": 0.2508,
+      "y0": 0.1292,
+      "x1": 0.7492,
+      "y1": 0.3917
     }
   },
   "window": {
-    "x0": 0.1508,
+    "x0": 0.1516,
     "y0": 0.1194,
     "x1": 0.8484,
-    "y1": 0.4389
-  }
+    "y1": 0.4403
+  },
+  "deskLines": {
+    "studio_wide_empty": 0.468,
+    "market_wide_empty": 0.468,
+    "geopolitics_wide_empty": 0.491,
+    "tech_wide_empty": 0.5100,
+    "celebrity_wide_empty": 0.515,
+    "sports_wide_empty": 0.511,
+    "diplomatic_wide_empty": 0.5499,
+    "anomaly_wide_empty": 0.538,
+    "weather_wide_empty": 0.527,
+    "archive_wide_empty": 0.569
+  },
+  "deskLine": 0.468,
+  "backdrops": [
+    "asteroid_field_dawn.png",
+    "asteroid_field_day.png",
+    "asteroid_field_dusk.png",
+    "asteroid_field_night.png",
+    "colony_domes_dawn.png",
+    "colony_domes_day.png",
+    "colony_domes_dusk.png",
+    "colony_domes_night.png",
+    "earth_globe_dawn.png",
+    "earth_globe_day.png",
+    "earth_globe_dusk.png",
+    "earth_globe_night.png",
+    "orion_shipyard_dawn.png",
+    "orion_shipyard_day.png",
+    "orion_shipyard_dusk.png",
+    "orion_shipyard_night.png"
+  ]
 }
