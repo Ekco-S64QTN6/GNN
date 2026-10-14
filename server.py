@@ -7,15 +7,14 @@ GNN Newsroom — static host + zero-cloud neural voice endpoint
 
 Routes
     /                 static files from the project directory
-    /api/tts          edge-tts synthesis  ->  audio/mpeg
+    /api/tts          kokoro (local) or edge-tts synthesis
     /api/status       what the station has available
     /api/log          browser diagnostics append to gnn-server.log
 
-The TTS route streams Microsoft neural voices through the local
-`edge-tts` package. No account, no key, nothing leaves the machine
-except the synthesis request itself. If `edge-tts` is missing the
-route answers 503 and the browser client silently falls back to the
-Web Speech API, so the broadcast never goes mute.
+The TTS route prefers the local Kokoro engine. If Kokoro is missing it
+falls back to edge-tts, and if that is missing too it answers 503 and
+the browser client silently falls back to the Web Speech API, so the
+broadcast never goes mute.
 """
 
 import asyncio
@@ -89,9 +88,24 @@ except Exception:                                     # noqa: BLE001
 
 LOCAL_SR = 24000
 
+# A voice that is known to exist in every release of Kokoro this project has
+# been built against. Used as the fallback when a requested voice is not in
+# the installed release — Kokoro adds voices between versions, and the
+# station should stay on air rather than go silent because one character's
+# voice name was not yet shipped.
+#
+# `am_michael` is Hale's voice and is in the original Kokoro voice set.
+SAFE_VOICE = 'am_michael'
+
 # One pipeline per language code, built on first use. Loading costs ~11s,
 # so it is warmed in the background at startup rather than on the first
 # line of the broadcast.
+#
+# Two languages matter here: `'a'` for the American voices (af_*, am_*) and
+# `'b'` for the British ones (bf_*, bm_*). They share a model but not a
+# phonemizer — the `'b'` pipeline is a separate object with its own state,
+# and building it on the request path is what made the first British line
+# slow and, when it failed, produced a bare 502 with no diagnostic.
 _pipelines = {}
 _pipe_lock = threading.Lock()
 
@@ -101,6 +115,7 @@ _pipe_lock = threading.Lock()
 # of them are worse; offering them only makes the good ones harder to find.
 LOCAL_VOICES = [
     ('am_michael', 'MICHAEL — Anchor Prime'),
+    ('am_fenrir', 'FENRIR — Deep Baritone'),
     ('bm_george', 'GEORGE — Interstellar BBC'),
     ('bm_daniel', 'DANIEL — Council Desk'),
     ('bm_fable', 'FABLE — Archive Reader'),
@@ -109,6 +124,7 @@ LOCAL_VOICES = [
     ('af_bella', 'BELLA — Smooth Sci-Fi (F)'),
     ('bf_emma', 'EMMA — Interstellar BBC (F)'),
     ('bf_isabella', 'ISABELLA — Council Desk (F)'),
+    ('bf_lily', 'LILY — Science Desk (F)'),
     ('vox_unit', 'VOX UNIT — Station Automation'),
 ]
 
@@ -145,18 +161,42 @@ def local_pipeline(lang):
 
 
 def warm_local():
-    """Load the model off the request path so the first line is not slow."""
+    """Load both pipelines off the request path so the first line is not slow.
+
+    Warming only `'a'` was the bug: the American voices came up instantly
+    and the British ones — `bf_lily`, `bf_emma`, `bf_isabella`, and every
+    `bm_*` — paid the full pipeline-construction cost on their first
+    request. Worse, when construction failed under load, `handle_tts`
+    caught it as a generic exception and returned 502 with no message;
+    the browser showed `noblob` and the anchor went silent for that line
+    and every line after it by the same voice.
+    """
     if not HAVE_LOCAL:
         return
-    try:
-        local_pipeline('a')
-        sys.stderr.write('[GNN] local voice ready (kokoro)\n')
-    except Exception as err:                          # noqa: BLE001
-        sys.stderr.write('[GNN] local voice unavailable: %s\n' % err)
+    for lang in ('a', 'b'):
+        try:
+            local_pipeline(lang)
+            sys.stderr.write(
+                '[GNN] local voice ready (kokoro, lang=%s)\n' % lang)
+        except Exception as err:                      # noqa: BLE001
+            sys.stderr.write(
+                '[GNN] local voice lang=%s unavailable: %s\n' % (lang, err))
 
 
 def synthesize_local(text, voice, rate):
-    """Render locally and return WAV bytes. `rate` is a percentage string."""
+    """Render locally and return WAV bytes. `rate` is a percentage string.
+
+    Two attempts: the requested voice, then `SAFE_VOICE` if the first one
+    fails. The fallback exists because Kokoro ships its voice list with
+    the model, not the library — a name that is valid on one release may
+    not exist on another — and a station that goes mute because one
+    character's voice name changed is worse than one that reads the line
+    in a different voice and logs the substitution.
+
+    Every failure is written to stderr with the voice name and the
+    exception message, so `tail -f gnn-server.log` tells you exactly
+    which voice failed and why, rather than a bare 502 with no context.
+    """
     import io
     import numpy as np
     import soundfile as sf
@@ -170,10 +210,40 @@ def synthesize_local(text, voice, rate):
     robot = ROBOT_VOICES.get(voice)
     base = robot[0] if robot else voice
 
-    pipe = local_pipeline('b' if base.startswith('b') else 'a')
-    parts = [chunk.audio.numpy() for chunk in pipe(text, voice=base, speed=speed)]
+    # Try the requested voice, then the safe fallback. `SAFE_VOICE` is not
+    # retried if it *is* the requested voice — that would just be the same
+    # call twice.
+    candidates = [base]
+    if base != SAFE_VOICE:
+        candidates.append(SAFE_VOICE)
+
+    parts = []
+    used = None
+    for candidate in candidates:
+        lang = 'b' if candidate.startswith('b') else 'a'
+        try:
+            pipe = local_pipeline(lang)
+            parts = [chunk.audio.numpy()
+                     for chunk in pipe(text, voice=candidate, speed=speed)]
+            if parts:
+                used = candidate
+                break
+        except Exception as err:                      # noqa: BLE001
+            sys.stderr.write(
+                '[GNN] kokoro failed voice=%s lang=%s: %s\n'
+                % (candidate, lang, err))
+            parts = []
+
     if not parts:
+        sys.stderr.write(
+            '[GNN] kokoro gave no audio for any candidate voice '
+            '(requested=%s)\n' % base)
         return b''
+
+    if used != base:
+        sys.stderr.write(
+            '[GNN] substituted voice %s for requested %s\n' % (used, base))
+
     audio = np.concatenate(parts)
     buf = io.BytesIO()
     sf.write(buf, audio, LOCAL_SR, format='WAV', subtype='PCM_16')
@@ -650,7 +720,7 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             audio = (synthesize_local(text, voice, rate) if use_local
                      else synthesize(text, voice, rate, pitch))
         except Exception as err:                      # noqa: BLE001 - report to client
-            sys.stderr.write('[GNN] tts failed: %s\n' % err)
+            sys.stderr.write('[GNN] tts failed voice=%s: %s\n' % (voice, err))
             return self.send_bytes(
                 json.dumps({'error': str(err)}).encode(), 'application/json', 502)
         finally:

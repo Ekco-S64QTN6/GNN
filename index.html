@@ -1,17 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="GNN Newsroom — an unscripted live newscast simulation built entirely from the Master of Orion 1 (1993) asset library, reading real-world RSS through a robot anchor.">
+    <meta name="description"
+        content="GNN Newsroom — an unscripted live newscast simulation built entirely from the Master of Orion 1 (1993) asset library, reading real-world RSS through a robot anchor.">
     <title>GNN — Galactic News Network</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Outfit:wght@300;400;600&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="index.css">
 </head>
+
 <body>
     <div id="app">
+        <div id="boot-overlay">
+            <img id="boot-card" alt="">
+        </div>
         <div id="canvas-wrapper">
             <canvas id="gnnCanvas" width="1280" height="720"></canvas>
             <div id="scanlines"></div>
@@ -52,7 +59,8 @@
                 <hr>
                 <label for="breaking-news-input">Inject breaking bulletin</label>
                 <div id="breaking-input-row">
-                    <input type="text" id="breaking-news-input" placeholder="e.g. Space monster sighted off the Orion arm">
+                    <input type="text" id="breaking-news-input"
+                        placeholder="e.g. Space monster sighted off the Orion arm">
                     <button id="btn-inject-news">Inject</button>
                 </div>
 
@@ -100,4 +108,5 @@
     <script src="js/renderer.js"></script>
     <script src="js/main.js"></script>
 </body>
+
 </html>

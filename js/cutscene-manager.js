@@ -70,6 +70,7 @@ const GNNCutsceneManager = (() => {
         { kind: 'hack', words: ['hack', 'hacked', 'cyber', 'breach', 'ransomware', 'malware', 'leak', 'exploit', 'phishing', 'botnet', 'zero-day', 'encryption', 'password', 'spyware'] },
         { kind: 'council', words: ['senate', 'parliament', 'congress', 'election', 'vote', 'treaty', 'summit', 'council', 'minister', 'president', 'diplomat', 'sanctions', 'legislation'] },
         { kind: 'survey', words: ['telescope', 'exoplanet', 'astronomy', 'webb', 'hubble', 'asteroid', 'comet', 'mars', 'moon', 'jupiter', 'saturn', 'galaxy', 'nebula', 'star'] },
+        { kind: 'outbreak', words: ['plague', 'disease', 'virus', 'outbreak', 'pandemic', 'epidemic', 'infection', 'quarantine', 'contagion', 'medical', 'health'] },
         { kind: 'industry', words: ['factory', 'manufacturing', 'mining', 'chip', 'semiconductor', 'steel', 'energy', 'reactor', 'battery', 'supply chain', 'plant', 'refinery'] },
         { kind: 'interview', words: ['interview', 'said', 'told', 'statement', 'ceo', 'spokesperson', 'testimony', 'address', 'speech'] },
         { kind: 'tactical', words: ['military', 'defense', 'defence', 'missile', 'strike', 'troops', 'war', 'conflict', 'invasion', 'drone', 'navy', 'army'] },
@@ -105,17 +106,31 @@ const GNNCutsceneManager = (() => {
     // substitutes a random scene for a name it does not recognise. That
     // is deliberate: a missing cutaway is a small loss, a wrong one is
     // worse than none.
+    //
+    // Every `_02`, `_03` variant on disk is listed. A route with only one
+    // plate shows the same cutaway every time it fires; a route with four
+    // picks a different one on each cut. The selection is a uniform
+    // random draw over the array, so the ordering within a route does not
+    // affect the mix.
     const GENERATED = {
-        convoy: ['station_trade', 'starship_battle', 'starship_battle_02'],
-        tactical: ['starship_battle', 'starship_battle_02', 'planet_invasion',
-            'planet_invasion_02'],
-        council: ['council_vote'],
-        hack: ['hacker_code', 'spy_infiltration'],
-        anomaly: ['space_vortex', 'space_vortex_02', 'black_hole',
-            'solar_flare'],
-        survey: ['black_hole', 'solar_flare', 'asteroid_mining'],
-        industry: ['asteroid_mining', 'station_trade'],
-        deepfield: ['black_hole', 'space_vortex'],
+        convoy: ['station_trade', 'station_trade_02',
+            'starship_battle', 'starship_battle_02', 'starship_battle_03'],
+        tactical: ['starship_battle', 'starship_battle_02', 'starship_battle_03',
+            'planet_invasion', 'planet_invasion_02', 'planet_invasion_03'],
+        council: ['council_vote', 'council_vote_02', 'council_summit'],
+        hack: ['hacker_code', 'hacker_code_02',
+            'spy_infiltration', 'spy_infiltration_02'],
+        anomaly: ['space_vortex', 'space_vortex_02', 'space_vortex_03',
+            'black_hole', 'black_hole_02',
+            'solar_flare', 'solar_flare_02'],
+        survey: ['black_hole', 'black_hole_02',
+            'solar_flare', 'solar_flare_02',
+            'asteroid_mining', 'asteroid_mining_02'],
+        outbreak: ['virus_outbreak', 'virus_outbreak_02'],
+        industry: ['asteroid_mining', 'asteroid_mining_02',
+            'station_trade', 'station_trade_02'],
+        deepfield: ['black_hole', 'black_hole_02',
+            'space_vortex', 'space_vortex_02', 'space_vortex_03'],
     };
     const GEN_DIR = 'assets/generated/cutaways/';
     const genCache = new Map();
@@ -128,7 +143,6 @@ const GNNCutsceneManager = (() => {
         genCache.set(name, p);
         return p;
     }
-
     /**
      * A generated plate for this route, as a scene the renderer can show.
      *
@@ -278,7 +292,10 @@ const GNNCutsceneManager = (() => {
         });
         return {
             kind: kind || 'interview', layers,
-            duration: PIP_MS, label: null, correspondent: sid
+            duration: PIP_MS, label: null, correspondent: sid,
+            // Built from generated plates, drawn at the destination's own
+            // resolution — see drawGeneratedScene().
+            generated: true,
         };
     }
 
@@ -602,6 +619,15 @@ const GNNCutsceneManager = (() => {
     }
 
     function drawScene(ctx, scene, elapsed, dest, alpha) {
+        // A generated plate is a finished 1280x720 picture. The compositor's
+        // 320x200 buffer exists for assembling MOO1 sprite chips into a scene,
+        // and routing a plate through it costs three quarters of its pixels
+        // with nearest-neighbour sampling before it is stretched back up to
+        // the monitor. Draw the plate straight to the destination instead.
+        if (scene.generated) {
+            drawGeneratedScene(ctx, scene, elapsed, dest, alpha);
+            return;
+        }
         const buf = GNNSceneCompositor.draw(scene, elapsed);
         ctx.save();
         ctx.imageSmoothingEnabled = false;
@@ -610,6 +636,68 @@ const GNNCutsceneManager = (() => {
         ctx.restore();
     }
 
+    /**
+     * Draw a scene built from generated plates at the destination's own
+     * resolution. Layers are still cover/contain-fitted and still stack in
+     * order; they just skip the low-resolution compositor buffer that
+     * composites of MOO1 art need and finished plates do not.
+     *
+     * Motion models are not applied. Generated scenes are `motion: 'still'`
+     * by construction — the only thing that moves in a two-way is the
+     * correspondent's mouth, which is a frame swap between two plates, and
+     * that is handled by the caller setting `frameIndex`.
+     */
+    function drawGeneratedScene(ctx, scene, elapsed, dest, alpha) {
+        ctx.save();
+        // Bilinear on the downscale. The plates are photographic, not sprites;
+        // nearest-neighbour at a 5-6x reduction aliases into noise.
+        ctx.imageSmoothingEnabled = true;
+        ctx.beginPath();
+        ctx.rect(dest.x, dest.y, dest.w, dest.h);
+        ctx.clip();
+        const t = elapsed / 1000;
+        for (const layer of scene.layers) {
+            if (!layer || !layer.frames.length) continue;
+            const idx = layer.fps
+                ? (Math.floor((t + layer.offset) * layer.fps) % layer.frames.length)
+                : Math.min(layer.frames.length - 1, layer.frameIndex || 0);
+            const img = layer.frames[idx];
+            if (!img) continue;
+            let x = dest.x, y = dest.y, w = dest.w, h = dest.h;
+            if (layer.fit === 'cover') {
+                const s = Math.max(dest.w / img.width, dest.h / img.height);
+                w = img.width * s;
+                h = img.height * s;
+                x = dest.x + (dest.w - w) / 2;
+                y = dest.y + (dest.h - h) / 2;
+            } else if (layer.fit === 'contain') {
+                const s = Math.min(dest.w / img.width, dest.h / img.height);
+                w = img.width * s;
+                h = img.height * s;
+                x = dest.x + (dest.w - w) / 2;
+                y = dest.y + (dest.h - h) / 2;
+            }
+            const a = (layer.alpha === undefined ? 1 : layer.alpha)
+                * (alpha === undefined ? 1 : alpha);
+            ctx.globalAlpha = Math.max(0, Math.min(1, a));
+            ctx.drawImage(img, x, y, w, h);
+        }
+        ctx.restore();
+    }
+
+    /**
+     * The lit bezel and label strip drawn over a cutaway in the monitor.
+     * Top row is a "LIVE" tag and the cutaway's own label; optional second
+     * line along the bottom carries the source strap ("GNN LIVE FOOTAGE").
+     *
+     * This was missing from the module at the time of the black-screen bug
+     * — `render()` called it, it threw, the renderer's try/catch ate the
+     * throw, and every frame after the throw was skipped. The screen went
+     * black every time a cutaway fired because the draw path never reached
+     * `blitViewport`. It lives here now, defined before `render()` uses it,
+     * and it is measured rather than assumed so a long label does not run
+     * over its own LIVE tag.
+     */
     function drawChrome(ctx, dest, label, sub) {
         ctx.save();
         ctx.imageSmoothingEnabled = false;

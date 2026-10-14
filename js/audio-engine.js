@@ -505,7 +505,81 @@ const GNNAudio = (() => {
         console.log('[GNN Audio] music started', trackId,
             'base', musicBaseGain, 'duck', musicDuck);
     }
+    /**
+     * Play a track once, from the start, and hand back both its duration
+     * and a promise that resolves when it ends.
+     *
+     * Used by the boot sequence, which needs to know how long the loading
+     * screen should stay up and needs to start the fade-out three seconds
+     * before the track finishes. `playMusic` does not work for this: it
+     * loops by default and has no end-of-track hook.
+     *
+     * Returns `{ duration, stopped }` where `duration` is the track length
+     * in seconds and `stopped` is a promise that resolves when the source
+     * has ended, or `null` if the track cannot be loaded.
+     */
+    async function playBootTrack(trackId, opts = {}) {
+        ensureContext();
+        if (!ctx || muted) return null;
+        const meta = (typeof GNNAssets !== 'undefined')
+            ? GNNAssets.musicTracks().find((m) => m.id === trackId)
+            : null;
+        if (!meta) {
+            console.warn('[GNN Audio] playBootTrack: no manifest entry for', trackId);
+            return null;
+        }
+        let buf = buffers.get(trackId);
+        if (!buf) {
+            try {
+                const r = await fetch(meta.file);
+                if (!r.ok) {
+                    console.warn('[GNN Audio] boot track fetch failed',
+                        meta.file, r.status, r.statusText);
+                    return null;
+                }
+                buf = await ctx.decodeAudioData(await r.arrayBuffer());
+                buffers.set(trackId, buf);
+            } catch (err) {
+                console.warn('[GNN Audio] boot track decode failed',
+                    meta.file, err && err.message ? err.message : err);
+                return null;
+            }
+        }
+        rememberMusic(trackId);
+        stopMusic(0.05);
+        const duration = buf.duration;
+        const gain = opts.gain !== undefined ? opts.gain : 0.7;
 
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.loop = false;
+        const g = ctx.createGain();
+        g.gain.value = 0.0001;
+        src.connect(g); g.connect(musicBus);
+        src.start(0);
+        g.gain.linearRampToValueAtTime(
+            Math.max(0.0001, gain * musicDuck),
+            ctx.currentTime + (opts.fadeIn || 1.4));
+        musicSource = src; musicGain = g; currentTrack = trackId;
+        musicBaseGain = gain;
+
+        const stopped = new Promise((resolve) => {
+            src.onended = () => {
+                // Only clear shared music state when this source is still
+                // the current one. If something else called playMusic in
+                // the meantime, clearing musicSource here would break the
+                // track that is actually on air.
+                if (musicSource === src) {
+                    musicSource = null; musicGain = null; currentTrack = null;
+                    musicBaseGain = 1;
+                }
+                resolve();
+            };
+        });
+        console.log('[GNN Audio] boot track started', trackId,
+            'duration', duration.toFixed(2) + 's');
+        return { duration, stopped };
+    }
     /**
      * Pull the music bed down while the anchor talks.
      *
@@ -682,7 +756,7 @@ const GNNAudio = (() => {
         getMusicLevel, getCompression,
         preload, load, play, playRole, playChord, CORE_SFX,
         playTypingBlip, playUiClick, playKlaxon,
-        playMusic, stopMusic, duckMusic, duckEffects, duckUnderVoice, getCurrentTrack,
+        playMusic, playBootTrack, stopMusic, duckMusic, duckEffects, duckUnderVoice, getCurrentTrack,
         glitchCrush, tapeStop, setStationGain,
         toggleMute, isMuted,
         VOLUME,
