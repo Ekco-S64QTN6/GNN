@@ -41,7 +41,6 @@ const GNNFeedManager = (() => {
 
         // --- Morning Index: markets and money ---
         { url: 'https://feeds.bbci.co.uk/news/business/rss.xml', cat: 'markets' },
-        { url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', cat: 'markets' },
         { url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', cat: 'markets' }, // Replaced failing CNBC feed
 
         // --- Diplomatic Hour ---
@@ -83,14 +82,24 @@ const GNNFeedManager = (() => {
     let seenTitles = new Set();
     let broadcast = new Set();   // titles already put to air this cycle
     let pollTimer = null;
+    let pollInProgress = false;
     let onNewItems = null;      // callback: (items[]) => void
     let onStatusChange = null;  // callback: (status: string, isError: boolean) => void
 
     /** Strip HTML tags from string */
     function stripHtml(html) {
-        const tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        return (tmp.textContent || tmp.innerText || '').trim();
+        const value = String(html || '');
+        // RSS descriptions are often HTML fragments. Use the DOM parser when
+        // available; keep a conservative fallback for tests/non-browser runs.
+        if (typeof document !== 'undefined' && document.createElement) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = value;
+            return (tmp.textContent || tmp.innerText || '').trim();
+        }
+        return value.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ')
+            .replace(/&amp;/gi, '&').replace(/&quot;/gi, '"')
+            .replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<')
+            .replace(/&gt;/gi, '>').replace(/\s+/g, ' ').trim();
     }
 
     /** Truncate text cleanly at sentence boundary */
@@ -157,6 +166,13 @@ const GNNFeedManager = (() => {
         return true;
     }
 
+    /** Stable comparison key: collapse case, punctuation and whitespace variants. */
+    function titleKey(title) {
+        return String(title || '').toLowerCase()
+            .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, ' ').trim();
+    }
+
     /**
      * Primary entity a story is *about*, used to keep the rundown from running
      * four consecutive SpaceX items when every feed covers the same launch.
@@ -206,25 +222,33 @@ const GNNFeedManager = (() => {
         return label ? `SUBJ:${label}` : null;
     }
 
-    /** Calculate the story's agentic importance score */
+    /** Score stories for rundown priority without rewarding accidental substrings. */
     function calculateImportance(title, desc) {
-        let score = 0;
         const text = `${title} ${desc}`.toUpperCase();
-
-        // Priority news keywords
-        const priorityKeywords = [
-            'BREAKING', 'CRITICAL', 'DISCOVERY', 'ANNOUNCES', 'FIRST TIME', 'REVEALS', 'LAUNCH',
-            'THREAT', 'DANGER', 'COLLISION', 'OUTBREAK', 'SABOTAGE', 'WAR ', 'INVASION', 'DISASTER',
-            'NEW MODEL', 'AI', 'QUANTUM', 'FUSION', 'SUPERCONDUCTOR', 'NASA', 'ESA', 'SPACE', 'HISTORIC'
+        let score = 0;
+        const priorityPhrases = [
+            ['BREAKING', 12], ['URGENT', 10], ['CRITICAL', 10],
+            ['FIRST TIME', 8], ['REVEALS', 6], ['ANNOUNCES', 5],
+            ['LAUNCH', 5], ['THREAT', 7], ['COLLISION', 8],
+            ['OUTBREAK', 8], ['SABOTAGE', 8], ['INVASION', 8],
+            ['DISASTER', 8], ['HISTORIC', 6], ['NEW MODEL', 4],
+            ['QUANTUM', 3], ['FUSION', 3], ['SUPERCONDUCTOR', 4],
+            ['NASA', 2], ['ESA', 2], ['SPACE', 1], ['WAR', 5]
         ];
-
-        priorityKeywords.forEach(kw => {
-            if (text.includes(kw)) score += 10;
-        });
-
-        // Add small random weight to avoid deterministic ordering for same-priority items
-        score += Math.random() * 5;
-
+        for (const [phrase, weight] of priorityPhrases) {
+            // Match whole words/phrases, so "AI" does not score "SAID" and
+            // "WAR" does not score "WARMING".
+            const escaped = phrase.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+            const pattern = new RegExp(`(?:^|[^A-Z0-9])${escaped}(?=$|[^A-Z0-9])`, 'g');
+            const matches = text.match(pattern);
+            if (matches) score += Math.min(matches.length, 2) * weight;
+        }
+        // Small stable variation based on the title avoids reshuffling identical
+        // stories on each poll while retaining a little tie-breaking variety.
+        const key = titleKey(title);
+        let hash = 0;
+        for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+        score += (hash % 100) / 100;
         return score;
     }
 
@@ -234,7 +258,14 @@ const GNNFeedManager = (() => {
 
         for (let attempt = 0; attempt <= retries; attempt++) {
             try {
-                const resp = await fetch(apiUrl);
+                const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                const timeout = controller ? setTimeout(() => controller.abort(), 12000) : null;
+                let resp;
+                try {
+                    resp = await fetch(apiUrl, controller ? { signal: controller.signal } : undefined);
+                } finally {
+                    if (timeout) clearTimeout(timeout);
+                }
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const data = await resp.json();
                 if (data.status !== 'ok') throw new Error(data.message || 'Feed error');
@@ -253,11 +284,12 @@ const GNNFeedManager = (() => {
 
                     const matchedIcon = GNNIconManager.matchIcon(title, desc);
                     const importance = calculateImportance(title, desc);
-                    const timestamp = Date.parse(item.pubDate || new Date().toISOString()) || Date.now();
+                    const timestamp = Date.parse(item.pubDate || '') || 0;
                     const topic = extractTopic(rawTitle, rawDesc);
 
                     validItems.push({
                         title,
+                        titleKey: titleKey(title),
                         // Keep the original casing: the script writer mines
                         // proper nouns out of it, and an upper-cased headline
                         // makes every word look like a place name.
@@ -265,7 +297,7 @@ const GNNFeedManager = (() => {
                         description: desc,
                         icon: matchedIcon,
                         link: item.link,
-                        pubDate: item.pubDate || new Date().toISOString(),
+                        pubDate: item.pubDate || '',
                         timestamp: timestamp,
                         importance: importance,
                         topic: topic,
@@ -284,6 +316,9 @@ const GNNFeedManager = (() => {
 
     /** Fetch all RSS feeds */
     async function pollAll() {
+        // A slow request must not overlap the next interval and duplicate work.
+        if (pollInProgress) return;
+        pollInProgress = true;
         setStatus('Fetching live RSS feeds…', false);
         let fetchedItems = [];
         let successCount = 0;
@@ -322,15 +357,19 @@ const GNNFeedManager = (() => {
                 const now = Date.now();
                 for (const it of (local.items || [])) {
                     if (!isValidStory(it.title, it.description)) continue;
+                    const localTitle = cleanFeedText(it.title || '');
+                    const localDesc = cleanFeedText(it.description || '');
                     fetchedItems.push({
-                        title: it.title,
-                        description: it.description || '',
-                        icon: GNNIconManager.matchIcon(it.title, ''),
+                        title: localTitle.toUpperCase(),
+                        titleRaw: localTitle,
+                        titleKey: titleKey(localTitle),
+                        description: localDesc,
+                        icon: GNNIconManager.matchIcon(localTitle, localDesc),
                         link: '',
                         pubDate: new Date(now).toISOString(),
                         timestamp: now,
-                        importance: calculateImportance(it.title, ''),
-                        topic: extractTopic(it.title, ''),
+                        importance: calculateImportance(localTitle, localDesc),
+                        topic: extractTopic(localTitle, localDesc),
                         category: it.category || 'world',
                     });
                 }
@@ -349,26 +388,30 @@ const GNNFeedManager = (() => {
             } else {
                 setStatus('Connecting to RSS feeds…', true);
             }
+            pollInProgress = false;
             return;
         }
 
         // Deduplicate and store in rssPool
         const newItems = [];
         for (const item of fetchedItems) {
-            if (item.title && !seenTitles.has(item.title)) {
-                seenTitles.add(item.title);
+            const key = item.titleKey || titleKey(item.title);
+            if (key && !seenTitles.has(key)) {
+                item.titleKey = key;
+                seenTitles.add(key);
                 rssPool.push(item);
                 newItems.push(item);
             }
         }
 
         if (onNewItems && newItems.length > 0) {
-            newItems.forEach((i) => broadcast.add(i.title));
+            newItems.forEach((i) => broadcast.add(i.titleKey || titleKey(i.title)));
             onNewItems(newItems);
         }
 
         prunePool();
-        setStatus(`Live RSS — ${rssPool.length} stories loaded (${successCount}/${feeds.length} feeds)`, false);
+        setStatus(`Live RSS — ${rssPool.length} stories loaded (${successCount}/${slice.length} feeds checked)`, false);
+        pollInProgress = false;
     }
 
     /** Evict the oldest stories once the pool passes its ceiling. */
@@ -376,12 +419,12 @@ const GNNFeedManager = (() => {
         if (rssPool.length > POOL_LIMIT) {
             rssPool.sort((a, b) => b.timestamp - a.timestamp);
             for (const dropped of rssPool.splice(POOL_LIMIT)) {
-                seenTitles.delete(dropped.title);
-                broadcast.delete(dropped.title);
+                seenTitles.delete(dropped.titleKey || titleKey(dropped.title));
+                broadcast.delete(dropped.titleKey || titleKey(dropped.title));
             }
         }
         if (seenTitles.size > SEEN_LIMIT) {
-            const live = new Set(rssPool.map((i) => i.title));
+            const live = new Set(rssPool.map((i) => i.titleKey || titleKey(i.title)));
             for (const t of seenTitles) {
                 if (seenTitles.size <= SEEN_LIMIT) break;
                 if (!live.has(t)) seenTitles.delete(t);
@@ -461,10 +504,10 @@ const GNNFeedManager = (() => {
         const onAir = (typeof GNNDirector !== 'undefined' && GNNDirector.getCurrent)
             ? GNNDirector.getCurrent() : null;
 
-        const queued = new Set(rundown.map((q) => q.title));
-        if (onAir) queued.add(onAir.title);
+        const queued = new Set(rundown.map((q) => q.titleKey || titleKey(q.title)));
+        if (onAir) queued.add(onAir.titleKey || titleKey(onAir.title));
 
-        const fresh = rssPool.filter((item) => !queued.has(item.title) && !broadcast.has(item.title));
+        const fresh = rssPool.filter((item) => !queued.has(item.titleKey || titleKey(item.title)) && !broadcast.has(item.titleKey || titleKey(item.title)));
         if (fresh.length) {
             fresh.sort((a, b) => b.timestamp - a.timestamp);
             // One story per subject in a batch, and none repeating what is
@@ -480,7 +523,7 @@ const GNNFeedManager = (() => {
                 taken.push(item.title);
             }
             if (!batch.length) batch.push(fresh[0]);
-            batch.forEach((i) => broadcast.add(i.title));
+            batch.forEach((i) => broadcast.add(i.titleKey || titleKey(i.title)));
             onNewItems(batch);
             return;
         }
@@ -489,11 +532,11 @@ const GNNFeedManager = (() => {
         // going silent — a station with nothing new still has a rundown.
         broadcast.clear();
         const recycled = rssPool
-            .filter((item) => !queued.has(item.title))
-            .sort(() => Math.random() - 0.5)
+            .filter((item) => !queued.has(item.titleKey || titleKey(item.title)))
+            .sort((a, b) => b.timestamp - a.timestamp)
             .slice(0, 6);
         if (recycled.length) {
-            recycled.forEach((i) => broadcast.add(i.title));
+            recycled.forEach((i) => broadcast.add(i.titleKey || titleKey(i.title)));
             onNewItems(recycled);
         }
     }
@@ -503,6 +546,7 @@ const GNNFeedManager = (() => {
     }
 
     function start() {
+        if (pollTimer) return;
         pollAll();
         pollTimer = setInterval(pollAll, POLL_INTERVAL_MS);
     }
