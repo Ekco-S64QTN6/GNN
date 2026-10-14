@@ -33,6 +33,57 @@ eye-line; three separate generations never do. The first Bulrathi set drifted
 18% in scale across its three states and would have read as the anchor
 lurching at the camera. Finding that on the first species costs one batch;
 finding it after ten costs thirty generations.
+
+When the speaking plate's head does not line up with the hero's after body
+registration — the female Mrrshan came back with a head 14% wider and 10 px
+higher — the mouth-only swap is skipped rather than misplaced. The raw
+speaking plate is written out whole in that case, and the run reports it. The
+cause is always the source generation, not the tool: the variant was not made
+as a tight edit of the hero.
+
+Some species use a beak rather than a mouth, and the mouth-region detector
+does not reliably find the beak's opening gap. Those species are listed in
+`WHOLE_SPEAKING` and their speaking plate is written whole, source
+unmodified, so the source's open beak is used as-is.
+
+Room plates now ship with real transparency in the window panes. The tool
+does not key them any more — it resizes, quantises and reads the transparent
+region out of the alpha channel to record where the window sits. The old
+black-pixel keying path stays in the file as a fallback for plates generated
+by the earlier prompt, but the current ten sets do not use it.
+
+The backdrop list is published into `layout.json` as `layout['backdrops']`,
+so the client can pick from whatever is on disk rather than from a hardcoded
+pair. Adding a new backdrop is: drop the PNG in the inbox, re-run this tool,
+reload the page.
+
+Anchor species this tool expects. Any species with a `_desk_hero` (or
+`_hero`) source is processed; the list below is what the cast includes, not
+a filter.
+
+    Male:    human, mrrshan, alkari, bulrathi, darlok, meklar,
+             sakkra, silicoid, klackon, psilon, robot
+    Female:  human_f, mrrshan_f, alkari_f, bulrathi_f, darlok_f,
+             meklar_f, sakkra_f, silicoid_f, klackon_f
+
+Psilon has no female variant — the species reads as sexless and a female
+version looks like a female head on an already-androgynous body. Robot has
+no female variant either; Unit 7 is a single machine.
+
+The robot used to be 25 separate cels loaded as `robot_frame_*.png` and
+driven directly off the animator's frame index. He now goes through the
+same anchor pipeline as every other species: `robot_desk_hero`,
+`robot_speaking`, `robot_listening`, and optionally `robot_listening_flip`.
+`main.js` must be changed to load him that way — this tool already handles
+him like any other species once the sources are named correctly.
+
+Where the anchors sit. Each studio plate puts its desk at a different height
+in the frame, so the row the anchors' hands rest on is a per-set property
+and is written into `layout.json` as `deskLines` (a map) plus `deskLine`
+(the primary set's value, for a client that only knows about the first
+block). The renderer reads it and seats the cast at that row for the set
+currently on air; without it, every set drew them at the studio's own
+0.468 and anchors floated above or sank into the desks of the other nine.
 """
 import json
 import os
@@ -104,28 +155,102 @@ def _frame():
 
 VIEW_W, VIEW_H = _frame()
 
-# Where each plate sits in the view. The desk comes back from the image model
-# filling its whole frame, and composited at full size it covers the viewport
-# and leaves nowhere for anyone to sit; it is a prop in the room, not a second
-# backdrop. Width is a fraction of the view, anchored bottom-centre.
+# Every studio set the studio prompt produces. Each is a full newsroom in
+# one image — the desk is drawn into the plate, not composited on from a
+# separate image, because two separately-generated images never agreed on
+# perspective, lighting or style. The set prompt names them by show block:
+# the default main-desk room, plus Market, Fleet Briefing, Tech, Celebrity,
+# Sports and Fleet, Diplomatic Chamber, Anomaly Log, Weather, Archive.
 #
-# The room plate already has consoles built into both side walls, so the two
-# standalone consoles are not set dressing — they are free-standing props at a
-# different perspective, kept for cutaways. They are conditioned the same way
-# but given no place in the set, which is why their role is 'prop'.
-#
-# Source and installed name are the same: the document tells you to save
-# straight to the installed path, so that is where the raw drop appears.
+# The window panes in these plates are already transparent in the source
+# PNG. The tool does not need to key them; it resizes, quantises, and reads
+# the transparent region out of the alpha channel to record where the window
+# sits in `layout.json`.
 #
 # source file -> (installed name, width fraction or None for full bleed, role)
 PLATES = [
-    ('studio_wide_empty.png', 'studio_wide_empty.png', None, 'room'),
-    # The desk is drawn into the set plate now, not supplied separately.
-    # Two images had to agree on perspective, lighting and style, and
-    # separately generated ones never did.
-    ('console_left.png',      'console_left.png',      0.22, 'prop'),
-    ('console_right.png',     'console_right.png',     0.22, 'prop'),
+    ('studio_wide_empty.png',      'studio_wide_empty.png',      None, 'room'),
+    ('market_wide_empty.png',      'market_wide_empty.png',      None, 'room'),
+    ('geopolitics_wide_empty.png', 'geopolitics_wide_empty.png', None, 'room'),
+    ('tech_wide_empty.png',        'tech_wide_empty.png',        None, 'room'),
+    ('celebrity_wide_empty.png',   'celebrity_wide_empty.png',   None, 'room'),
+    ('sports_wide_empty.png',      'sports_wide_empty.png',      None, 'room'),
+    ('diplomatic_wide_empty.png',  'diplomatic_wide_empty.png',  None, 'room'),
+    ('anomaly_wide_empty.png',     'anomaly_wide_empty.png',     None, 'room'),
+    ('weather_wide_empty.png',     'weather_wide_empty.png',     None, 'room'),
+    ('archive_wide_empty.png',     'archive_wide_empty.png',     None, 'room'),
 ]
+
+# Legacy per-set window rectangles, used only when a plate arrives without a
+# transparent region (e.g. one generated by the earlier prompt, which asked
+# for black panes and relied on the tool to find them). None of the current
+# ten sets need this. Kept so an old plate can be dropped in without a code
+# change.
+SET_WINDOWS = {
+    'studio_wide_empty':      (0.12, 0.10, 0.88, 0.44),
+    'market_wide_empty':      (0.16, 0.11, 0.84, 0.44),
+    'geopolitics_wide_empty': (0.14, 0.09, 0.86, 0.44),
+    'tech_wide_empty':        (0.09, 0.09, 0.91, 0.44),
+    'celebrity_wide_empty':   (0.14, 0.10, 0.86, 0.54),
+}
+SET_GROWTH = {
+    'tech_wide_empty':      40,
+    'celebrity_wide_empty': 40,
+}
+DEFAULT_GROWTH = 12
+
+# The values here are what the eye confirmed, in `tools/studio_review.html`
+# and on air. Where a set is named, its value wins outright; where it is
+# not, the window-bottom-plus-offset rule supplies a starting point. Every
+# set is now named, because every set has been looked at — the derived
+# values were close for the sets whose desk sits at the studio's own
+# height and wrong for the sets where the desk sits somewhere else.
+# Re-tune with the review tool if a plate is regenerated; the tool
+# prints the exact line to paste back here.
+DESK_LINES = {
+    'studio_wide_empty':      0.468,
+    'market_wide_empty':      0.468,
+    'geopolitics_wide_empty': 0.4910,
+    'tech_wide_empty':        0.5100,
+    'celebrity_wide_empty':   0.5150,
+    'sports_wide_empty':      0.5110,
+    'diplomatic_wide_empty':  0.5499,
+    'anomaly_wide_empty':     0.5380,
+    'weather_wide_empty':     0.5270,
+    'archive_wide_empty':     0.5690,
+}
+# How far below the bottom of the transparent window region the seat line
+# sits, measured off the studio plate: window bottom 0.4403, desk line
+# 0.468, difference 0.0277.
+#
+# Every set is now named in `DESK_LINES`, so this offset is not used for
+# any of the ten. It is kept for a set added to `SET_FILES` without a tuned
+# value — the offset gives a starting point that is close for the sets
+# whose desk sits at the studio's own height and wrong for the sets where
+# the desk sits somewhere else. Tune it in the review tool and add the
+# result to `DESK_LINES` above.
+DESK_LINE_OFFSET = 0.0277
+DESK_LINE_DEFAULT = 0.468
+
+
+def desk_line_for(set_key, rect):
+    """The row the anchors sit on in one set.
+
+    Three cases, in order of authority:
+
+      - the value named for this set in `DESK_LINES`, which is the eye's
+        answer and wins over any arithmetic;
+      - the window bottom plus `DESK_LINE_OFFSET`, for a set the named
+        table does not cover but which has a measured window;
+      - the studio's own value, for a set with no window at all.
+    """
+    named = DESK_LINES.get(set_key)
+    if named is not None:
+        return named
+    if rect is not None:
+        return round(rect[3] + DESK_LINE_OFFSET, 4)
+    return DESK_LINE_DEFAULT
+
 
 # Anchors composite into this band, behind the desk: centred, with their heads
 # clear of the viewport's lower frame and their waists hidden by the desk top.
@@ -226,6 +351,13 @@ def crop_to_content(im):
 
 
 def condition(src, frac=None):
+    """Condition a character or prop plate.
+
+    These are cut-outs: a subject on transparent background. The tool crops
+    the empty margin, bleeds opaque colour into the anti-aliased edge so the
+    subject does not carry a dark halo when it lands on the studio, and
+    resizes to the target.
+    """
     im = Image.open(src).convert('RGBA')
     if im.split()[3].getextrema()[0] < 255:          # has real transparency
         im = crop_to_content(im)
@@ -238,18 +370,67 @@ def condition(src, frac=None):
     return quantise(resize_premultiplied(im, size))
 
 
+def condition_room(src):
+    """Condition a full-bleed room plate.
+
+    A room is not a cut-out. The transparent region in it is the window
+    opening — a deliberate hole for the backdrop to composite through — and
+    bleeding opaque neighbours into it the way defringe does for a character
+    plate would fill the glass with a rim of wall colour. So the room path
+    skips both crop_to_content and defringe, and just resizes and quantises.
+
+    Resizing happens on premultiplied alpha so the pane interior stays fully
+    transparent through the LANCZOS pass. Quantising hardens the pane edge
+    at 50% alpha, which is the intent — the renderer blits at 3x with no
+    smoothing, so an anti-aliased edge would be downsampled back to a soft
+    ramp anyway.
+    """
+    im = Image.open(src).convert('RGBA')
+    return quantise(resize_premultiplied(im, (VIEW_W, VIEW_H)))
+
+
+def alpha_window_rect(im, min_pixels=5000):
+    """The bounding rect of the transparent region in a conditioned room.
+
+    Returns (x0, y0, x1, y1) as fractions of the frame, or None when the
+    plate has no significant transparent region. The threshold is well above
+    any stray anti-aliased pixel that survived the quantise pass; a real
+    window opening is tens of thousands of pixels.
+    """
+    a = np.asarray(im.convert('RGBA'))[:, :, 3]
+    h, w = a.shape
+    mask = a < 8
+    if mask.sum() < min_pixels:
+        return None
+    ys, xs = np.nonzero(mask)
+    return (float(xs.min()) / w, float(ys.min()) / h,
+            float(xs.max() + 1) / w, float(ys.max() + 1) / h)
+
+
 CUTAWAY_OUT = os.path.join(ROOT, 'assets', 'generated', 'cutaways')
 ANCHOR_OUT = os.path.join(ROOT, 'assets', 'generated', 'anchors')
 RAW_KEEP = os.path.join(ROOT, 'assets', 'generated', '_inbox')
 # `listening_flip` is the listening plate with the glance turned the other
 # way, for an anchor sitting on the other side of whoever is talking. A
-# supplied one is conditioned like any other state; when none is supplied it
-# is derived from the finished `listening` plate by mirroring the head only.
-#
-# Flipping the whole picture turns the glance the right way and turns the
-# station badge into backwards lettering with it, which is exactly what two
-# of the hand-made flips in this project came back with.
+# supplied one is conditioned like any other state; when none is supplied the
+# renderer falls back to `listening`, which looks the wrong way for a seat on
+# the speaker's right but is not broken art.
 STATES = ('desk_hero', 'speaking', 'listening', 'listening_flip')
+
+# Species whose speaking plate is written whole, source unmodified, and the
+# mouth-only swap skipped. The detector finds a mouth by looking for the
+# brightest blurred pixel difference between hero and variant, then places
+# an ellipse there. That works when the mouth is a large soft region that
+# opens wide. It does not work on a beak: the beak's opening is a small
+# dark gap between two hard-edged parts, the diff is only a few hundred
+# pixels, and the peak often lands on a crest, brow or collar instead. For
+# those species the whole source is used, which is the right picture — the
+# model drew an open beak, and there is nothing to composite.
+#
+# Add a species here if its speaking plate comes back with a stray swap
+# artifact. Remove it if the source is a copy of the hero and the swap is
+# the only way to get a mouth open.
+WHOLE_SPEAKING = {'alkari', 'alkari_f', 'robot'}
 
 def _cast_fraction(default=0.34):
     """`CAST.h` out of renderer.js — the fraction of the frame a plate fills.
@@ -482,6 +663,14 @@ def register(variant, hero):
     return canvas, scale
 
 
+# Two generations agree on the head to within this much, or the mouth-only
+# swap is refused. The female Mrrshan came back with a head 14% wider than
+# her hero after registration — the source was a fresh generation, not a
+# tight edit — and no mouth mask placed on a differently-shaped head lands
+# on the mouth. 8% is the point past which the swap reads as misplaced.
+HEAD_SIZE_TOLERANCE = 0.08
+
+
 def mouth_region(hero, variant):
     """Where the mouth is, as a soft mask over the hero's head.
 
@@ -498,6 +687,12 @@ def mouth_region(hero, variant):
     her noise floor is high enough that half her peak is everywhere. So
     the centre is measured and the size is a fraction of the head, which
     is a thing with a known shape rather than a thing being searched for.
+
+    One more check on top of that. The peak must be in the lower two thirds
+    of the head. A mouth sits low; if the hottest difference is in the top
+    third, that is a brow, forehead or crest change, and putting the swap
+    there would replace the wrong part of the face. When the peak fails the
+    position test, this returns None and the caller leaves the plate whole.
 
     Returns (mask, (cx, cy, rx, ry)), or None when nothing stands out.
     """
@@ -535,6 +730,12 @@ def mouth_region(hero, variant):
     if not len(ys):
         return None
     cy, cx = float(ys.mean()), float(xs.mean())
+
+    # The peak must sit in the lower two thirds of the head. A mouth is not
+    # up near the brow; if the brightest difference is there, the two plates
+    # changed something other than the mouth and this mask would be wrong.
+    if cy < rows * 0.33:
+        return None
 
     # Size: a fraction of the head's own width. A mouth is about a quarter
     # of a face across and a little less tall, and that holds for a bear,
@@ -651,48 +852,68 @@ def _is_backdrop(name):
     return name.endswith(_BACKDROP_PHASES)
 
 
-def window_mask(room):
-    """The panes of the studio window, as a boolean mask.
+def window_mask(room, set_name):
+    """Legacy black-pixel window keyer.
 
-    The set prompt says every pane is a flat area of pure black and that
-    nothing else in the room may be, which makes the window keyable without
-    anyone measuring a rectangle that goes stale the next time the room is
-    regenerated.
+    Used only when a room plate arrives without real transparency in the
+    window panes — that is, one generated by the earlier prompt that asked
+    for pure black panes and relied on this tool to find and remove them.
+    The current ten sets ship with alpha already in the panes, so this
+    function is not called for them.
 
-    Thresholding alone is not enough — the ceiling truss and the two
-    wall-mounted monitors are near-black too, and they came to 23% of the
-    plate between them. So the black is split into connected regions and
-    only the ones sitting where a window sits are kept: eight panes, each
-    about 21,000 pixels, centred across the middle of the room. The two
-    monitors land at x 0.04 and 0.95 and are dropped.
+    The per-set rectangle in `SET_WINDOWS` bounds the search; a dark-pixel
+    threshold inside the rect finds the pane interior, and a per-column
+    downward growth reaches past the light trim row at the bottom of some
+    panes into the tinted shadow band beneath.
     """
     try:
         from scipy import ndimage
     except ImportError:
         return None
+    rect = SET_WINDOWS.get(set_name)
+    if rect is None:
+        return None
     a = np.asarray(room.convert('RGB')).astype(int)
     h, w = a.shape[:2]
-    lab, n = ndimage.label(a.max(axis=2) <= 24)
+    x0 = int(round(rect[0] * w))
+    y0 = int(round(rect[1] * h))
+    x1 = int(round(rect[2] * w))
+    y1 = int(round(rect[3] * h))
+    dark = a.max(axis=2) <= 32
     keep = np.zeros((h, w), bool)
+    keep[y0:y1, x0:x1] = dark[y0:y1, x0:x1]
+    struct = np.ones((3, 3), bool)
+    keep = ndimage.binary_opening(keep, structure=struct)
+    growth = SET_GROWTH.get(set_name, DEFAULT_GROWTH)
+    for col in range(w):
+        col_vals = keep[:, col]
+        nz = np.nonzero(col_vals)[0]
+        if not len(nz):
+            continue
+        last = int(nz[-1])
+        end = min(h, last + growth + 1)
+        keep[last + 1:end, col] = True
+    keep[:y0, :] = False
+    keep[y1:, :] = False
+    keep[:, :x0] = False
+    keep[:, x1:] = False
+    lab, n = ndimage.label(keep)
+    out = np.zeros((h, w), bool)
     for i in range(1, n + 1):
         comp = lab == i
-        if comp.sum() < 1500:
+        if comp.sum() < 3000:
             continue
-        ys, xs = np.nonzero(comp)
-        if 0.15 < xs.mean() / w < 0.85 and 0.08 < ys.mean() / h < 0.55:
-            keep |= comp
-    return keep if keep.any() else None
+        out |= comp
+    return out if out.any() else None
 
 
-def punch_window(room):
-    """The room with its window panes cut out, and where they were.
+def punch_window(room, set_name):
+    """Legacy path: cut black panes out of a room plate and report where.
 
-    The engine draws a backdrop and then the room over it, so the glass has
-    to be a hole. Baking a backdrop into the plate instead would fix one
-    view into the set for good, and the whole point of the window is that
-    it changes with the show block and the hour.
+    Called only for a plate with no real transparency, so the legacy keyer
+    has something to remove. The current ten sets do not go through here.
     """
-    mask = window_mask(room)
+    mask = window_mask(room, set_name)
     if mask is None:
         return room, None
     out = room.convert('RGBA')
@@ -819,11 +1040,44 @@ def conditioned_already(im):
 
 
 def anchor_sources(sid, state):
-    return find_source('%s_%s.png' % (sid, state), out_dir=ANCHOR_OUT)
+    """The source file for one state of one species.
+
+    A state is normally named `<sid>_<state>.png`, so a `desk_hero` source
+    is `<sid>_desk_hero.png`. Some image models save the hero as
+    `<sid>_hero.png` instead — no `desk_` in the middle — and the fallback
+    below picks that up so a file saved under the shorter name still ends
+    up written out under the canonical one. Everything else is unchanged.
+    """
+    src = find_source('%s_%s.png' % (sid, state), out_dir=ANCHOR_OUT)
+    if src is None and state == 'desk_hero':
+        src = find_source('%s_hero.png' % sid, out_dir=ANCHOR_OUT)
+    return src
+
+
+def _head_size_ratio(hero_metrics, variant_metrics):
+    """How much bigger the variant's head is than the hero's, as a ratio.
+
+    Returns None when either head width is unreadable, so the caller can
+    skip the check. A ratio of 1.0 means they match.
+    """
+    hh = hero_metrics.get('head') if hero_metrics else None
+    vh = variant_metrics.get('head') if variant_metrics else None
+    if not hh or not vh:
+        return None
+    return vh / float(hh)
 
 
 def do_anchors():
-    """Condition every complete anchor set, and check the states line up."""
+    """Condition every complete anchor set, and check the states line up.
+
+    The robot goes through this loop like every other species. His sources
+    are named `robot_desk_hero.png`, `robot_speaking.png`, `robot_listening.png`
+    (and optionally `robot_listening_flip.png`) and dropped into `_inbox`
+    alongside the rest. The old `robot_frame_*.png` convention — 25 cels
+    loaded as separate images — is retired; `main.js` used to load him that
+    way and needs to be changed to load him from `assets/generated/anchors/`
+    like the other anchors.
+    """
     names = set()
     roots = SRC_ROOTS + [ANCHOR_OUT]
     for root in roots:
@@ -832,6 +1086,11 @@ def do_anchors():
         for f in os.listdir(root):
             if f.endswith('_desk_hero.png'):
                 names.add(f[:-len('_desk_hero.png')])
+            elif f.endswith('_hero.png'):
+                # Alternate name some image models save under, e.g.
+                # `human_f_hero.png`. `_desk_hero.png` also ends in
+                # `_hero.png`, so that pattern is checked first, above.
+                names.add(f[:-len('_hero.png')])
     if not names:
         return
     os.makedirs(ANCHOR_OUT, exist_ok=True)
@@ -844,7 +1103,7 @@ def do_anchors():
             if src:
                 found[st] = src
         if not found:
-            print('%s: already conditioned' % sid)
+            print('%s: no sources found' % sid)
             continue
 
         hero_src = found.get('desk_hero')
@@ -935,42 +1194,80 @@ def do_anchors():
         # every pixel flips by a palette step and the flap shimmers across
         # the whole figure. Built from the hero's own finished bytes, the
         # only pixels that can differ are the ones inside the mouth.
+        #
+        # Refused when the two heads do not match. The female Mrrshan came
+        # back with a head 14% wider than her hero, and a mouth mask placed
+        # on a differently-shaped head lands wherever the largest difference
+        # is — ear cuff, mane, brow — not on the mouth. When the head sizes
+        # disagree past HEAD_SIZE_TOLERANCE the plate is written whole and
+        # the run says so; the fix is to regenerate the speaking source as
+        # a tight edit of the hero, not to ask the mask to work harder.
+        #
+        # Also refused for the species in WHOLE_SPEAKING. Those are the
+        # beaked characters. The detector works by finding the brightest
+        # blurred pixel difference, and on a bird the beak's opening gap
+        # is small, dark and surrounded by high-contrast feather edges, so
+        # the peak lands somewhere else. Writing the source whole uses the
+        # open beak the model actually drew.
         if 'speaking' in done and 'desk_hero' in done:
-            hero_p, spk_p = done['desk_hero'], done['speaking']
-            region = mouth_region(hero_p, spk_p)
-            if region:
-                mask, (cx, cy, rx, ry) = region
-                out = swap_region(hero_p, spk_p, mask)
-                # Outside the feather, the hero verbatim.
-                out = Image.composite(
-                    out, hero_p,
-                    Image.fromarray(((mask[:, :, 0] > 0.02) * 255)
-                                    .astype(np.uint8)))
-                # Quantised, and this is not cosmetic. The swap blends two
-                # 256-colour plates and invents colours; saved as-is the
-                # result had over a thousand, which is exactly the test
-                # `conditioned_already` uses. The next run therefore read
-                # the tool's own output back as source art, registered it
-                # (scaling a 216px plate up five and a half times) and
-                # conditioned it again, and the anchor's mouth degraded a
-                # little further every run.
-                out = quantise_like(out, hero_p)
-                # Hero verbatim outside the feather, applied last so those
-                # pixels are byte-identical and nothing but the mouth can
-                # move.
-                out = Image.composite(
-                    out, hero_p,
-                    Image.fromarray(((mask[:, :, 0] > 0.02) * 255)
-                                    .astype(np.uint8)))
-                out.save(os.path.join(ANCHOR_OUT, '%s_speaking.png' % sid))
-                moved = int((np.abs(
-                    np.asarray(out.convert('RGBA'), int)
-                    - np.asarray(hero_p.convert('RGBA'), int)).sum(2) > 8).sum())
-                print('   speaking: mouth only — %d px differ from the hero '
-                      '(%.1f%% of the plate)'
-                      % (moved, 100.0 * moved / (out.width * out.height)))
+            if sid in WHOLE_SPEAKING:
+                done['speaking'].save(
+                    os.path.join(ANCHOR_OUT, '%s_speaking.png' % sid))
+                print('   speaking: %s is in WHOLE_SPEAKING — source '
+                      'written whole, mouth swap skipped.' % sid)
             else:
-                print('   speaking: no clear mouth region — left whole')
+                ratio = _head_size_ratio(metrics.get('desk_hero'),
+                                         metrics.get('speaking'))
+                if ratio is not None and abs(ratio - 1.0) > HEAD_SIZE_TOLERANCE:
+                    print('   speaking: head is %+.0f%% the hero\'s size — '
+                          'source is a fresh generation, not an edit. Written '
+                          'whole, mouth swap skipped.'
+                          % ((ratio - 1.0) * 100))
+                    done['speaking'].save(
+                        os.path.join(ANCHOR_OUT, '%s_speaking.png' % sid))
+                else:
+                    hero_p, spk_p = done['desk_hero'], done['speaking']
+                    region = mouth_region(hero_p, spk_p)
+                    if region:
+                        mask, (cx, cy, rx, ry) = region
+                        out = swap_region(hero_p, spk_p, mask)
+                        # Outside the feather, the hero verbatim.
+                        out = Image.composite(
+                            out, hero_p,
+                            Image.fromarray(((mask[:, :, 0] > 0.02) * 255)
+                                            .astype(np.uint8)))
+                        # Quantised, and this is not cosmetic. The swap
+                        # blends two 256-colour plates and invents colours;
+                        # saved as-is the result had over a thousand, which
+                        # is exactly the test `conditioned_already` uses.
+                        # The next run would therefore read the tool's own
+                        # output back as source art, register it (scaling a
+                        # 216px plate up five and a half times) and condition
+                        # it again, and the anchor's mouth degraded a little
+                        # further every run.
+                        out = quantise_like(out, hero_p)
+                        # Hero verbatim outside the feather, applied last so
+                        # those pixels are byte-identical and nothing but
+                        # the mouth can move.
+                        out = Image.composite(
+                            out, hero_p,
+                            Image.fromarray(((mask[:, :, 0] > 0.02) * 255)
+                                            .astype(np.uint8)))
+                        out.save(os.path.join(ANCHOR_OUT,
+                                              '%s_speaking.png' % sid))
+                        moved = int((np.abs(
+                            np.asarray(out.convert('RGBA'), int)
+                            - np.asarray(hero_p.convert('RGBA'), int)
+                        ).sum(2) > 8).sum())
+                        print('   speaking: mouth only — %d px differ from '
+                              'the hero (%.1f%% of the plate)'
+                              % (moved, 100.0 * moved
+                                 / (out.width * out.height)))
+                    else:
+                        done['speaking'].save(
+                            os.path.join(ANCHOR_OUT,
+                                         '%s_speaking.png' % sid))
+                        print('   speaking: no clear mouth region — left whole')
 
         # The listening states get the same treatment with a bigger
         # region: the head turns, so the head is what is swapped and the
@@ -989,11 +1286,13 @@ def do_anchors():
             out = swap_region(hero_p, done[st], mask)
             out = Image.composite(
                 out, hero_p,
-                Image.fromarray(((mask[:, :, 0] > 0.02) * 255).astype(np.uint8)))
+                Image.fromarray(((mask[:, :, 0] > 0.02) * 255)
+                                .astype(np.uint8)))
             out = quantise_like(out, hero_p)
             out = Image.composite(
                 out, hero_p,
-                Image.fromarray(((mask[:, :, 0] > 0.02) * 255).astype(np.uint8)))
+                Image.fromarray(((mask[:, :, 0] > 0.02) * 255)
+                                .astype(np.uint8)))
             out.save(os.path.join(ANCHOR_OUT, '%s_%s.png' % (sid, st)))
             moved = int((np.abs(
                 np.asarray(out.convert('RGBA'), int)
@@ -1090,7 +1389,9 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     made = {}
     layout = {'view': {'w': VIEW_W, 'h': VIEW_H}, 'anchors': ANCHOR_BAND,
-              'plates': {}}
+              'plates': {}, 'windows': {}}
+    primary_window_written = False
+    primary_desk_written = False
     for src_name, out_name, frac, role in PLATES:
         dest = os.path.join(OUT, out_name)
         src = find_source(src_name, out_dir=OUT)
@@ -1109,42 +1410,103 @@ def main():
                 spot = {'w': im.width, 'h': im.height, 'role': role}
                 if role == 'room':
                     spot.update(x=0, y=0)
-                elif role == 'desk':
-                    spot.update(x=(VIEW_W - im.width) // 2,
-                                y=VIEW_H - im.height)
                 layout['plates'][out_name] = spot
-                print('%-24s -- source gone, keeping conditioned %dx%d'
+                # Re-derive the window rect and the desk line from the
+                # existing plate so a re-run does not lose either. The two
+                # are derived together because the desk line is defined in
+                # terms of the window bottom — see `desk_line_for`.
+                if role == 'room':
+                    set_key = os.path.splitext(out_name)[0]
+                    rect = alpha_window_rect(im)
+                    if rect is not None:
+                        layout['windows'][set_key] = {
+                            'x0': round(rect[0], 4), 'y0': round(rect[1], 4),
+                            'x1': round(rect[2], 4), 'y1': round(rect[3], 4)}
+                        if not primary_window_written:
+                            layout['window'] = layout['windows'][set_key]
+                            primary_window_written = True
+                    desk = desk_line_for(set_key, rect)
+                    layout.setdefault('deskLines', {})[set_key] = desk
+                    if not primary_desk_written:
+                        layout['deskLine'] = desk
+                        primary_desk_written = True
+                print('%-26s -- source gone, keeping conditioned %dx%d'
                       % (src_name, im.width, im.height))
             else:
                 print('not found anywhere, skipped: %s' % src_name)
             continue
-        im = condition(src, frac)
         if role == 'room':
-            # Cut the glass out so a backdrop can be drawn behind it.
-            im, box = punch_window(im)
-            if box:
-                layout['window'] = {'x0': round(box[0], 4),
-                                    'y0': round(box[1], 4),
-                                    'x1': round(box[2], 4),
-                                    'y1': round(box[3], 4)}
-                print('%-24s    window keyed: %.3f,%.3f - %.3f,%.3f'
-                      % ('', box[0], box[1], box[2], box[3]))
+            # Room plates ship with real transparency in the window panes.
+            # Nothing is keyed; the pane interior is already alpha 0 in the
+            # source and survives the resize because resize_premultiplied
+            # cannot bleed colour into a zero-alpha pixel. The window rect
+            # in layout.json is read straight back out of the alpha channel.
+            im = condition_room(src)
+            rect = alpha_window_rect(im)
+            if rect is None:
+                # No transparency in the source. Fall back to the legacy
+                # black-pixel keyer for a plate generated by the earlier
+                # prompt, which asked for pure black panes and relied on
+                # this tool to cut them.
+                set_key = os.path.splitext(out_name)[0]
+                im, box = punch_window(im, set_key)
+                if box is not None:
+                    rect = box
+                    print('%-26s    window keyed (legacy black-pixel path): '
+                          '%.3f,%.3f - %.3f,%.3f'
+                          % ('', box[0], box[1], box[2], box[3]))
+                else:
+                    print('%-26s    no transparent window region and no '
+                          'legacy rect for %s — no window entry written'
+                          % ('', set_key))
+            else:
+                print('%-26s    window rect from alpha: %.3f,%.3f - %.3f,%.3f'
+                      % ('', rect[0], rect[1], rect[2], rect[3]))
+
+            set_key = os.path.splitext(out_name)[0]
+            if rect is not None:
+                r = {'x0': round(rect[0], 4), 'y0': round(rect[1], 4),
+                     'x1': round(rect[2], 4), 'y1': round(rect[3], 4)}
+                layout['windows'][set_key] = r
+                if not primary_window_written:
+                    layout['window'] = r
+                    primary_window_written = True
+
+            # The seat line: the row the anchors' hands land on in this
+            # set. Written alongside the window because it is derived from
+            # it — window bottom plus the studio's own offset — unless the
+            # set is named in `DESK_LINES`, where the eye's answer wins.
+            desk = desk_line_for(set_key, rect)
+            layout.setdefault('deskLines', {})[set_key] = desk
+            if not primary_desk_written:
+                layout['deskLine'] = desk
+                primary_desk_written = True
+            print('%-26s    desk line: %.4f' % ('', desk))
+
+            made[out_name] = im
+        else:
+            im = condition(src, frac)
+            made[out_name] = im
         im.save(dest)
-        made[out_name] = im
         spot = {'w': im.width, 'h': im.height, 'role': role}
         if role == 'room':
             spot.update(x=0, y=0)
-        elif role == 'desk':
-            spot.update(x=(VIEW_W - im.width) // 2, y=VIEW_H - im.height)
         layout['plates'][out_name] = spot
         where = ('at (%d,%d)' % (spot['x'], spot['y'])) if 'x' in spot else 'unplaced prop'
-        print('%-24s -> set/%-22s %3dx%-3d %-14s %d colours'
+        print('%-26s -> set/%-26s %3dx%-3d %-14s %d colours'
               % (src_name, out_name, im.width, im.height, where,
                  len(im.convert('RGB').getcolors(1 << 16) or [])))
 
     # Backdrops: what is seen through that hole. Conditioned to the shape
     # of the window opening rather than the frame, because that is the only
     # part of them anyone ever sees.
+    #
+    # Sized from the primary window. All ten rooms have slightly different
+    # window shapes, and a single backdrop size cannot be right for all of
+    # them — the current pipeline washes that out by covering (max scale)
+    # rather than fitting, so a backdrop covers the largest opening and is
+    # cropped by the smaller ones. When the renderer learns to read
+    # `windows` per set, backdrops should be conditioned per set too.
     win = layout.get('window')
     if win:
         os.makedirs(BACKDROP_OUT, exist_ok=True)
@@ -1167,9 +1529,19 @@ def main():
             left = (bim.width - ww) // 2
             top = (bim.height - wh) // 2
             bim = bim.crop((left, top, left + ww, top + wh))
-            bim = bim.quantize(colors=256, method=Image.MEDIANCUT).convert('RGB')
+            bim = bim.quantize(colors=256,
+                              method=Image.MEDIANCUT).convert('RGB')
             bim.save(os.path.join(BACKDROP_OUT, name))
-            print('%-24s -> backdrops/%-20s %3dx%-3d' % (name, name, ww, wh))
+            print('%-26s -> backdrops/%-20s %3dx%-3d' % (name, name, ww, wh))
+
+    # Publish the backdrop list so the client reads it rather than
+    # hardcoding a pair. This is what makes adding a new backdrop a
+    # data-only change: drop the PNG in the inbox, re-run this tool,
+    # reload. Read from the output folder rather than from the source
+    # list, so an item that failed to condition is not offered.
+    layout['backdrops'] = sorted(
+        f for f in os.listdir(BACKDROP_OUT)
+        if f.endswith('.png') and _is_backdrop(f))
 
     # Field correspondents.
     #
@@ -1205,16 +1577,10 @@ def main():
         by, bh = int(VIEW_H * ANCHOR_BAND['y']), int(VIEW_H * ANCHOR_BAND['h'])
         band.rectangle([VIEW_W // 2 - 46, by, VIEW_W // 2 + 46, by + bh],
                        outline=(255, 0, 128, 180))
-        for name in ('desk_oval_front.png',):
-            im2 = made.get(name)
-            if im2 is None:
-                continue
-            spot = layout['plates'][name]
-            room.alpha_composite(im2, (spot['x'], spot['y']))
         big = room.resize((room.width * 3, room.height * 3), Image.NEAREST)
         p = os.path.join(ROOT, 'docs', 'set-preview.png')
         big.save(p)
-        print('preview (room + desk, at the 3x the engine uses) -> docs/set-preview.png')
+        print('preview (room only, at the 3x the engine uses) -> docs/set-preview.png')
     do_anchors()
     do_cutaways()
     return 0
