@@ -31,6 +31,61 @@ const GNNDirector = (() => {
         IDENT: 'IDENT', DRY: 'DRY', SIGNOFF: 'SIGNOFF',
     };
 
+    // --- Show length -----------------------------------------
+    //
+    // A show is fifteen minutes of airtime, measured on the wall clock, not
+    // on a story count. The story count was the previous design — read
+    // between nine and fourteen stories and sign off — and it did not match
+    // what a channel actually does: a fast wire closed the show in six
+    // minutes, a slow one ran it long, and there was no way to keep two
+    // consecutive shows to the same length.
+    //
+    // The floor is a safety rail, not a driver. A very productive wire
+    // should not close a show after two stories just because the clock has
+    // somehow run out (it cannot, but a stuck `showStartedAt` could), and a
+    // very slow one should not overrun forever because it has not filed
+    // enough to satisfy a minimum. Four stories and fifteen minutes is the
+    // shortest acceptable show.
+    const SHOW_MS = 15 * 60 * 1000;
+    const MIN_STORIES_PER_SHOW = 4;
+
+    // The station's fixed opening announcement.
+    //
+    // One line, always the same words, read by the station automation.
+    // It used to be drawn from `GNNScript.ident()`, which picks at
+    // random from five different station announcements, so every boot
+    // the ident was different. A station signature is not a variant —
+    // the words are the point, and a viewer who has heard them once
+    // should hear the same words the next time.
+    //
+    // The `ident()` pool is still used elsewhere: mid-show idents
+    // (`beginIdent`), commercial break idents (`startCommercialBreak`).
+    // Those are separate messages for separate moments, and they keep
+    // their variety. Only the boot-time booth ident is fixed.
+    const BOOTH_IDENT_LINE = 'This is the Galactic News Network.';
+
+    // Broadcasting labels that prefix a wire headline.
+    //
+    // The feed manager's cleaner strips a label when it is the very first
+    // word of the headline — "Watch:", "LIVE:", "Video:". It does not
+    // catch a multi-word prefix like "IRAN WAR LIVE:", and that one is
+    // not a rare shape: sections of the wire that run continuous coverage
+    // file their own items under a section label, and the label stays on
+    // the front of the headline when the item lands in the feed.
+    //
+    // The label is a filing marker, not part of the headline. A viewer
+    // watching the station wants "Trump says Houthis", not "Iran war
+    // live, Trump says Houthis" — the section the item was filed under
+    // is not news.
+    //
+    // The rule: an optional run of uppercase words, then a broadcasting
+    // keyword, then a colon. The keyword is required, so a headline like
+    // "TRUMP: Iran deal close" is preserved — "TRUMP" is attribution,
+    // not a label. "IRAN WAR LIVE:" is stripped because "LIVE" is the
+    // last word before the colon and the words before it are all caps.
+    const BROADCAST_LABEL_RE =
+        /^\s*(?:(?:[A-Z][A-Z0-9' -]{0,38}?\s+)?(?:LIVE|WATCH|UPDATE|DEVELOPING|BREAKING(?:\s+NEWS)?|VIDEO|RECAP|ANALYSIS|OPINION))\s*:\s*/i;
+
     // --- Pacing knobs (ms) -----------------------------------
     const PACE = {
         holdAfterRead: [1500, 3600],
@@ -44,7 +99,6 @@ const GNNDirector = (() => {
         wireShare: 0.35,          // of banter beats, how many are sector-wire
         exchangeShare: 0.33,      // ...and how many are the two anchors
         twoWayShare: 0.22,        // ...and how many go to a correspondent
-        storiesPerShow: [9, 14],  // before the lead signs the block off
         tossChance: 0.42,
         cutawayChance: 0.62,
         cutawayAt: 0.34,          // fraction through the read
@@ -58,8 +112,12 @@ const GNNDirector = (() => {
     let queue = [];
     // Stories that arrived while a desk was on air that does not cover their
     // category. Held rather than dropped — the show-block scheduler drains a
-    // bucket when it seats a desk whose beat includes that category. Until
-    // the scheduler exists, sports stories land here and stay.
+    // bucket when it seats a desk whose beat includes that category.
+    //
+    // The beat filter exists so a Markets desk does not read a Sports story
+    // when it has a Markets story to read, not so it can refuse to read the
+    // news. `drainHeld()` below is what releases these when the desk would
+    // otherwise go to DRY with a bucket full of readable copy.
     const heldByCategory = Object.create(null);
     const HELD_CAP = 40;
     let current = null;
@@ -68,6 +126,27 @@ const GNNDirector = (() => {
     let sinceIdent = 0;
     let nextBreakAt = randInt(PACE.storiesPerBreak);
     let nextIdentAt = randInt(PACE.storiesPerIdent);
+
+    // Wall clock for the current show. Set the moment the cold open fires
+    // — that is the top of the hour, as far as the station is concerned —
+    // and read by `decideAfterRead` and the DRY case to close on time.
+    let showStartedAt = 0;
+
+    // Whether this show has already sent to a correspondent. The show
+    // block contract is one two-way per show; see `beginBanter` for how the
+    // forced use works and why it fires in the second half.
+    let correspondentUsed = false;
+
+    // Which show block we are on. Incremented at the end of each show, at
+    // the same moment the director schedules a new cold open, so the
+    // station walks the ten blocks in order across a long session rather
+    // than picking one at random.
+    //
+    // The renderer is what actually swaps the set, the window rect, the
+    // backdrop and the seated pair; this counter is the index it swaps to.
+    // See `GNNRenderer.setShowBlock()` — that is where the whole bundle
+    // lives.
+    let blockIndex = 0;
 
     let speaking = false;
     let speechToken = 0;
@@ -169,7 +248,10 @@ const GNNDirector = (() => {
      * Queue a line.
      *
      * `opts.caption` is the teleprompter payload; it is presented when the
-     * line actually begins.
+     * line actually begins. Passing `null` means the line is spoken but
+     * carries no caption — which is what the boot-time booth ident does,
+     * because it plays under the title card where the canvas is not
+     * visible, and a caption presented there would linger past the fade.
      *
      * `opts.drivesDesk` (default true) says whether this line is spoken by
      * somebody sitting at the desk — a two-way correspondent answering from
@@ -283,6 +365,13 @@ const GNNDirector = (() => {
                     const who = speaker();
                     if (who && who.voice) opts.voice = who.voice;
                 }
+                // Present the caption only if the job carries one. A job
+                // with `caption: null` is a line that is spoken but not
+                // captioned — the boot-time booth ident, for instance,
+                // which plays under the title card where the canvas is
+                // not visible. Without this check a caption would be
+                // presented for a line that has none, and it would linger
+                // on screen past the fade.
                 if (job.opts.caption) {
                     GNNTextEngine.present(job.text, Object.assign(
                         { durationMs: job.est }, job.opts.caption));
@@ -456,6 +545,63 @@ const GNNDirector = (() => {
         if (queue.length > 60) queue.length = 60;
     }
 
+    /**
+     * Release stories from the held buckets back into the queue.
+     *
+     * The beat filter holds stories whose category the current desk does
+     * not cover. With a Markets desk and a wire full of World news, that is
+     * every incoming story — the desk sits in DRY saying "standing by for
+     * the next relay" while hundreds of readable stories wait in a bucket.
+     * That is not a station reading a rundown that has nothing on it; that
+     * is a station that forgot its own bucket.
+     *
+     * Two passes. The first takes from categories the desk does cover, so a
+     * Sports desk gets its Sports stories first. The second pass takes from
+     * whatever is left — a Markets desk with no Markets stories airs the
+     * World stories instead of going silent, because a channel reads what
+     * the wire has and "the news" is not a category.
+     *
+     * The cap is six per call, so the queue does not go from empty to full
+     * in one frame; the next call to `nextStory` will drain more if the
+     * desk is still short.
+     *
+     * Called from `nextStory` before it gives up to DRY.
+     */
+    function drainHeld(maxItems = 6) {
+        const beat = deskBeat();
+        const taken = [];
+
+        // First pass: categories the desk covers.
+        for (const cat of Object.keys(heldByCategory)) {
+            if (taken.length >= maxItems) break;
+            if (!beat || !beat.has(cat)) continue;
+            const bucket = heldByCategory[cat];
+            while (bucket.length && taken.length < maxItems) {
+                taken.push(bucket.shift());
+            }
+            if (!bucket.length) delete heldByCategory[cat];
+        }
+
+        // Second pass: whatever remains, if the preferred categories did
+        // not fill the batch.
+        if (taken.length < maxItems) {
+            for (const cat of Object.keys(heldByCategory)) {
+                if (taken.length >= maxItems) break;
+                const bucket = heldByCategory[cat];
+                while (bucket.length && taken.length < maxItems) {
+                    taken.push(bucket.shift());
+                }
+                if (!bucket.length) delete heldByCategory[cat];
+            }
+        }
+
+        if (!taken.length) return;
+        taken.forEach((it) => queue.push(it));
+        const now = Date.now();
+        queue.sort((a, b) => storyScore(b, now) - storyScore(a, now));
+        queue = interleaveByTopic(queue);
+    }
+
     function injectBreaking(title, description) {
         pendingBreaking = {
             title: String(title || '').toUpperCase(),
@@ -491,8 +637,39 @@ const GNNDirector = (() => {
         return shared / tw.size >= 0.7;
     }
 
+    /**
+     * Strip a broadcasting label from the front of a headline.
+     *
+     * "IRAN WAR LIVE: TRUMP SAYS HOUTHIS" becomes "TRUMP SAYS HOUTHIS".
+     * "WATCH LIVE: Election results" becomes "Election results". The
+     * label is the feed's own filing marker — a note to its own reader
+     * about what kind of item it is — and it was never part of the
+     * headline for anybody else.
+     *
+     * Only strips when the last word before the colon is a broadcasting
+     * keyword from a fixed list. "TRUMP: Iran deal close" is preserved,
+     * because "TRUMP" is attribution, not a marker. And a strip that
+     * would leave nothing substantial behind is not applied — a title
+     * that was nothing but the label is left as-is rather than emptied.
+     */
+    function stripBroadcastLabel(title) {
+        if (!title) return title;
+        const m = title.match(BROADCAST_LABEL_RE);
+        if (!m) return title;
+        // Everything through the label's colon is metadata, not spoken
+        // headline text. Do not restore it just because the actual headline
+        // is short; only preserve the original if stripping empties it.
+        const stripped = title.slice(m[0].length).trim();
+        return stripped || title;
+    }
+
     function storyText(item) {
-        const title = (item.title || '').trim();
+        // Strip any broadcasting label first, before either the echo
+        // detection or the restatement guard gets a chance to see it.
+        // A label at the front of the headline is not part of the story,
+        // and leaving it in confused both the string-match echo trim and
+        // the anchor's own reading of the line.
+        const title = stripBroadcastLabel((item.title || '').trim());
         let desc = (item.description || '').trim();
         if (!desc) return title.replace(/[.!?]?$/, '.');
 
@@ -571,11 +748,113 @@ const GNNDirector = (() => {
     // Segments
     // ---------------------------------------------------------
 
+    /**
+     * The booth ident — the station's fixed opening announcement, read by
+     * the station automation rather than by an anchor.
+     *
+     * Called from `main.js`'s `runBootSequence`, timed so the line finishes
+     * just before the title card crossfades to the studio. The sounder
+     * sting fires with it, so the line comes in over the sound.
+     *
+     * The line is read by `vox_unit` — Unit 7, the station's own machine
+     * voice — because the anchor's own sign-on already names the station
+     * ("I am Commander Hale. This is G N N..."). Hearing the anchor say
+     * the station's name twice in five seconds reads as a stutter; a
+     * separate machine voice making the announcement gives the ident its
+     * own ceremonial beat, and then the anchor introduces themselves on
+     * top of it.
+     *
+     * No caption. The ident plays under the boot card, where the canvas
+     * is not visible — and a caption presented here lingers past the
+     * fade, so the first thing seen after the card is the anchor's name
+     * over the ident's text. The line is a station announcement heard
+     * over the title card, not a broadcast caption, and it is `say`-ed
+     * without one.
+     *
+     * The line itself is `BOOTH_IDENT_LINE`, a constant. It used to
+     * draw at random from `GNNScript.ident()`, so every boot the station
+     * identified itself with different words. A signature is not a
+     * variant — the same words every time is what makes it a signature.
+     *
+     * Takes no arguments, and any line a caller passes is ignored. The
+     * old signature accepted an optional `line` for the caller's estimate
+     * of the ident's length; that estimate is now unnecessary, because
+     * the ident's length is a constant that `main.js` can measure from
+     * the same constant if it wants to.
+     *
+     * Returns the estimated duration in ms.
+     */
+    function boothIdent() {
+        GNNAudio.play('intro_sfx_01', { gain: 0.55 });
+        return say(BOOTH_IDENT_LINE, {
+            voice: 'vox_unit',
+            pitch: -6,
+            speakerId: null,
+            drivesDesk: false,
+            caption: null,
+        });
+    }
+
+    /**
+     * The top of the show, after the boot sequence.
+     *
+     * The station sounder and the booth ident have already been fired by
+     * main.js's runBootSequence, timed so the ident ends as the picture
+     * crossfades from the title card to the studio. By the time this
+     * function runs, the viewer is looking at the studio and the robot's
+     * voice is already out.
+     *
+     * Only the anchor's own sign-on happens here. It is queued after the
+     * ident has finished and after the fade has completed, so there is no
+     * window for it to pre-empt the ident — which is what caused the
+     * non-deterministic "Hale cut off the robot" fault when both lines
+     * were queued microseconds apart from this one function.
+     *
+     * The music bed is picked from the middle of the library so it does
+     * not collide with the boot track that has just finished.
+     *
+     * The show block is swapped FIRST, before the sign-on is queued. That
+     * order matters: `GNNScript.showOpen()` reads the lead anchor from the
+     * renderer, so if the swap had not already happened, the sign-on would
+     * be spoken by the *previous* block's lead while the picture showed the
+     * new one. Swap, then read the desk, then set the voice, then speak.
+     *
+     * Two show-scoped state variables are reset here, not in
+     * `beginShowClose`: the wall clock (`showStartedAt`) and the
+     * correspondent flag (`correspondentUsed`). Setting them at the top of
+     * the show means a cold open that fires for a different reason — a
+     * boot with an empty queue, a resume after a skip — still gives the
+     * new show a fresh fifteen minutes and its own one correspondent slot.
+     */
     function beginColdOpen(now) {
         setState(S.COLD_OPEN, now);
-        // The lead anchor opens the show and says who they are. Without
-        // this the channel came up mid-rundown with two strangers at a
-        // desk already reading a wire story.
+
+        // The top of the hour, as far as the show is concerned. Every
+        // timing decision in `decideAfterRead` measures against this, and
+        // every "is it time for the correspondent yet" check in
+        // `beginBanter` does too.
+        showStartedAt = now;
+        correspondentUsed = false;
+
+        // Move to this block's set, backdrop and seated pair in one call.
+        // Synchronous, so nothing renders a half-swapped frame. No
+        // transition — the picture changes on the next tick, which is a
+        // hard cut from the previous show's closing shot to the new room.
+        if (typeof GNNRenderer !== 'undefined' && GNNRenderer.setShowBlock) {
+            GNNRenderer.setShowBlock(blockIndex);
+        }
+
+        // The new lead anchor reads the sign-on, so the station speaks with
+        // that character's voice rather than whatever was left over from
+        // the previous block. Same pattern the initial boot uses in
+        // main.js's init() — set voice, then queue the line that uses it.
+        //
+        // `GNNScript.desk()` reads the renderer's *current* seated pair,
+        // which is why this must come after the setShowBlock call above.
+        const seats = GNNScript.desk();
+        const lead = seats[0];
+        if (lead && lead.voice) GNNTTS.setVoice(lead.voice);
+
         const open = GNNScript.showOpen();
         const openMs = say(open, {
             caption: {
@@ -583,13 +862,13 @@ const GNNDirector = (() => {
                 chyron: 'GALACTIC NEWS NETWORK'
             }
         });
-        GNNAudio.play('intro_sfx_02', { gain: 0.6 });
+
         const beds = GNNAssets.musicTracks();
         if (beds.length) {
-            GNNAudio.playMusic(beds[8 % beds.length].id, { gain: 0.55, loop: false, fadeIn: 0.4 });
+            GNNAudio.playMusic(beds[8 % beds.length].id,
+                { gain: 0.55, loop: false, fadeIn: 0.4 });
         }
-        // The show open above is the spoken line. Saying the ident too
-        // queued a second utterance straight over it.
+
         holdUntil = now + Math.max(3200, openMs + 900);
     }
 
@@ -608,6 +887,11 @@ const GNNDirector = (() => {
         // 900 characters; when the teleprompter was handed the untrimmed
         // story it kept scrolling after the audio had finished and the
         // anchor sat there with her mouth shut mid-sentence.
+        //
+        // `storyText` also strips broadcasting labels ("LIVE:", "WATCH
+        // LIVE:") from the headline, and that strip covers both this
+        // voice read and the caption below — they both take their text
+        // from the same string.
         const text = GNNTTS.trimForSynthesis
             ? GNNTTS.trimForSynthesis(storyText(item))
             : storyText(item);
@@ -706,20 +990,25 @@ const GNNDirector = (() => {
      * finishes asking before the reporter starts answering — which is the
      * whole reason the queue exists.
      *
-     * `GNNScript.twoWay()` now returns one of three shapes — brief (2
-     * lines), standard (3 lines), or extended (5 lines) — and this
-     * function queues however many come back without caring which. The
-     * brief shape is the quick consult that existed before; the extended
-     * shape is the interview the change request asked for.
+     * `GNNScript.twoWay()` returns one of four shapes — brief (2 lines),
+     * standard (3 lines), extended (5 lines), or panel (16 lines, ~2
+     * minutes) — and this function queues however many come back without
+     * caring which. `opts.shape` may force a specific shape; the director
+     * uses it to guarantee a panel for the show's one correspondent slot.
      *
      * The correspondent's answering lines are tagged `drivesDesk: false`,
      * so the anchor's mouth stays shut while the correspondent talks. They
      * also carry `speakerId`, so the caption label reads the right name
      * and `activeSeatForLine()` can return -1 to tell the renderer and the
      * text engine that no anchor is speaking.
+     *
+     * Returns `true` synchronously if a two-way was actually queued, or
+     * `false` if there was no away-correspondent to call. The caller uses
+     * that return to decide whether to set `correspondentUsed` — a
+     * two-way that never opened does not count against the show's one.
      */
-    function beginTwoWay(now) {
-        const tw = GNNScript.twoWay();
+    function beginTwoWay(now, opts = {}) {
+        const tw = GNNScript.twoWay(opts);
         if (!tw) return false;
         // Queue all the lines first, synchronously, so `speaking` is true
         // before any frame can run. Then open the cutaway async.
@@ -737,28 +1026,44 @@ const GNNDirector = (() => {
             tw.correspondent.id, kind, performance.now(),
             tw.correspondent.name.toUpperCase());
         // Drop the monitor once the exchange is over, not on a timer.
-        // Ceiling scales with the beat length so an extended five-line
-        // two-way is not cut short by a hardcoded timeout.
-        drainSpeech(total * 3 + 15000).then(() => {
+        // Ceiling scales with the beat length so a long panel is not cut
+        // short by a hardcoded timeout.
+        drainSpeech(total * 3 + 20000).then(() => {
             if (GNNCutsceneManager.isTwoWay()) GNNCutsceneManager.endCutaway();
         });
         holdUntil = now + total + 1200;
         return true;
     }
 
+    /**
+     * Pick the beat to run after a story.
+     *
+     * One two-way per show. The guaranteed one is forced in the second
+     * half, and it is forced as a *panel* — the two-minute three-way the
+     * change request asked for. Before the second half, a two-way can
+     * still fire on the normal `PACE.twoWayShare` draw, and those use
+     * whatever shape `GNNScript.twoWay()` rolls naturally (brief, standard
+     * or extended) since they are not the show's reserved interview slot.
+     *
+     * Past halfway with no correspondent yet, every banter beat attempts a
+     * panel until it succeeds. If there is no away-correspondent in the
+     * cast — everything is seated — `beginTwoWay` returns false and the
+     * beat falls through to the exchange and plain-banter paths; the show
+     * runs without a correspondent rather than stalling.
+     *
+     * Once the correspondent has been used, no further two-ways fire this
+     * show. That is the whole of the "one per show" rule.
+     */
     function beginBanter(now) {
-        // Some anchor beats are a remote two-way, some are the pair
-        // talking to each other, the rest a comment on the story.
-        //
-        // Order matters. The two-way is the most structured and the
-        // longest; it comes first. Then the relationship exchange — the
-        // specific opinion one anchor holds of another, which can now
-        // extend to four lines when the entry carries a follow and close.
-        // Then the bank-driven structured beat, which builds from each
-        // anchor's own openers / reactions / closers. Only if none of
-        // those produce a beat does it fall through to a single-line
-        // aside.
-        if (Math.random() < PACE.twoWayShare) {
+        const elapsed = now - showStartedAt;
+        const secondHalf = elapsed >= SHOW_MS * 0.5;
+        // The panel is the show's reserved interview slot, so it is only
+        // forced — a random draw in the first half still gets whatever
+        // shape the roll produces.
+        const forcePanel = !correspondentUsed && secondHalf;
+        const rollForTwoWay = !correspondentUsed
+            && (secondHalf || Math.random() < PACE.twoWayShare);
+        if (rollForTwoWay) {
             // Reserve BANTER *before* the async two-way opens.
             // `openTwoWay` awaits image loads; in the meantime the
             // director's HOLD case would see `!speaking` and fall through
@@ -766,8 +1071,16 @@ const GNNDirector = (() => {
             // story it was meant to replace.
             setState(S.BANTER, now);
             banterStreak++;
-            beginTwoWay(now);
-            return;
+            const opts = forcePanel ? { shape: 'panel' } : {};
+            if (beginTwoWay(now, opts)) {
+                correspondentUsed = true;
+                return;
+            }
+            // No away-correspondent to call. Fall through to the exchange
+            // and plain-banter paths. BANTER state was already set above,
+            // which is harmless — the BANTER case in `update()` will
+            // transition out on the next tick when it sees `!speaking` and
+            // nothing typed.
         }
         if (Math.random() < PACE.exchangeShare) {
             if (beginExchange(now)) return;
@@ -902,6 +1215,17 @@ const GNNDirector = (() => {
 
         switch (state) {
             case S.BOOT:
+                // Hold here until the boot sequence releases us. The
+                // station renders behind the boot overlay but starts no
+                // rundown and makes no sound until the boot track ends and
+                // main.js sets `window.GNNBootReady` — see main.js's
+                // `runBootSequence`. That window is what fixes the
+                // first-minute weirdness: TTS pipeline warm-up, first
+                // feed poll, anchor plates and icon plates all have the
+                // track's runtime to settle before a line is spoken.
+                if (typeof window !== 'undefined' && !window.GNNBootReady) {
+                    break;
+                }
                 // Open on the first story, but never wait on the feed forever —
                 // an empty rundown is still a broadcast, it is just a quiet one.
                 if (queue.length) beginColdOpen(now);
@@ -977,17 +1301,32 @@ const GNNDirector = (() => {
             // back-live line and the viewer heard the same announcement
             // twice. The state still exists; nothing runs while it is set.
 
-            case S.DRY:
+            case S.DRY: {
                 if (queue.length) { nextStory(now); break; }
+                // The show should still end on time even if the wire has
+                // gone quiet. Airtime does not pause because the feed did,
+                // and a channel that sat on a HOLD card for six minutes
+                // past the end of the block would be a channel that
+                // forgot to sign off. Same check as `decideAfterRead`,
+                // reading the same two values.
+                if (now - showStartedAt >= SHOW_MS
+                    && storiesRead >= MIN_STORIES_PER_SHOW) {
+                    beginShowClose(now);
+                    break;
+                }
+                // A queue that is empty is not the same as a wire that has
+                // nothing on it. Try the held buckets before giving up to
+                // the DRY loop — `drainHeld` was already called by
+                // `nextStory`, so reaching here means the buckets are empty
+                // too. Fall through to DRY.
                 if (!speaking && now >= holdUntil) beginDry(now);
                 break;
+            }
 
             default:
                 break;
         }
     }
-
-    let nextCloseAt = randInt(PACE.storiesPerShow);
 
     /**
      * End of a block: the lead signs off and names whoever sat with them,
@@ -995,6 +1334,11 @@ const GNNDirector = (() => {
      *
      * A rundown with no end is a feed, not a broadcast. `showClose()` and
      * `showOpen()` were both written for this and neither was ever called.
+     *
+     * The block index advances here, at the same moment the next cold open
+     * is scheduled, so the two cannot get out of step. By the time
+     * `beginColdOpen` runs, `blockIndex` already names the block that
+     * sign-on belongs to.
      */
     function beginShowClose(now) {
         const line = GNNScript.showClose();
@@ -1003,6 +1347,11 @@ const GNNDirector = (() => {
         // `speaker()` here read the chair, and when the chair happened to
         // be the co-anchor the station heard Varr introduce herself as
         // Commander Hale.
+        //
+        // The same rule applies across a block boundary: read `desk()`
+        // *before* advancing the block index, so the sign-off uses the
+        // outgoing lead's voice, not the incoming one's. The order of these
+        // two statements is the whole of the correctness here.
         const seats = GNNScript.desk();
         const lead = seats[0];
         const est = say(line, {
@@ -1013,13 +1362,40 @@ const GNNDirector = (() => {
                 chyron: 'GALACTIC NEWS NETWORK'
             }
         });
+
         storiesRead = 0;
-        nextCloseAt = randInt(PACE.storiesPerShow);
+
+        // Advance to the next block. The swap itself happens in
+        // `beginColdOpen`, which runs after this hold resolves — see the
+        // comment there for why the order (swap, then read the desk, then
+        // set the voice, then speak) matters.
+        //
+        // A plain increment, not a modulo. `GNNRenderer.setShowBlock()`
+        // wraps internally with `((n % count) + count) % count`, so the
+        // counter can grow past the number of blocks without the renderer
+        // caring. A `% 10` here would be a second, independent count of
+        // how many blocks exist — and the day an eleventh set is added to
+        // `main.js`'s `SET_FILES`, the two counts would disagree and the
+        // rotation would land one block out of step with the seated pair.
+        blockIndex++;
+
         beginHold(now, [est + 600, est + 1200], S.COLD_OPEN);
     }
 
+    /**
+     * What the show does after a story finishes.
+     *
+     * Wall clock first, story floor second. `SHOW_MS` is the length of the
+     * show; `MIN_STORIES_PER_SHOW` is a safety rail that keeps a very fast
+     * wire from closing after three stories. Both must be satisfied before
+     * the show signs off.
+     *
+     * Below those two, the same priority ordering as before: break, then
+     * ident, then banter or toss or another story.
+     */
     function decideAfterRead(now) {
-        if (storiesRead >= nextCloseAt) {
+        const elapsed = now - showStartedAt;
+        if (elapsed >= SHOW_MS && storiesRead >= MIN_STORIES_PER_SHOW) {
             beginShowClose(now);
         } else if (sinceBreak >= nextBreakAt) {
             beginHold(now, PACE.holdBeforeBreak, S.BREAK);
@@ -1038,6 +1414,13 @@ const GNNDirector = (() => {
         if (typeof GNNFeedManager !== 'undefined' && queue.length < 3) {
             GNNFeedManager.replenishQueue();
         }
+        // A queue that is empty because everything got bucketed is not
+        // the same as a wire that went quiet. Release the held stories
+        // rather than going to DRY with a bucket full of readable copy —
+        // a Markets desk that gets nothing but World stories still reads
+        // the World stories, because a channel does not refuse to read
+        // the news.
+        if (!queue.length) drainHeld();
         const item = queue.shift();
         if (!item) { beginDry(now); return; }
         beginRead(now, item);
@@ -1074,10 +1457,28 @@ const GNNDirector = (() => {
     }
 
     function report() {
+        const elapsed = showStartedAt ? performance.now() - showStartedAt : 0;
         return {
             state, storiesRead, queued: queue.length, breakArming,
             sinceBreak, nextBreakAt, sinceIdent, nextIdentAt,
             speaking, current: current ? current.title : null,
+            block: blockIndex,
+            // Show-scoped state, for the telemetry line. `showLeftMs` is
+            // what the readout uses to show how much show is left, and
+            // `correspondentUsed` is what tells a watching developer
+            // whether the two-way has fired yet.
+            showElapsedMs: elapsed,
+            showLeftMs: Math.max(0, SHOW_MS - elapsed),
+            correspondentUsed,
+            // Held-bucket counts, for anyone watching the filter from the
+            // telemetry line. Empty object when nothing is held.
+            held: (() => {
+                const out = {};
+                for (const cat of Object.keys(heldByCategory)) {
+                    if (heldByCategory[cat].length) out[cat] = heldByCategory[cat].length;
+                }
+                return out;
+            })(),
         };
     }
 
@@ -1085,26 +1486,48 @@ const GNNDirector = (() => {
         STATES: S, PACE,
         update, enqueueAll, injectBreaking, skip, pause, resume, forceBreak,
         interject,
+        /**
+         * The booth ident — see the function of the same name above.
+         * Called from main.js's runBootSequence so the station's fixed
+         * opening line lands while the title card is still up, well before
+         * the anchor's sign-on is queued. Takes no arguments; the line is
+         * the `BOOTH_IDENT_LINE` constant. Returns the estimated duration
+         * in ms.
+         */
+        boothIdent,
         /** Which seat is reading the story, for the rundown's own use. */
         activeSeat: () => seatIndex,
         /**
          * Which seat is speaking *this line*, or -1 when the speaker is
-         * not at the desk — a correspondent in the monitor.
+         * not at the desk.
          *
          * The renderer's hero/speaking swap and the text engine's bubble
-         * position both read this. `activeSeat()` names the chair, which is
-         * who would be speaking if the line were a story; `activeSeatForLine`
-         * names who is actually talking, and during an exchange or a two-way
-         * that is a different person.
+         * position both read this.
          *
-         * Falls back to the chair when no specific speaker is set, which is
-         * everything outside an exchange or a two-way.
+         * Three cases:
+         *
+         *   - A specific speaker is set (an exchange, a two-way): their
+         *     seat, or -1 when they are not seated.
+         *   - No specific speaker, but the line drives the desk (a normal
+         *     anchor read, plain banter, a toss, a commercial throw): the
+         *     chair.
+         *   - No specific speaker, and the line does NOT drive the desk
+         *     (the booth ident, a correspondent's answering line): -1.
+         *     The caption draws centred and no anchor is shown as the
+         *     speaker, because no anchor is the speaker.
          */
         activeSeatForLine: () => {
-            if (!speaking || !currentLineSpeaker) return seatIndex;
-            if (typeof GNNRenderer === 'undefined' || !GNNRenderer.seatedIds) return -1;
-            const ids = GNNRenderer.seatedIds();
-            return ids.indexOf(currentLineSpeaker.id);
+            if (!speaking) return seatIndex;
+            if (currentLineSpeaker) {
+                if (typeof GNNRenderer === 'undefined' || !GNNRenderer.seatedIds) return -1;
+                const ids = GNNRenderer.seatedIds();
+                return ids.indexOf(currentLineSpeaker.id);
+            }
+            // No specific speaker. The drivesDesk flag tells us whether
+            // the voice belongs to somebody at the desk. If it does not,
+            // there is no active seat.
+            if (!currentLineDrivesDesk) return -1;
+            return seatIndex;
         },
         speaker,
         /**
@@ -1122,9 +1545,10 @@ const GNNDirector = (() => {
         report,
         /**
          * Stories held because the current desk does not cover their
-         * category. Read by the show-block scheduler when a desk changes.
-         * Nothing drains these yet — the bucket is a holding area until the
-         * scheduler lands and seats a desk whose beat matches.
+         * category. Released back into the queue by `drainHeld` when the
+         * desk would otherwise go to DRY — so a Markets desk with nothing
+         * but World stories on the wire reads the World stories rather
+         * than repeating "standing by" at the viewer.
          */
         heldFor: (category) => (heldByCategory[category] || []).slice(),
         /** How many stories are held, per category. Diagnostics only. */
@@ -1135,6 +1559,8 @@ const GNNDirector = (() => {
             }
             return out;
         },
+        /** Release held stories back into the queue. Exported for tests. */
+        drainHeld,
         set onStateChange(fn) { onStateChange = fn; },
         set onStory(fn) { onStory = fn; },
     };

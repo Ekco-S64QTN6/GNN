@@ -15,9 +15,15 @@
    carries banks for openers, reactions, closers and asks; the
    relationship table between them carries optional follow and
    close lines. Two-ways and exchanges now draw on those to build
-   a shape — brief, standard, extended — rather than picking one
-   canned line and stopping. A two-anchor beat is a real exchange:
-   one anchor opens, the other reacts, and it closes.
+   a shape — brief, standard, extended, panel — rather than picking
+   one canned line and stopping.
+
+   The `panel` shape is the long form: a two-minute three-way
+   between the two seated anchors and a correspondent in the
+   monitor. It uses the `followups`, `asides` and `handbacks` banks
+   as well as `asks` and `reactions`, so each turn is in the
+   speaker's own voice and the beat has real back-and-forth rather
+   than a single question and answer.
    ============================================================ */
 
 const GNNScript = (() => {
@@ -204,21 +210,34 @@ const GNNScript = (() => {
         'A confidence interval is not a promise. This reminder has been issued {N} times.',
     ];
 
-    // Human asides should sound like a correspondent who has read the brief,
-    // not like a generic transition generator.
+    // Human asides for standalone use — every line here has to be safe to
+    // say after any story at all.
+    //
+    // This pool used to contain responses written for a specific story
+    // shape: "The denial is on the record. So is the question it did not
+    // answer." reads correctly after a story in which someone issued a
+    // denial, and reads as nonsense after a story about an actor dying.
+    // Spoken alone at the camera, a response line is a response to nothing.
+    //
+    // The new lines are observations on the work of reporting itself —
+    // what a correspondent says to fill the beat between stories without
+    // pretending something happened in the story that did not. Where a
+    // character has specific things to say, those live in their own
+    // `openers` and `reactions` banks on the cast sheet, which are
+    // context-appropriate by construction.
     const CREW_ASIDES = [
-        'There is a statement. There still is not an answer.',
-        'The official version keeps changing. The facts have not kept pace.',
-        'We will ask again when someone is willing to answer the question.',
-        'Someone will have to put a cost on that eventually.',
-        'Nobody is disputing the event. They are disputing what it means.',
-        'The briefing is over. The questions are not.',
-        'That wording was chosen carefully. We should ask why.',
-        'The account is neat. The aftermath will not be.',
-        'We were promised a fuller account. That usually means a longer one.',
-        'We asked who knew. We got an answer about who was informed.',
-        'The denial is on the record. So is the question it did not answer.',
-        'The next version may be clearer. It will certainly be longer.',
+        'Some questions do not get answered on deadline.',
+        'We will keep at it.',
+        'There is more to establish. There always is.',
+        'That is what is on the record for now.',
+        'We will pick it up as it develops.',
+        'The story is not finished. They rarely are.',
+        'We stay with it and see what holds up.',
+        'That is where the reporting stands.',
+        'The wire will have more on this.',
+        'We will not know the full shape of it for a while.',
+        'That is the account we have. It is not the whole picture.',
+        'Sometimes the follow-up is the story.',
     ];
 
     // These bridges avoid inventing fresh figures or pretending an unverified
@@ -401,6 +420,52 @@ const GNNScript = (() => {
         'Stay with it, %s. Thank you.',
     ];
 
+    // Fallbacks for the panel shape's anchor-to-anchor asides and the final
+    // handback. Used only when the seated pair's own `asides` / `handbacks`
+    // banks are exhausted or missing — the cast sheets carry 3 lines each,
+    // so in practice these fire on the third or fourth panel in a session.
+    const PANEL_ASIDES = [
+        'That is worth noting.',
+        'Let us keep that on the record.',
+        'That is the part to watch.',
+        'Noted.',
+    ];
+    const PANEL_HANDBACKS = [
+        'Back to you.',
+        'Over to the desk.',
+        'Your turn.',
+        'Take it.',
+    ];
+
+    /**
+     * Which species have a correspondent plate on disk.
+     *
+     * A two-way can only throw to a correspondent who has a picture. The
+     * monitor is the whole of the correspondent's presence on air: if
+     * there is no plate, `openTwoWay` returns null, no cutaway opens, and
+     * the interview plays as audio over whatever the desk was already
+     * showing — the story icon, in the case that prompted this list. The
+     * viewer hears "we can go to Commander Vance now" and nothing changes
+     * on screen, because Commander Vance does not exist as a monitor
+     * portrait.
+     *
+     * The set of anchors is larger than the set of correspondent plates.
+     * Anchors are loaded from `assets/generated/anchors/`, correspondents
+     * from `assets/generated/correspondents/`, and the two directories are
+     * populated by separate runs of the plate pipeline. A species can be
+     * a perfectly good anchor and have no correspondent plate at all.
+     *
+     * This list is the correspondents directory, enumerated. If a plate
+     * is added to that directory, its species id goes here. If a plate is
+     * removed, the id comes off. There is no way to check for the file
+     * from the browser without an async fetch, and `twoWay()` runs on the
+     * director's tick.
+     */
+    const CORRESPONDENT_READY = new Set([
+        'alkari', 'bulrathi', 'darlok', 'human', 'klackon',
+        'meklar', 'mrrshan_f', 'mrrshan', 'psilon', 'sakkra', 'silicoid',
+    ]);
+
     /**
      * The host's line to the correspondent.
      *
@@ -448,32 +513,178 @@ const GNNScript = (() => {
     }
 
     /**
-     * A remote two-way. Three shapes, rolled up front so the whole beat
-     * holds a coherent form rather than drifting longer midway through.
+     * Build the long-form panel: a two-minute three-way between the two
+     * seated anchors and a correspondent in the monitor.
      *
-     *   brief       ask, answer                          (2 lines)
-     *   standard    ask, answer, close                   (3 lines)
+     * Sixteen lines: four rounds of question-and-answer with the
+     * correspondent, split between the two anchors, plus two short
+     * between-anchor exchanges and a close.
+     *
+     *   1  host           opening ask, with the intro naming the correspondent
+     *   2  correspondent  answer
+     *   3  co-anchor      first question (uses `asks`)
+     *   4  correspondent  answer
+     *   5  host           aside to the co-anchor
+     *   6  co-anchor      reacts to the aside
+     *   7  host           follow-up (uses `followups`)
+     *   8  correspondent  answer
+     *   9  co-anchor      follow-up (uses `followups`)
+     *  10  correspondent  answer
+     *  11  host           aside to the co-anchor
+     *  12  co-anchor      reacts to the aside
+     *  13  host           final follow-up
+     *  14  correspondent  final answer
+     *  15  host           closer
+     *  16  co-anchor      handback
+     *
+     * The structure rules out two adjacent lines by the same speaker, and
+     * leaves the two anchors taking turns around the correspondent rather
+     * than the host doing all the talking. Every speaker uses their own
+     * banks, so the same shape reads differently depending on who is on
+     * the desk.
+     *
+     * Roughly 240-280 spoken words at typical line lengths, which lands
+     * between ninety seconds and two minutes once the pump's inter-line
+     * gaps are counted.
+     */
+    function buildPanelLines(host, coHost, correspondent) {
+        const lines = [];
+
+        // Opening ask, then the correspondent's first answer. This is the
+        // only place the intro fires — every subsequent question is a
+        // follow-up, without a naming line.
+        lines.push({ who: host, text: hostAsk(host, correspondent) });
+        lines.push({ who: correspondent, text: correspondentLine(correspondent, 'reactions') });
+
+        // Co-anchor's first question. The `asks` bank is the same one the
+        // host draws on for its opening question — a question framed at a
+        // correspondent — but without an intro, because the correspondent
+        // is already on screen.
+        lines.push({
+            who: coHost,
+            text: castLine('asks', coHost.id) || pickFrom(ASK_FOLLOWUP, ASK_FOLLOWUP[0])
+        });
+        lines.push({ who: correspondent, text: correspondentLine(correspondent, 'reactions') });
+
+        // Host aside to the co-anchor, and the co-anchor's response. This
+        // is the first between-anchor beat: the two anchors talk about the
+        // interview for a moment, which is what a panel does between
+        // rounds.
+        lines.push({
+            who: host,
+            text: castLine('asides', host.id) || pickFrom(PANEL_ASIDES, PANEL_ASIDES[0])
+        });
+        lines.push({
+            who: coHost,
+            text: castLine('reactions', coHost.id) || pickFrom(ANSWER, ANSWER[0])
+        });
+
+        // Host follow-up, then the co-anchor's follow-up. Two rounds of
+        // question-and-answer in a row, one from each anchor.
+        lines.push({
+            who: host,
+            text: castLine('followups', host.id) || pickFrom(ASK_FOLLOWUP, ASK_FOLLOWUP[0])
+        });
+        lines.push({ who: correspondent, text: correspondentLine(correspondent, 'reactions') });
+        lines.push({
+            who: coHost,
+            text: castLine('followups', coHost.id) || pickFrom(ASK_FOLLOWUP, ASK_FOLLOWUP[0])
+        });
+        lines.push({ who: correspondent, text: correspondentLine(correspondent, 'reactions') });
+
+        // Second between-anchor exchange, this time opened by the
+        // co-anchor. Then one more host question, one more answer.
+        lines.push({
+            who: coHost,
+            text: castLine('asides', coHost.id) || pickFrom(PANEL_ASIDES, PANEL_ASIDES[0])
+        });
+        lines.push({
+            who: host,
+            text: castLine('reactions', host.id) || pickFrom(ANSWER, ANSWER[0])
+        });
+        lines.push({
+            who: host,
+            text: castLine('followups', host.id) || pickFrom(ASK_FOLLOWUP, ASK_FOLLOWUP[0])
+        });
+        lines.push({ who: correspondent, text: correspondentLine(correspondent, 'reactions') });
+
+        // Close and handback.
+        lines.push({ who: host, text: hostClose(host, correspondent) });
+        lines.push({
+            who: coHost,
+            text: castLine('handbacks', coHost.id) || pickFrom(PANEL_HANDBACKS, PANEL_HANDBACKS[0])
+        });
+
+        return lines;
+    }
+
+    /**
+     * A remote two-way. Four shapes.
+     *
+     *   brief       ask, answer                          (2 lines, ~15s)
+     *   standard    ask, answer, close                   (3 lines, ~25s)
      *   extended    ask, answer, follow-up, answer,
-     *               close                                (5 lines)
+     *               close                                (5 lines, ~40s)
+     *   panel       two-anchor three-way with a
+     *               correspondent                        (16 lines, ~2 min)
      *
      * Each line is tagged with who says it, so the director can hand them
      * to the right voice in order. The correspondent is anyone in the
-     * cast who is not currently at the desk and not a machine.
+     * cast who is not currently at the desk, not a machine, and has a
+     * correspondent plate on disk — see `CORRESPONDENT_READY`.
+     *
+     * `opts.shape` forces a specific shape by name, or leaves the roll to
+     * this function. The director uses the argument to guarantee a panel
+     * for the show's one correspondent segment, since a two-minute beat
+     * is what a real newscast reserves for its interview slot and a
+     * thirty-second two-way is what it does for a quick consult.
+     *
+     * A panel needs a co-anchor — a second seated anchor. A desk with one
+     * seat cannot do a three-way, and `panel` silently degrades to
+     * `extended` in that case rather than returning null.
      */
-    function twoWay() {
+    function twoWay(opts = {}) {
         if (typeof GNNCast === 'undefined') return null;
         const seats = desk();
         const seated = new Set(seats.map((p) => p.id));
+        // The pool: everyone not at this desk, not a machine, and with a
+        // correspondent plate to put in the monitor. The plate test is
+        // what stops the station throwing to a correspondent who does not
+        // exist on screen — the "Let us bring in Commander Vance" fault,
+        // where the line spoke and the monitor stayed on the story icon.
         const away = GNNCast.all().filter(
-            (p) => !seated.has(p.id) && !p.machine);
+            (p) => !seated.has(p.id) && !p.machine
+                && CORRESPONDENT_READY.has(p.id));
         if (!seats.length || !away.length) return null;
         const who = away[(Math.random() * away.length) | 0];
         const host = seats[0];
+        const coHost = seats[1] || null;
 
-        const roll = Math.random();
-        const shape = roll < 0.25 ? 'brief'
-            : roll < 0.70 ? 'standard'
-                : 'extended';
+        // Pick the shape. A forced shape wins outright; otherwise the roll
+        // favours the shorter forms but gives the panel a real chance when
+        // the desk has two seats.
+        let shape;
+        if (opts.shape) {
+            shape = opts.shape;
+        } else if (coHost && Math.random() < 0.30) {
+            shape = 'panel';
+        } else {
+            const roll = Math.random();
+            shape = roll < 0.25 ? 'brief'
+                : roll < 0.70 ? 'standard'
+                    : 'extended';
+        }
+        // A panel with no co-anchor degrades to extended. Every other
+        // shape works with a single seat.
+        if (shape === 'panel' && !coHost) shape = 'extended';
+
+        if (shape === 'panel') {
+            return {
+                correspondent: who,
+                lines: buildPanelLines(host, coHost, who),
+                shape: 'panel',
+            };
+        }
 
         const lines = [];
         // The first ask names the correspondent. Everything after it — the
@@ -692,6 +903,14 @@ const GNNScript = (() => {
      * anchors at the desk — which is the default — heard the same tic five
      * or six times an hour. It now skips if the tic is in the recent buffer
      * and falls through to the next option.
+     *
+     * The `CREW_ASIDES` pool this draws from is now neutral-only. Before,
+     * it contained lines written as responses to a story that assumed a
+     * specific content — "The denial is on the record. So is the question
+     * it did not answer." spoken after a story about an actor's death is
+     * a response to a denial that never happened. The neutral lines in the
+     * pool work against any story, and story-specific material lives in
+     * the cast sheets where it is tied to the character who says it.
      */
     function banter(story, who) {
         const machine = !!(who && who.machine);
@@ -846,34 +1065,36 @@ const GNNScript = (() => {
     // ---------------------------------------------------------
     // Ticker
     // ---------------------------------------------------------
+    //
+    // The crawl carries real data and nothing else.
+    //
+    // Market segments arrive already formatted from
+    // `GNNTickerManager`'s live provider feed — real prices, real
+    // percentage moves, real timestamps. The wire headlines are pulled
+    // from the same RSS the anchor is reading. Nothing on the crawl is
+    // invented, and nothing on it is written in the game's vocabulary:
+    // there is no "SOLAR WIND: SEVERE" and no fictional "SECTOR: RIGEL"
+    // dispatches, because a viewer watching a crawl for a minute cannot
+    // tell where the real numbers end and the flavour begins, and the
+    // one thing a news ticker must never do is make a viewer doubt the
+    // numbers it is reporting.
+    //
+    // The MOO1 vocabulary stays where the viewer knows it is a joke —
+    // the station idents, the commercials, the easter eggs. Not here.
 
-    const COMMODITIES = ['NEUTRONIUM FOIL', 'ZORTRIUM ORE', 'DURALLOY PLATE', 'ADAMANTIUM BAR',
-        'DEUTERIUM', 'ANTIMATTER CELL', 'ORION ARTIFACT', 'CRYSTAL LATTICE',
-        'BC/CREDIT EXCH', 'COLONY BOND', 'FUEL RANGE INDEX', 'HULL SCRAP'];
-    const CONDITIONS = ['SOLAR WIND: SEVERE', 'SOLAR WIND: CALM', 'BEACON NET: NOMINAL',
-        'BEACON NET: DEGRADED', 'WARP LANES: OPEN', 'WARP LANES: RESTRICTED',
-        'COUNCIL SESSION: IN RECESS', 'QUARANTINE: LIFTED', 'PIRACY WATCH: ELEVATED'];
-
-    function tickerSegments(stories) {
+    function tickerSegments(stories, marketSegments) {
         const out = [];
-        for (const c of COMMODITIES) {
-            const v = (Math.random() * 9000 + 20).toFixed(1);
-            const d = (Math.random() * 8 - 4);
-            out.push(`${c}: ${v} ${d >= 0 ? '▲' : '▼'}${Math.abs(d).toFixed(2)}%`);
+
+        // Market quotes, from the ticker manager's live feed. Already
+        // formatted, already real. This is the top of the crawl.
+        for (const item of (marketSegments || [])) {
+            if (item) out.push(String(item).toUpperCase());
         }
-        for (const c of CONDITIONS) out.push(c);
+
+        // Wire headlines, real and attributed. Truncated only at the
+        // crawl's display width, never at the sentence.
         for (const s of (stories || []).slice(0, 8)) {
             if (s && s.title) out.push('WIRE: ' + s.title.toUpperCase().slice(0, 90));
-        }
-        for (let i = 0; i < 3; i++) {
-            out.push('SECTOR: ' + pickFrom(GNNAssets.vocab('stars'), 'RIGEL').toUpperCase()
-                + ' — ' + pickFrom(['SURVEY COMPLETE', 'TRAFFIC HEAVY', 'RELAY REBUILD',
-                    'CENSUS PENDING', 'DOCK FEES RAISED'], 'SURVEY COMPLETE'));
-        }
-        // Deterministic shuffle so the crawl never repeats the same neighbours.
-        for (let i = out.length - 1; i > 0; i--) {
-            const j = (Math.random() * (i + 1)) | 0;
-            const t = out[i]; out[i] = out[j]; out[j] = t;
         }
         return out;
     }
