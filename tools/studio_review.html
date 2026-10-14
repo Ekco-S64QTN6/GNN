@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <base href="/">
+    <title>GNN Studio Review</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #08080c;
+            color: #e0e0ec;
+            font-family: ui-monospace, 'JetBrains Mono', monospace;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #wrap {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            height: 100vh;
+        }
+
+        #side {
+            border-right: 1px solid #1f1f2e;
+            padding: 16px;
+            overflow-y: auto;
+            background: #0a0a12;
+        }
+
+        #side h1 {
+            font-size: 0.85rem;
+            letter-spacing: 0.12em;
+            margin: 0 0 1em;
+            color: #6fc3df;
+        }
+
+        .section {
+            margin-bottom: 18px;
+        }
+
+        .section>label.head {
+            display: block;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            color: #6a6a80;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .section button {
+            display: block;
+            width: 100%;
+            margin-bottom: 4px;
+            padding: 7px 10px;
+            font-family: inherit;
+            font-size: 0.72rem;
+            background: #14141e;
+            color: #e0e0ec;
+            border: 1px solid #2a2a3e;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .section button:hover:not(:disabled) {
+            background: #1e1e2e;
+            border-color: #6fc3df;
+        }
+
+        .section button.active {
+            background: #0a2540;
+            border-color: #6fc3df;
+        }
+
+        .section button:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+        .section label.check {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            padding: 4px 0;
+            cursor: pointer;
+            color: #c8c8d8;
+        }
+
+        .section input[type="range"] {
+            width: 100%;
+            accent-color: #6fc3df;
+        }
+
+        .section hr {
+            border: 0;
+            border-top: 1px solid #1f1f2e;
+            margin: 12px 0;
+        }
+
+        .kv {
+            font-size: 0.68rem;
+            line-height: 1.7;
+            color: #9a9ab0;
+            padding: 6px 0;
+        }
+
+        .kv b {
+            color: #cfeaff;
+            font-weight: normal;
+        }
+
+        #main {
+            padding: 16px;
+            overflow: auto;
+        }
+
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .tile {
+            position: relative;
+            cursor: pointer;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .tile:hover {
+            border-color: #4a7a8a;
+        }
+
+        .tile.active {
+            border-color: #6fc3df;
+        }
+
+        .tile canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            image-rendering: pixelated;
+        }
+
+        .tile .cap {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            padding: 3px 6px;
+            font-size: 0.6rem;
+            background: rgba(0, 0, 0, 0.72);
+            color: #9fe6ff;
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+        }
+
+        .tile .cap b {
+            color: #ffd166;
+            font-weight: normal;
+        }
+
+        #single-wrap {
+            display: none;
+            text-align: center;
+        }
+
+        #single {
+            display: inline-block;
+            background: #000;
+            image-rendering: pixelated;
+            border: 1px solid #2a2a3e;
+            max-width: 100%;
+            max-height: calc(100vh - 120px);
+        }
+
+        #info {
+            margin-top: 10px;
+            font-size: 0.72rem;
+            color: #9a9ab0;
+            line-height: 1.8;
+        }
+
+        #info b {
+            color: #cfeaff;
+            font-weight: normal;
+        }
+
+        #hint {
+            margin-top: 8px;
+            font-size: 0.65rem;
+            color: #55556a;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="wrap">
+        <aside id="side">
+            <h1>STUDIO REVIEW</h1>
+
+            <div class="section">
+                <label class="head">View</label>
+                <button id="view-grid" class="active">Grid — all 10 sets</button>
+                <button id="view-single">Single — full size</button>
+            </div>
+
+            <div class="section">
+                <label class="head">Show pair</label>
+                <button id="pair-follow" class="active">Follow set index</button>
+                <button id="pair-lock">Lock a specific pair…</button>
+                <div id="pair-list" style="margin-top:6px; display:none;"></div>
+            </div>
+
+            <div class="section">
+                <label class="head">Overlays</label>
+                <label class="check"><input type="checkbox" id="ov-desk" checked> Desk line</label>
+                <label class="check"><input type="checkbox" id="ov-window" checked> Window rect</label>
+                <label class="check"><input type="checkbox" id="ov-grid"> Fraction grid</label>
+                <label class="check"><input type="checkbox" id="ov-seats"> Seat positions</label>
+            </div>
+
+            <div class="section">
+                <label class="head">Desk line override — <span id="ov-set-name">studio</span></label>
+                <input type="range" id="dl-slider" min="0.30" max="0.65" step="0.001" value="0.468">
+                <div class="kv">
+                    Layout value: <b id="dl-layout">0.4680</b><br>
+                    Applied value: <b id="dl-applied">0.4680</b>
+                </div>
+                <button id="dl-apply-to-all">Apply override to all sets</button>
+                <button id="dl-reset">Reset override</button>
+                <button id="dl-copy">Copy Python line to clipboard</button>
+            </div>
+
+            <div class="section">
+                <label class="head">Cycle</label>
+                <button id="cycle">Cycle sets (1.6s each)</button>
+            </div>
+
+            <div id="hint">
+                ← → to move between sets in single view<br>
+                G to toggle the grid
+            </div>
+        </aside>
+
+        <main id="main">
+            <div id="grid"></div>
+            <div id="single-wrap">
+                <canvas id="single" width="1280" height="720"></canvas>
+            </div>
+            <div id="info">Loading…</div>
+        </main>
+    </div>
+
+    <script>
+        'use strict';
+
+        // Mirror of main.js's SET_FILES. Order matters — the pair shown in
+        // a set follows the set's index by default.
+        const SET_FILES = [
+            'studio_wide_empty.png',
+            'market_wide_empty.png',
+            'geopolitics_wide_empty.png',
+            'tech_wide_empty.png',
+            'celebrity_wide_empty.png',
+            'sports_wide_empty.png',
+            'diplomatic_wide_empty.png',
+            'anomaly_wide_empty.png',
+            'weather_wide_empty.png',
+            'archive_wide_empty.png',
+        ];
+
+        // Mirror of main.js's SHOW_PAIRS. Same order — the pair shown in a
+        // set follows the set's index by default. Species ids, not cast
+        // entries: the tool has no cast module loaded, so names are not
+        // available and the underlying plates are all it needs.
+        const SHOW_PAIRS = [
+            ['human', 'mrrshan_f'],
+            ['human_f', 'mrrshan'],
+            ['bulrathi', 'alkari_f'],
+            ['psilon', 'sakkra'],
+            ['darlok', 'meklar'],
+            ['silicoid', 'klackon'],
+            ['alkari', 'mrrshan_f'],
+            ['human', 'human_f'],
+            ['bulrathi', 'psilon'],
+            ['sakkra', 'silicoid'],
+        ];
+
+        // The renderer's geometry, mirrored. Kept in step with
+        // `js/renderer.js` by hand — the values do not change often, and a
+        // tool that reads them at runtime would need to parse a JS module
+        // to do it.
+        const CAST_H = 0.300;
+        const SEATS = {
+            1: [0.50],
+            2: [0.37, 0.63],
+            3: [0.28, 0.50, 0.72],
+        };
+
+        // -- state ----------------------------------------------------------
+
+        const state = {
+            view: 'grid',            // 'grid' | 'single'
+            pairMode: 'follow',      // 'follow' | 'lock'
+            lockedPair: 0,
+            activeSet: 0,
+            activeSeat: -1,          // -1 = no anchor active, both in hero
+            overlays: {
+                desk: true,
+                window: true,
+                grid: false,
+                seats: false,
+            },
+            // Desk line override, per set index. Applied on top of what
+            // layout.json says. Empty by default.
+            deskOverrides: {},
+            cycling: false,
+        };
+
+        const layout = {
+            sets: [],                // [{ name, plate, window, deskLine, layoutDeskLine }]
+            backdrops: [],           // [{ name, img }]
+            anchorCache: new Map(),  // sid -> { hero, speaking, listening, listeningFlip }
+            pairCache: new Map(),    // 'a|b' -> [anchorA, anchorB]
+        };
+
+        // -- dom ------------------------------------------------------------
+
+        const $ = (id) => document.getElementById(id);
+        const gridEl = $('grid');
+        const singleEl = $('single');
+        const singleWrap = $('single-wrap');
+        const infoEl = $('info');
+        const ovDesk = $('ov-desk');
+        const ovWindow = $('ov-window');
+        const ovGrid = $('ov-grid');
+        const ovSeats = $('ov-seats');
+        const dlSlider = $('dl-slider');
+        const dlLayout = $('dl-layout');
+        const dlApplied = $('dl-applied');
+        const ovSetName = $('ov-set-name');
+        const pairList = $('pair-list');
+
+        // -- image loading --------------------------------------------------
+
+        const imageCache = new Map();
+        function loadImage(src) {
+            if (imageCache.has(src)) return imageCache.get(src);
+            const p = new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(null);
+                img.src = src;
+            });
+            imageCache.set(src, p);
+            return p;
+        }
+
+        // -- load -----------------------------------------------------------
+
+        async function loadAll() {
+            // Layout first — it tells us each set's window rect and desk line.
+            let layoutJson = null;
+            try {
+                layoutJson = await fetch('assets/generated/set/layout.json')
+                    .then((r) => r.json());
+            } catch (err) {
+                console.warn('layout.json not found — using defaults');
+            }
+            const windows = (layoutJson && layoutJson.windows) || {};
+            const deskLines = (layoutJson && layoutJson.deskLines) || {};
+            const primaryDesk = (layoutJson && layoutJson.deskLine) || 0.468;
+
+            // Sets.
+            for (const name of SET_FILES) {
+                const key = name.replace(/\.png$/, '');
+                const plate = await loadImage(`assets/generated/set/${name}`);
+                if (!plate) continue;
+                layout.sets.push({
+                    name,
+                    key,
+                    plate,
+                    window: windows[key] || (layoutJson && layoutJson.window) || null,
+                    layoutDeskLine: deskLines[key] !== undefined ? deskLines[key] : primaryDesk,
+                    deskLine: deskLines[key] !== undefined ? deskLines[key] : primaryDesk,
+                });
+            }
+
+            // Backdrops. Just the first is needed — the renderer rotates
+            // them per block but for a seat check, one is representative.
+            const backdropNames = (layoutJson && layoutJson.backdrops) || [];
+            for (const name of backdropNames) {
+                const img = await loadImage(`assets/generated/backdrops/${name}`);
+                if (img) layout.backdrops.push({ name, img });
+            }
+
+            // Anchors. Every species a pair might name, plus the extras.
+            const speciesIds = new Set();
+            SHOW_PAIRS.forEach((pair) => pair.forEach((sid) => speciesIds.add(sid)));
+            for (const sid of speciesIds) {
+                const [hero, speaking, listening, flip] = await Promise.all([
+                    loadImage(`assets/generated/anchors/${sid}_desk_hero.png`),
+                    loadImage(`assets/generated/anchors/${sid}_speaking.png`),
+                    loadImage(`assets/generated/anchors/${sid}_listening.png`),
+                    loadImage(`assets/generated/anchors/${sid}_listening_flip.png`),
+                ]);
+                if (!hero) continue;
+                layout.anchorCache.set(sid, {
+                    sid, hero,
+                    speaking: speaking || hero,
+                    listening: listening || hero,
+                    listeningFlip: flip || listening || hero,
+                });
+            }
+
+            // Resolve the pairs to their loaded anchors now so the render
+            // path is a hash lookup rather than a filter on every frame.
+            for (const pair of SHOW_PAIRS) {
+                const key = pair.join('|');
+                const resolved = pair
+                    .map((sid) => layout.anchorCache.get(sid))
+                    .filter(Boolean);
+                layout.pairCache.set(key, resolved);
+            }
+        }
+
+        // -- drawing --------------------------------------------------------
+        //
+        // The composite routine is the renderer's own draw order, at any
+        // canvas size. `W` and `H` are the destination; everything else is
+        // expressed as fractions of them, exactly as `js/renderer.js` does.
+        //
+        // No crossfade, no lip-sync — a still frame of the composite is all
+        // this tool needs. A speaking plate is shown whenever the seat is
+        // marked active, a hero otherwise, so both mouth states can be
+        // seen without waiting for a beat.
+
+        function drawCover(c, img, w, h) {
+            const scale = Math.max(w / img.width, h / img.height);
+            const dw = img.width * scale;
+            const dh = img.height * scale;
+            c.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+        }
+
+        function composite(c, W, H, opts) {
+            const set = opts.set;
+            const people = opts.people;
+            const deskLine = opts.deskLine;
+            const overlays = opts.overlays;
+            const backdrop = opts.backdrop;
+
+            c.imageSmoothingEnabled = false;
+            c.fillStyle = '#05080e';
+            c.fillRect(0, 0, W, H);
+
+            if (!set) return;
+
+            // Backdrop through the window, mapped through the same cover
+            // transform the set plate gets.
+            if (backdrop && set.window) {
+                const sc = Math.max(W / set.plate.width, H / set.plate.height);
+                const dw = set.plate.width * sc;
+                const dh = set.plate.height * sc;
+                const ox = (W - dw) / 2;
+                const oy = (H - dh) / 2;
+                c.drawImage(
+                    backdrop,
+                    ox + set.window.x0 * dw,
+                    oy + set.window.y0 * dh,
+                    (set.window.x1 - set.window.x0) * dw,
+                    (set.window.y1 - set.window.y0) * dh
+                );
+            }
+
+            drawCover(c, set.plate, W, H);
+
+            // Anchors. The seat line comes from the set, not from the
+            // renderer's constant — which is exactly the value this tool
+            // exists to check.
+            if (people && people.length) {
+                const seats = SEATS[people.length] || SEATS[1];
+                const h = CAST_H * H;
+                const seatY = deskLine * H;
+                people.forEach((person, i) => {
+                    const active = opts.activeSeat === i;
+                    // Active seat shows the speaking plate; inactive seats
+                    // show listening if they have one, else hero.
+                    const img = active
+                        ? (person.speaking || person.hero)
+                        : (person.listening || person.hero);
+                    if (!img) return;
+                    const w = img.width * (h / img.height);
+                    const x = seats[i] * W - w / 2;
+                    const y = seatY - h;
+                    c.drawImage(img, x, y, w, h);
+                });
+            }
+
+            // Overlays.
+            if (overlays.grid) {
+                c.strokeStyle = 'rgba(255,255,255,0.12)';
+                c.fillStyle = 'rgba(255,255,255,0.45)';
+                c.font = Math.max(8, Math.round(H * 0.018)) + 'px monospace';
+                c.lineWidth = 1;
+                for (let i = 1; i < 10; i++) {
+                    const y = (i / 10) * H;
+                    c.beginPath();
+                    c.moveTo(0, y);
+                    c.lineTo(W, y);
+                    c.stroke();
+                    c.fillText('0.' + i, 4, y - 3);
+                }
+            }
+
+            if (overlays.window && set.window) {
+                c.strokeStyle = '#00e5ff';
+                c.lineWidth = Math.max(1, W / 640);
+                c.strokeRect(
+                    set.window.x0 * W,
+                    set.window.y0 * H,
+                    (set.window.x1 - set.window.x0) * W,
+                    (set.window.y1 - set.window.y0) * H
+                );
+                c.fillStyle = '#00e5ff';
+                c.font = Math.max(9, Math.round(H * 0.020)) + 'px monospace';
+                c.fillText(
+                    `window y1 ${set.window.y1.toFixed(4)}`,
+                    set.window.x0 * W + 4,
+                    set.window.y1 * H - 4
+                );
+            }
+
+            if (overlays.seats && people && people.length) {
+                const seats = SEATS[people.length] || SEATS[1];
+                c.strokeStyle = 'rgba(255,209,102,0.6)';
+                c.lineWidth = 1;
+                c.setLineDash([4, 4]);
+                for (const sx of seats) {
+                    c.beginPath();
+                    c.moveTo(sx * W, 0);
+                    c.lineTo(sx * W, H);
+                    c.stroke();
+                }
+                c.setLineDash([]);
+            }
+
+            if (overlays.desk) {
+                const y = deskLine * H;
+                c.strokeStyle = '#ff00ff';
+                c.lineWidth = Math.max(1, W / 480);
+                c.beginPath();
+                c.moveTo(0, y);
+                c.lineTo(W, y);
+                c.stroke();
+                c.fillStyle = '#ff00ff';
+                c.font = Math.max(9, Math.round(H * 0.022)) + 'px monospace';
+                c.fillText(`deskLine ${deskLine.toFixed(4)}`, 6, y - 4);
+            }
+        }
+
+        // -- render ---------------------------------------------------------
+
+        function pairFor(setIndex) {
+            if (state.pairMode === 'lock') {
+                const key = SHOW_PAIRS[state.lockedPair].join('|');
+                return layout.pairCache.get(key) || [];
+            }
+            const key = SHOW_PAIRS[setIndex].join('|');
+            return layout.pairCache.get(key) || [];
+        }
+
+        function deskLineFor(setIndex) {
+            const set = layout.sets[setIndex];
+            if (!set) return 0.468;
+            return state.deskOverrides[setIndex] !== undefined
+                ? state.deskOverrides[setIndex]
+                : set.deskLine;
+        }
+
+        function renderGrid() {
+            gridEl.innerHTML = '';
+            layout.sets.forEach((set, i) => {
+                const tile = document.createElement('div');
+                tile.className = 'tile' + (i === state.activeSet ? ' active' : '');
+                const canvas = document.createElement('canvas');
+                canvas.width = 320;
+                canvas.height = 180;
+                tile.appendChild(canvas);
+                const cap = document.createElement('div');
+                cap.className = 'cap';
+                cap.innerHTML = `<span>${set.key}</span><b>${deskLineFor(i).toFixed(4)}</b>`;
+                tile.appendChild(cap);
+                tile.addEventListener('click', () => {
+                    state.activeSet = i;
+                    updateDeskSlider();
+                    renderGrid();
+                });
+                gridEl.appendChild(tile);
+
+                const ctx = canvas.getContext('2d');
+                composite(ctx, canvas.width, canvas.height, {
+                    set,
+                    people: pairFor(i),
+                    deskLine: deskLineFor(i),
+                    overlays: state.overlays,
+                    backdrop: layout.backdrops[i % layout.backdrops.length]
+                        ? layout.backdrops[i % layout.backdrops.length].img
+                        : null,
+                    activeSeat: -1,
+                });
+            });
+        }
+
+        function renderSingle() {
+            const set = layout.sets[state.activeSet];
+            if (!set) return;
+            const ctx = singleEl.getContext('2d');
+            composite(ctx, singleEl.width, singleEl.height, {
+                set,
+                people: pairFor(state.activeSet),
+                deskLine: deskLineFor(state.activeSet),
+                overlays: state.overlays,
+                backdrop: layout.backdrops[state.activeSet % layout.backdrops.length]
+                    ? layout.backdrops[state.activeSet % layout.backdrops.length].img
+                    : null,
+                activeSeat: state.activeSeat,
+            });
+        }
+
+        function render() {
+            if (state.view === 'grid') {
+                gridEl.style.display = 'grid';
+                singleWrap.style.display = 'none';
+                renderGrid();
+            } else {
+                gridEl.style.display = 'none';
+                singleWrap.style.display = 'block';
+                renderSingle();
+            }
+            updateInfo();
+        }
+
+        function updateInfo() {
+            const set = layout.sets[state.activeSet];
+            if (!set) { infoEl.textContent = 'No sets loaded.'; return; }
+            const layoutVal = set.layoutDeskLine;
+            const override = state.deskOverrides[state.activeSet];
+            const applied = deskLineFor(state.activeSet);
+            const delta = (applied - layoutVal) * 100;
+            const pair = SHOW_PAIRS[state.pairMode === 'lock'
+                ? state.lockedPair : state.activeSet];
+            const lines = [
+                `Set: <b>${set.key}</b>`,
+                `Pair: <b>${pair.join(' + ')}</b>`,
+                `Layout desk line: <b>${layoutVal.toFixed(4)}</b>` +
+                (override !== undefined
+                    ? ` · Override: <b>${applied.toFixed(4)}</b> (${delta >= 0 ? '+' : ''}${delta.toFixed(2)}%)`
+                    : ''),
+                `Window rect: (${set.window ? set.window.x0.toFixed(3) : '—'}, ` +
+                `${set.window ? set.window.y0.toFixed(3) : '—'}) to ` +
+                `(${set.window ? set.window.x1.toFixed(3) : '—'}, ` +
+                `${set.window ? set.window.y1.toFixed(3) : '—'})`,
+            ];
+            infoEl.innerHTML = lines.join('<br>');
+        }
+
+        function updateDeskSlider() {
+            const set = layout.sets[state.activeSet];
+            if (!set) return;
+            const layoutVal = set.layoutDeskLine;
+            const applied = deskLineFor(state.activeSet);
+            dlSlider.value = applied;
+            dlLayout.textContent = layoutVal.toFixed(4);
+            dlApplied.textContent = applied.toFixed(4);
+            ovSetName.textContent = set.key;
+        }
+
+        // -- interactions ---------------------------------------------------
+
+        $('view-grid').addEventListener('click', () => {
+            state.view = 'grid';
+            $('view-grid').classList.add('active');
+            $('view-single').classList.remove('active');
+            render();
+        });
+        $('view-single').addEventListener('click', () => {
+            state.view = 'single';
+            $('view-single').classList.add('active');
+            $('view-grid').classList.remove('active');
+            render();
+        });
+
+        $('pair-follow').addEventListener('click', () => {
+            state.pairMode = 'follow';
+            $('pair-follow').classList.add('active');
+            $('pair-lock').classList.remove('active');
+            pairList.style.display = 'none';
+            render();
+        });
+        $('pair-lock').addEventListener('click', () => {
+            state.pairMode = 'lock';
+            $('pair-lock').classList.add('active');
+            $('pair-follow').classList.remove('active');
+            pairList.style.display = 'block';
+            buildPairList();
+            render();
+        });
+
+        function buildPairList() {
+            pairList.innerHTML = '';
+            SHOW_PAIRS.forEach((pair, i) => {
+                const b = document.createElement('button');
+                b.textContent = `${i + 1} — ${pair[0]} + ${pair[1]}`;
+                if (i === state.lockedPair) b.classList.add('active');
+                b.addEventListener('click', () => {
+                    state.lockedPair = i;
+                    buildPairList();
+                    render();
+                });
+                pairList.appendChild(b);
+            });
+        }
+
+        ovDesk.addEventListener('change', () => {
+            state.overlays.desk = ovDesk.checked;
+            render();
+        });
+        ovWindow.addEventListener('change', () => {
+            state.overlays.window = ovWindow.checked;
+            render();
+        });
+        ovGrid.addEventListener('change', () => {
+            state.overlays.grid = ovGrid.checked;
+            render();
+        });
+        ovSeats.addEventListener('change', () => {
+            state.overlays.seats = ovSeats.checked;
+            render();
+        });
+
+        dlSlider.addEventListener('input', () => {
+            const v = parseFloat(dlSlider.value);
+            state.deskOverrides[state.activeSet] = v;
+            dlApplied.textContent = v.toFixed(4);
+            render();
+        });
+
+        $('dl-reset').addEventListener('click', () => {
+            delete state.deskOverrides[state.activeSet];
+            updateDeskSlider();
+            render();
+        });
+
+        $('dl-apply-to-all').addEventListener('click', () => {
+            const v = state.deskOverrides[state.activeSet];
+            if (v === undefined) return;
+            for (let i = 0; i < layout.sets.length; i++) {
+                state.deskOverrides[i] = v;
+            }
+            render();
+        });
+
+        $('dl-copy').addEventListener('click', () => {
+            const set = layout.sets[state.activeSet];
+            if (!set) return;
+            const v = deskLineFor(state.activeSet);
+            const line = `    '${set.key}': ${v.toFixed(4)},`;
+            navigator.clipboard.writeText(line).then(() => {
+                const btn = $('dl-copy');
+                const prev = btn.textContent;
+                btn.textContent = '✓ Copied';
+                setTimeout(() => { btn.textContent = prev; }, 1200);
+            }).catch(() => {
+                // Clipboard may be blocked; show the line in the info panel.
+                infoEl.innerHTML += `<br><br>Copy manually:<br><code>${line}</code>`;
+            });
+        });
+
+        $('cycle').addEventListener('click', async () => {
+            if (state.cycling) return;
+            state.cycling = true;
+            state.view = 'single';
+            $('view-single').classList.add('active');
+            $('view-grid').classList.remove('active');
+            singleWrap.style.display = 'block';
+            gridEl.style.display = 'none';
+            for (let i = 0; i < layout.sets.length; i++) {
+                if (!state.cycling) break;
+                state.activeSet = i;
+                updateDeskSlider();
+                renderSingle();
+                updateInfo();
+                await new Promise((r) => setTimeout(r, 1600));
+            }
+            state.cycling = false;
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
+            if (e.key === 'ArrowRight') {
+                state.activeSet = (state.activeSet + 1) % layout.sets.length;
+                updateDeskSlider();
+                render();
+            } else if (e.key === 'ArrowLeft') {
+                state.activeSet = (state.activeSet - 1 + layout.sets.length) % layout.sets.length;
+                updateDeskSlider();
+                render();
+            } else if (e.key === 'g' || e.key === 'G') {
+                state.view = state.view === 'grid' ? 'single' : 'grid';
+                $('view-grid').classList.toggle('active', state.view === 'grid');
+                $('view-single').classList.toggle('active', state.view === 'single');
+                render();
+            } else if (e.key === ' ') {
+                // Cycle the active seat so the speaking pose can be seen on
+                // each anchor in turn.
+                const people = pairFor(state.activeSet);
+                state.activeSeat = state.activeSeat + 1;
+                if (state.activeSeat >= people.length) state.activeSeat = -1;
+                render();
+                e.preventDefault();
+            }
+        });
+
+        // -- boot -----------------------------------------------------------
+
+        (async () => {
+            infoEl.textContent = 'Loading sets, backdrops and anchors…';
+            await loadAll();
+            updateDeskSlider();
+            render();
+        })();
+    </script>
+</body>
+
+</html>
