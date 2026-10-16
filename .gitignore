@@ -12,6 +12,9 @@ __pycache__/
 Master of Orion 1/
 .gnn-server.pid
 gnn-server.log
+gnn-server.log.*
+gnn-transcript.log
+gnn-transcript.log.*
 
 # local agent/workspace config
 .agents/
@@ -36,3 +39,34 @@ docs/*.webm
 # tools/scene_review.html; the README stays, the renders do not.
 docs/scene-review/*.png
 docs/scene-review/*.webm
+# ------------------------------------------------------------------
+# Extracted assets — regenerable from the game archives.
+#
+# The repo tracks the extraction pipeline, not its output. Anyone with
+# a GoG copy of MoO1 and MoO2 can rebuild everything under assets/
+# except assets/generated/ by running the tools in tools/. See
+# tools/PROJECT.md for the pipeline and the order to run it in.
+#
+# assets/generated/ is deliberately not listed here. Those plates are
+# AI-generated art, not decoded game data, and total a few hundred KB.
+# They stay tracked so a fresh clone can run the broadcast immediately.
+# ------------------------------------------------------------------
+assets/anchor_frame_*.png
+assets/anchor_frames/
+assets/audio/
+assets/audio-manifest.json
+assets/background_tv.png
+assets/cutscenes/
+assets/gfx-manifest.json
+assets/globe_frame_*.png
+assets/globe_frames/
+assets/icons/
+assets/moo-strings.json
+assets/text/
+
+# palette-compare diagnostic output — regenerable with tools/palette_compare.py
+tools/palette_compare/
+tools/palette_survey/
+
+# runtime news ledger — grows during a session, not source
+gnn-news-ledger.json
