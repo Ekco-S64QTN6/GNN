@@ -34,7 +34,7 @@ if ! "$PY" -c "import kokoro" 2>/dev/null; then
 fi
 
 if [ "${1:-}" = "--bg" ]; then
-    nohup "$PY" server.py >"$LOG" 2>&1 &
+    setsid "$PY" -u server.py >>"$LOG" 2>&1 &
     for _ in $(seq 1 40); do
         if curl -fsS "http://localhost:$PORT/api/status" >/dev/null 2>&1; then
             echo "GNN on air  ->  http://localhost:$PORT   (log: $LOG)"

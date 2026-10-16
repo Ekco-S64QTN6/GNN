@@ -74,8 +74,6 @@ The robot used to be 25 separate cels loaded as `robot_frame_*.png` and
 driven directly off the animator's frame index. He now goes through the
 same anchor pipeline as every other species: `robot_desk_hero`,
 `robot_speaking`, `robot_listening`, and optionally `robot_listening_flip`.
-`main.js` must be changed to load him that way — this tool already handles
-him like any other species once the sources are named correctly.
 
 Where the anchors sit. Each studio plate puts its desk at a different height
 in the frame, so the row the anchors' hands rest on is a per-set property
@@ -84,6 +82,16 @@ and is written into `layout.json` as `deskLines` (a map) plus `deskLine`
 block). The renderer reads it and seats the cast at that row for the set
 currently on air; without it, every set drew them at the studio's own
 0.468 and anchors floated above or sank into the desks of the other nine.
+
+Product stills are conditioned by `do_products()`. They are neither
+characters nor backgrounds: a cut-out product is defringed and cropped
+like a character, but capped at 512px rather than the frame's width, and
+NOT quantised. The stage plate behind a product is a painted set; a
+photographic product on it is what real shopping-channel television
+does, and posterising the product to 256 colours reads as neither art
+style. The 512 cap is a memory ceiling — the slot the product occupies
+in the stage is roughly 250px wide, so 512 on the long edge is already
+more resolution than the display can use.
 """
 import json
 import os
@@ -711,30 +719,26 @@ def mouth_region(hero, variant):
     radius = max(2.0, d.shape[0] / 70.0)
     blur = np.asarray(Image.fromarray(d.astype(np.uint8)).filter(
         ImageFilter.GaussianBlur(radius)), dtype=float)
-    rows = int(blur.shape[0] * 0.45)          # the head, not the uniform
+    rows = int(blur.shape[0] * 0.50)          # the head, not the uniform
     head = blur[:rows]
     peak = head.max()
     inside = blur[:rows][alpha[:rows]]
     floor = float(np.median(inside)) if inside.size else 0.0
-    # The floor is high when the two plates are separate generations that
-    # disagree everywhere, which is exactly the case where swapping whole
-    # plates is worst. 1.8 keeps the mouth as the clear winner without
-    # demanding a quiet background that those pairs will never have.
-    if peak < 20 or peak < floor * 1.8:
+    # Scaled to plate height: 20 at CAST_H (216px), ~10 at PIP_H (142px), min 6
+    min_peak = max(6.0, 20.0 * (blur.shape[0] / 216.0))
+    if peak < min_peak or peak < floor * 1.5:
         return None
 
     # Centre: the centroid of the hottest two percent, so one stray pixel
     # cannot place the mouth.
-    hot = head >= peak * 0.92
+    hot = head >= peak * 0.90
     ys, xs = np.nonzero(hot)
     if not len(ys):
         return None
     cy, cx = float(ys.mean()), float(xs.mean())
 
-    # The peak must sit in the lower two thirds of the head. A mouth is not
-    # up near the brow; if the brightest difference is there, the two plates
-    # changed something other than the mouth and this mask would be wrong.
-    if cy < rows * 0.33:
+    # The peak must sit in the lower portion of the head region.
+    if cy < rows * 0.20:
         return None
 
     # Size: a fraction of the head's own width. A mouth is about a quarter
@@ -828,6 +832,13 @@ def swap_region(hero, variant, mask):
 
 BACKDROP_OUT = os.path.join(ROOT, 'assets', 'generated', 'backdrops')
 CORRESPONDENT_OUT = os.path.join(ROOT, 'assets', 'generated', 'correspondents')
+TITLECARD_OUT = os.path.join(ROOT, 'assets', 'generated', 'titlecards')
+LOGO_OUT = os.path.join(ROOT, 'assets', 'generated', 'logos')
+ICON_OUT = os.path.join(ROOT, 'assets', 'generated', 'icons')
+INFOMERCIAL_OUT = os.path.join(ROOT, 'assets', 'generated', 'infomercials')
+TESTIMONIAL_OUT = os.path.join(ROOT, 'assets', 'generated', 'testimonials')
+SPONSOR_OUT = os.path.join(ROOT, 'assets', 'generated', 'sponsors')
+PRODUCT_OUT = os.path.join(ROOT, 'assets', 'generated', 'products')
 
 
 def _pip_height():
@@ -1037,6 +1048,21 @@ def conditioned_already(im):
     """Whether this is output rather than something freshly dropped in."""
     return (im.width <= VIEW_W * 2 and im.height <= VIEW_H * 2
             and palette_size(im) <= 256)
+
+
+def product_conditioned_already(im):
+    """Whether a product still has been through `do_products()`.
+
+    A product is deliberately *not* quantised — it stays photographic
+    against the painted stage — so `conditioned_already()` will report
+    False on a correctly-conditioned product forever. The size cap is the
+    only reliable marker, and the only thing the pass actually changes
+    about an already-processed file: crop-to-content and defringe are
+    idempotent enough that running them twice does no harm, but resizing
+    a 512px product back down to 512px is a no-op that costs a full
+    LANCZOS pass over every pixel.
+    """
+    return max(im.size) <= 512
 
 
 def anchor_sources(sid, state):
@@ -1385,6 +1411,325 @@ def do_cutaways():
         print('%d of %d fitted to %dx%d' % (done, len(names), VIEW_W, VIEW_H))
 
 
+def do_correspondents():
+    """Condition field correspondents for the PIP monitor.
+
+    They appear in the PIP monitor above the desk. Previously, _desk_hero and
+    _speaking variants were independently cropped and quantised, resulting
+    in sprite bounding box shifts (e.g. 148px vs 147px) and severe GNN chest
+    badge mutation on every mouth flap (~5000 differing pixels).
+
+    This pipeline:
+      1. Groups sources by species in RAW_KEEP/field.
+      2. Registers _speaking against _desk_hero.
+      3. Computes a unified content crop box across both states so dimensions
+         and alignment match exactly.
+      4. Downscales with premultiplied alpha to ph (142px) and shares the
+         hero's 256-color palette (quantise_like).
+      5. Performs adaptive mouth-region detection and chin limiting, ensuring
+         that ONLY the mouth/jaw area animates while 100% of the uniform,
+         collar, and GNN chest badge remain byte-identical to the hero plate.
+    """
+    field_src = os.path.join(RAW_KEEP, 'field')
+    if not os.path.isdir(field_src):
+        return
+
+    os.makedirs(CORRESPONDENT_OUT, exist_ok=True)
+    ph = int(VIEW_H * PIP_H * 0.92)
+
+    species = set()
+    for name in os.listdir(field_src):
+        if name.endswith('_desk_hero.png'):
+            species.add(name[:-len('_desk_hero.png')])
+        elif name.endswith('_hero.png'):
+            species.add(name[:-len('_hero.png')])
+
+    if not species:
+        return
+
+    print('\n--- field correspondents ---')
+    done_n = 0
+    for sid in sorted(species):
+        hero_name = sid + '_desk_hero.png'
+        if not os.path.exists(os.path.join(field_src, hero_name)):
+            hero_name = sid + '_hero.png'
+            if not os.path.exists(os.path.join(field_src, hero_name)):
+                continue
+
+        hero_im = Image.open(os.path.join(field_src, hero_name)).convert('RGBA')
+        spk_path = os.path.join(field_src, sid + '_speaking.png')
+        spk_im = Image.open(spk_path).convert('RGBA') if os.path.exists(spk_path) else None
+
+        if spk_im is not None:
+            spk_reg, sc = register(spk_im, hero_im)
+            b_hero = content_box(hero_im)
+            b_spk = content_box(spk_reg)
+            boxes = [b for b in (b_hero, b_spk) if b]
+            crop = (min(b[0] for b in boxes), min(b[1] for b in boxes),
+                    max(b[2] for b in boxes), max(b[3] for b in boxes)) if boxes else None
+
+            hero_crop = defringe(hero_im.crop(crop) if crop else hero_im)
+            spk_crop = defringe(spk_reg.crop(crop) if crop else spk_reg)
+
+            w = max(1, round(hero_crop.width * ph / hero_crop.height))
+            hero_p = quantise(resize_premultiplied(hero_crop, (w, ph)))
+            spk_p = quantise_like(resize_premultiplied(spk_crop, (w, ph)), hero_p)
+
+            reg = mouth_region(hero_p, spk_p)
+            if reg:
+                mask, (cx, cy, rx, ry) = reg
+                chin_limit = min(ph - 1, int(cy + ry * 1.30))
+                mask[chin_limit:, :, :] = 0.0
+                out = swap_region(hero_p, spk_p, mask)
+                out = Image.composite(out, hero_p,
+                                      Image.fromarray(((mask[:, :, 0] > 0.02) * 255).astype(np.uint8)))
+                out = quantise_like(out, hero_p)
+                out = Image.composite(out, hero_p,
+                                      Image.fromarray(((mask[:, :, 0] > 0.02) * 255).astype(np.uint8)))
+                moved = int((np.abs(
+                    np.asarray(out.convert('RGBA'), int) - np.asarray(hero_p.convert('RGBA'), int)
+                ).sum(2) > 8).sum())
+                print('%-14s -> mouth swap: %d px differ (uniform badge 100%% locked)' % (sid, moved))
+            else:
+                cut = neck_row(hero_p)
+                feather = 3
+                mask = np.zeros((ph, w, 1), dtype=float)
+                mask[:max(0, cut - feather)] = 1.0
+                for i in range(max(0, cut - feather), min(ph, cut + feather)):
+                    mask[i] = 1.0 - (i - (cut - feather)) / float(2 * feather)
+                out = swap_region(hero_p, spk_p, mask)
+                out = quantise_like(out, hero_p)
+                print('%-14s -> head/neck graft at row %d' % (sid, cut))
+
+            hero_p.save(os.path.join(CORRESPONDENT_OUT, sid + '_hero.png'))
+            out.save(os.path.join(CORRESPONDENT_OUT, sid + '_speaking.png'))
+            done_n += 2
+        else:
+            hero_crop = defringe(crop_to_content(hero_im))
+            w = max(1, round(hero_crop.width * ph / hero_crop.height))
+            hero_p = quantise(resize_premultiplied(hero_crop, (w, ph)))
+            hero_p.save(os.path.join(CORRESPONDENT_OUT, sid + '_hero.png'))
+            done_n += 1
+            print('%-14s -> hero only (no speaking variant)' % sid)
+
+    print('correspondents: %d plates conditioned at %dpx tall' % (done_n, ph))
+
+
+def do_titlecards():
+    """Condition broadcast titlecards (full-bleed, 1280x720, 256 colors)."""
+    if not os.path.isdir(TITLECARD_OUT):
+        return
+    names = sorted(f for f in os.listdir(TITLECARD_OUT) if f.endswith('.png'))
+    done = 0
+    raw_dir = os.path.join(RAW_KEEP, 'titlecards')
+    for name in names:
+        path = os.path.join(TITLECARD_OUT, name)
+        im = Image.open(path).convert('RGBA')
+        if conditioned_already(im):
+            continue
+        os.makedirs(raw_dir, exist_ok=True)
+        shutil.copy2(path, os.path.join(raw_dir, name))
+        im = quantise(resize_premultiplied(im, (VIEW_W, VIEW_H)))
+        im.save(path)
+        done += 1
+    if done:
+        print('\n--- titlecards ---')
+        print('%d of %d fitted to %dx%d' % (done, len(names), VIEW_W, VIEW_H))
+
+
+def do_logos():
+    """Condition show and daypart logos (defringed, 256 max dim, 256 colors)."""
+    if not os.path.isdir(LOGO_OUT):
+        return
+    names = sorted(f for f in os.listdir(LOGO_OUT) if f.endswith('.png'))
+    done = 0
+    raw_dir = os.path.join(RAW_KEEP, 'logos')
+    for name in names:
+        path = os.path.join(LOGO_OUT, name)
+        im = Image.open(path).convert('RGBA')
+        if conditioned_already(im):
+            continue
+        os.makedirs(raw_dir, exist_ok=True)
+        shutil.copy2(path, os.path.join(raw_dir, name))
+        im = crop_to_content(defringe(im))
+        w, h = im.size
+        sc = 256.0 / max(w, h)
+        size = (max(1, round(w * sc)), max(1, round(h * sc)))
+        im = quantise(resize_premultiplied(im, size))
+        im.save(path)
+        done += 1
+    if done:
+        print('\n--- logos ---')
+        print('%d of %d conditioned at 256px max' % (done, len(names)))
+
+
+def do_icons():
+    """Condition story over-the-shoulder icons (defringed, 128 max dim, 256 colors)."""
+    if not os.path.isdir(ICON_OUT):
+        return
+    names = sorted(f for f in os.listdir(ICON_OUT) if f.endswith('.png'))
+    done = 0
+    raw_dir = os.path.join(RAW_KEEP, 'icons')
+    for name in names:
+        path = os.path.join(ICON_OUT, name)
+        im = Image.open(path).convert('RGBA')
+        if conditioned_already(im):
+            continue
+        os.makedirs(raw_dir, exist_ok=True)
+        shutil.copy2(path, os.path.join(raw_dir, name))
+        im = crop_to_content(defringe(im))
+        w, h = im.size
+        sc = 128.0 / max(w, h)
+        size = (max(1, round(w * sc)), max(1, round(h * sc)))
+        im = quantise(resize_premultiplied(im, size))
+        im.save(path)
+        done += 1
+    if done:
+        print('\n--- icons ---')
+        print('%d of %d conditioned at 128px max' % (done, len(names)))
+
+
+def do_infomercials():
+    """Condition infomercial presentation backdrops and stages (1280x720, 256 colors)."""
+    if not os.path.isdir(INFOMERCIAL_OUT):
+        return
+    names = sorted(f for f in os.listdir(INFOMERCIAL_OUT) if f.endswith('.png'))
+    done = 0
+    raw_dir = os.path.join(RAW_KEEP, 'infomercials')
+    for name in names:
+        path = os.path.join(INFOMERCIAL_OUT, name)
+        im = Image.open(path).convert('RGBA')
+        if conditioned_already(im):
+            continue
+        os.makedirs(raw_dir, exist_ok=True)
+        shutil.copy2(path, os.path.join(raw_dir, name))
+        im = quantise(resize_premultiplied(im, (VIEW_W, VIEW_H)))
+        im.save(path)
+        done += 1
+    if done:
+        print('\n--- infomercials ---')
+        print('%d of %d fitted to %dx%d' % (done, len(names), VIEW_W, VIEW_H))
+
+
+def do_products():
+    """Condition product stills for compositing onto infomercial stages.
+
+    A product is neither a character plate nor a background. It is a
+    cut-out: the image model drew the object on transparent background
+    and the compositor sits it on a stage plate. So it gets the cut-out
+    treatment — crop transparent margin, defringe the soft edge — and a
+    cap of 512px on the long edge.
+
+    The cap is not a preference. The slot the product occupies on the
+    stage is roughly a fifth of a 1280-wide plate, so 512 is already more
+    resolution than the display can use, and the current drops are
+    1254x1254. Halving them is a memory saving on the plate and a cleaner
+    downscale than the canvas's nearest-neighbour blit would produce.
+
+    Colour count is deliberately not forced. The stage plate behind the
+    product is a painted set, and a photographic product on it reads as
+    what real shopping channels do. Posterising a 1254px render to 256
+    colours gives it a hard-edged, aliased look that matches neither the
+    plate's own style nor a real product shot. Leave the palette alone
+    unless the source is already pixel art.
+
+    Opaque products (a source with no transparency, i.e. the model drew
+    the object against a background) are left whole. The tool's job is
+    not to invent a matte for them; the fix for a product with a
+    background is a new generation with the transparency the prompt asks
+    for.
+
+    The gate here is size, not palette. The generic `conditioned_already`
+    checks palette_size ≤ 256, which a correctly-conditioned product
+    never satisfies because it is not quantised. So a separate gate: a
+    file at or below 512 in its longest dimension has been through this
+    pass and does not need it again.
+    """
+    if not os.path.isdir(PRODUCT_OUT):
+        return
+    names = sorted(f for f in os.listdir(PRODUCT_OUT) if f.endswith('.png'))
+    done = 0
+    raw_dir = os.path.join(RAW_KEEP, 'products')
+    for name in names:
+        path = os.path.join(PRODUCT_OUT, name)
+        im = Image.open(path).convert('RGBA')
+        if product_conditioned_already(im):
+            continue
+        os.makedirs(raw_dir, exist_ok=True)
+        shutil.copy2(path, os.path.join(raw_dir, name))
+
+        if im.split()[3].getextrema()[0] < 255:
+            # Real transparency. This is a cut-out: crop the empty margin
+            # and bleed opaque colour outward into the soft edge so the
+            # product does not carry a dark halo onto the stage.
+            im = crop_to_content(im)
+            im = defringe(im)
+        # else: opaque product on its own background. Leave the RGB alone.
+
+        w, h = im.size
+        sc = 512.0 / max(w, h)
+        if sc < 1.0:
+            im = resize_premultiplied(
+                im, (max(1, round(w * sc)), max(1, round(h * sc))))
+        im.save(path)
+        done += 1
+    if done:
+        print('\n--- products ---')
+        print('%d of %d conditioned at 512px max' % (done, len(names)))
+
+
+def do_testimonials():
+    """Condition customer/claimant testimonial portraits (defringed, 320px max, 256 colors)."""
+    if not os.path.isdir(TESTIMONIAL_OUT):
+        return
+    names = sorted(f for f in os.listdir(TESTIMONIAL_OUT) if f.endswith('.png'))
+    done = 0
+    raw_dir = os.path.join(RAW_KEEP, 'testimonials')
+    for name in names:
+        path = os.path.join(TESTIMONIAL_OUT, name)
+        im = Image.open(path).convert('RGBA')
+        if conditioned_already(im):
+            continue
+        os.makedirs(raw_dir, exist_ok=True)
+        shutil.copy2(path, os.path.join(raw_dir, name))
+        im = crop_to_content(defringe(im))
+        w, h = im.size
+        sc = 320.0 / max(w, h)
+        size = (max(1, round(w * sc)), max(1, round(h * sc)))
+        im = quantise(resize_premultiplied(im, size))
+        im.save(path)
+        done += 1
+    if done:
+        print('\n--- testimonials ---')
+        print('%d of %d conditioned at 320px max' % (done, len(names)))
+
+
+def do_sponsors():
+    """Condition corporate sponsor insignias (defringed, 256px max, 256 colors)."""
+    if not os.path.isdir(SPONSOR_OUT):
+        return
+    names = sorted(f for f in os.listdir(SPONSOR_OUT) if f.endswith('.png'))
+    done = 0
+    raw_dir = os.path.join(RAW_KEEP, 'sponsors')
+    for name in names:
+        path = os.path.join(SPONSOR_OUT, name)
+        im = Image.open(path).convert('RGBA')
+        if conditioned_already(im):
+            continue
+        os.makedirs(raw_dir, exist_ok=True)
+        shutil.copy2(path, os.path.join(raw_dir, name))
+        im = crop_to_content(defringe(im))
+        w, h = im.size
+        sc = 256.0 / max(w, h)
+        size = (max(1, round(w * sc)), max(1, round(h * sc)))
+        im = quantise(resize_premultiplied(im, size))
+        im.save(path)
+        done += 1
+    if done:
+        print('\n--- sponsors ---')
+        print('%d of %d conditioned at 256px max' % (done, len(names)))
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     made = {}
@@ -1543,46 +1888,16 @@ def main():
         f for f in os.listdir(BACKDROP_OUT)
         if f.endswith('.png') and _is_backdrop(f))
 
-    # Field correspondents.
-    #
-    # They appear in the monitor above the desk, not on a second set — one
-    # portrait instead of a room, per docs/ROADMAP.md. The chest-cropped
-    # generation archived in `_inbox/field/` is the right framing for that;
-    # the full-torso plates are the anchors' and are too wide for a PIP.
-    field_src = os.path.join(RAW_KEEP, 'field')
-    if os.path.isdir(field_src):
-        os.makedirs(CORRESPONDENT_OUT, exist_ok=True)
-        ph = int(VIEW_H * PIP_H * 0.92)
-        done_n = 0
-        for name in sorted(os.listdir(field_src)):
-            if not name.endswith(('_desk_hero.png', '_speaking.png')):
-                continue
-            im = Image.open(os.path.join(field_src, name)).convert('RGBA')
-            im = crop_to_content(defringe(im))
-            w = max(1, round(im.width * ph / im.height))
-            im = quantise(resize_premultiplied(im, (w, ph)))
-            out_name = name.replace('_desk_hero.png', '_hero.png')
-            im.save(os.path.join(CORRESPONDENT_OUT, out_name))
-            done_n += 1
-        print('correspondents            -> %d plates at %dpx tall'
-              % (done_n, ph))
-
-    with open(os.path.join(OUT, 'layout.json'), 'w') as fh:
-        json.dump(layout, fh, indent=2)
-    print('layout -> assets/generated/set/layout.json')
-
-    if '--preview' in sys.argv and 'studio_wide_empty.png' in made:
-        room = made['studio_wide_empty.png'].copy()
-        band = ImageDraw.Draw(room, 'RGBA')
-        by, bh = int(VIEW_H * ANCHOR_BAND['y']), int(VIEW_H * ANCHOR_BAND['h'])
-        band.rectangle([VIEW_W // 2 - 46, by, VIEW_W // 2 + 46, by + bh],
-                       outline=(255, 0, 128, 180))
-        big = room.resize((room.width * 3, room.height * 3), Image.NEAREST)
-        p = os.path.join(ROOT, 'docs', 'set-preview.png')
-        big.save(p)
-        print('preview (room only, at the 3x the engine uses) -> docs/set-preview.png')
     do_anchors()
+    do_correspondents()
     do_cutaways()
+    do_titlecards()
+    do_logos()
+    do_icons()
+    do_infomercials()
+    do_products()
+    do_testimonials()
+    do_sponsors()
     return 0
 
 

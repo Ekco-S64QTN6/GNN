@@ -24,10 +24,21 @@
    as well as `asks` and `reactions`, so each turn is in the
    speaker's own voice and the beat has real back-and-forth rather
    than a single question and answer.
+
+   The `CORRESPONDENT_READY` set is exported. It is the species that
+   have a correspondent plate on disk and can therefore be thrown to
+   on air — the two-way pool and the debate pool both filter against
+   it. The director holds the read-only reference; this module owns
+   the value. When the correspondents directory gains or loses a
+   species, this file is the one that changes.
    ============================================================ */
 
 const GNNScript = (() => {
     'use strict';
+
+    // Defense in depth: a placeholder can already be queued or injected by
+    // another path, so never let it become an on-air rundown teaser.
+    const NON_STORY_TITLE = /^\s*(?:no\b.{0,60}\b(?:news|update|updates|developments?|stories|reports?|details)|nothing\s+to\s+report|no\s+further\s+(?:details|information|comment)|no\s+verified\s+developments?|no\s+verifiable\s+quote|more\s+on\s+this\s+later|developing\s+story)(?:\s+(?:today|yet|so\s+far|at\s+this\s+time|available|reported))?\s*[.!]?\s*$/i;
 
     const STOP = new Set(('the a an and or of for to in on at by with from as is are was were be been ' +
         'this that these those it its his her their our your they we you he she has have had will would ' +
@@ -309,14 +320,210 @@ const GNNScript = (() => {
         'This is G N N. Wherever the relay reaches, we are on.',
     ];
 
+    const WIRE_LABEL_RE = /^(\[[^\]]+\]|\b(?:live|breaking|update|exclusive|analysis|watch|photos?|report|new|just in)\b\s*[:\-–—]\s*)/i;
+    const CATEGORY_PREFIX_RE = /^(?:world(?:\s+events)?|white\s+house|international\s+relations|data\s+breaches|markets?|politics?|tech(?:nology)?|science|sports?|defense|military|business|economy|energy)\s*:\s*/i;
+    const TRAILING_SOURCE_RE = /\s+(?:[|–—]|--|-)\s+[A-Za-z0-9\s.]{1,40}$/i;
+    const TRAILING_PAREN_RE = /\s*\([^)]*\)$/;
+    const DANGLING_RE = /^(?:of|in|to|for|with|on|at|from|by|about|into|through|after|over|between|under|against|during|without|before|towards|toward|around|round|among|across|behind|beyond|upon|and|or|but|nor|so|yet|as|if|while|though|although|because|unless|since|the|a|an|this|that|these|those|its|their|his|her|our|your|my|who|whom|whose|which|what|where|when|why|how|is|are|was|were|be|been|being|has|have|had|will|would|shall|should|can|could|may|might|must)$/i;
+    const PREP_PHRASE_LEAD_RE = /^(?:strait|gulf|bay|sea|cape|isle|port|bank|city|state|house|department|ministry|secretary|president|minister|court|republic|kingdom|union|coast|border|island)\s+of$/i;
+    const TWO_WORD_COMPOUNDS = [
+        ['strait', 'of'], ['gulf', 'of'], ['bay', 'of'], ['sea', 'of'], ['cape', 'of'],
+        ['white', 'house'], ['space', 'force'], ['wall', 'street'], ['federal', 'reserve'],
+        ['united', 'states'], ['european', 'union'], ['united', 'nations'], ['prime', 'minister'],
+        ['foreign', 'minister'], ['supreme', 'court'], ['defense', 'forces'], ['national', 'security']
+    ];
+
+    /**
+     * Sentence-to-noun headline shortener.
+     * Transforms long wire headlines into crisp, punchy spoken broadcast teasers
+     * while preserving multi-word proper nouns, questions, and natural clause boundaries.
+     */
+    function shortenHeadline(title) {
+        const original = String(title || '').trim();
+        if (!original) return 'Developing stories on the wire';
+        let t = original;
+
+        // 1. Strip leading broadcast & category prefixes, but never allow a
+        //    label-only headline to collapse to an empty string.
+        t = t.replace(WIRE_LABEL_RE, '').trim() || original;
+        t = t.replace(CATEGORY_PREFIX_RE, '').trim() || original;
+
+        // 2. Strip trailing attribution and parentheticals, with the same
+        //    protection against producing an empty teaser.
+        const withoutSource = t.replace(TRAILING_SOURCE_RE, '').trim();
+        if (withoutSource) t = withoutSource;
+        const withoutParen = t.replace(TRAILING_PAREN_RE, '').trim();
+        if (withoutParen) t = withoutParen;
+
+        // Check if original headline is phrased as a question
+        const isQuestion = /\?$/.test(t) || /^(?:could|can|will|would|is|are|was|were|why|how|what|who|where)\b/i.test(t);
+
+        // 3. Remove mid-sentence appositive if it leaves a complete sentence
+        // e.g. "Amber Siyavus, a star from 'Big Brother 8', has died at the age of 46"
+        t = t.replace(/^([A-Z][a-zA-Z0-9'.\-–—\s]{1,35}),\s+[^,]{3,45},\s+(has|have|had|is|was|were|will|announces|dies|died|resigns|steps|faces|warns|says|leads)\b/i, '$1 $2');
+
+        // 4. Split on secondary clause comma (e.g. ", with...", ", as...", ", carrying...", ", aiming to...")
+        const commaClauseIdx = t.search(/,\s+(?:with|as|amid|amidst|following|after|prompting|sparking|aiming|seeking|according|officials|sources|report|reports|which|where|potentially|resulting|marking|triggering|described|highlighting|urging|warning|sending|bringing|leaving|carrying|while)\b/i);
+        if (commaClauseIdx > 0) {
+            const leadClause = t.slice(0, commaClauseIdx).trim();
+            if (leadClause.split(/\s+/).length >= 4) {
+                t = leadClause;
+            }
+        } else {
+            // Also check standalone semicolon or em-dash clause
+            const dashIdx = t.search(/\s+[;–—]\s+/);
+            if (dashIdx > 0) {
+                const leadClause = t.slice(0, dashIdx).trim();
+                if (leadClause.split(/\s+/).length >= 4) {
+                    t = leadClause;
+                }
+            }
+        }
+
+        // 5. Subordinate trailing clauses without comma if long (> 10 words)
+        let words = t.split(/\s+/);
+        if (words.length > 10) {
+            const subIdx = t.search(/\s+(?:amid|in\s+the\s+wake\s+of|in\s+wake\s+of|ahead\s+of|after\s+(?:an?|the|\d+|reports?))\b/i);
+            if (subIdx > 0) {
+                const leadClause = t.slice(0, subIdx).trim();
+                if (leadClause.split(/\s+/).length >= 5) {
+                    t = leadClause;
+                    words = t.split(/\s+/);
+                }
+            }
+        }
+
+        // 6. Word count budget: keep intact up to 14 words to avoid mutilating proper nouns
+        if (words.length > 14) {
+            let cut = 13;
+
+            // Check if cutoff is splitting a compound or "Strait of [Name]"
+            const wCutMinus1 = (words[cut - 1] || '').toLowerCase();
+            const wCut = (words[cut] || '').toLowerCase();
+
+            // Check if cut lands right on "Strait of"
+            const prevTwo = `${(words[cut - 2] || '').toLowerCase()} ${wCutMinus1}`;
+            if (PREP_PHRASE_LEAD_RE.test(prevTwo) && words[cut]) {
+                cut++; // include the proper noun! e.g. "Strait of Hormuz"
+            } else if (PREP_PHRASE_LEAD_RE.test(`${wCutMinus1} ${wCut}`) && words[cut + 1]) {
+                cut += 2; // include "of" and the proper noun!
+            } else {
+                // Check 2-word compounds
+                for (const [w1, w2] of TWO_WORD_COMPOUNDS) {
+                    if (wCutMinus1 === w1 && wCut === w2) {
+                        cut++;
+                        break;
+                    }
+                }
+            }
+
+            t = words.slice(0, cut).join(' ');
+        }
+
+        // Run the dangling-ending correction after every kind of shortening,
+        // not just the word-count cut. If the correction would leave only a
+        // fragment, preserve the original headline instead.
+        words = t.split(/\s+/);
+        while (words.length > 4 && DANGLING_RE.test(words[words.length - 1])) {
+            words.pop();
+        }
+        if (words.length < 4) {
+            t = original;
+        } else {
+            t = words.join(' ');
+        }
+
+        // Strip trailing punctuation
+        t = t.replace(/[.,:;!?-]+$/, '').trim();
+
+        if (isQuestion) {
+            t += '?';
+        }
+
+        return t || 'Developing stories on the wire';
+    }
+
+    function formatTeaser(text) {
+        const s = String(text || '').trim();
+        if (!s) return '';
+        if (/[.!?]$/.test(s)) return s;
+        return s + '.';
+    }
+
+    /**
+     * Multi-story cold open rundown teaser ("Tonight on GNN: ...").
+     * Uses queued stories to deliver a structured newsroom rundown exchange.
+     */
+    function rundownOpen(queue, showInfo) {
+        const seats = desk();
+        const leadAnchor = seats[0] || null;
+        const coAnchor = seats[1] || null;
+        if (!leadAnchor) return null;
+
+        const stories = (queue || []).filter((s) =>
+            s && (s.title || s.titleRaw)
+            && !NON_STORY_TITLE.test(String(s.titleRaw || s.title || '')));
+        if (stories.length < 2) return null;
+
+        const t1 = shortenHeadline(stories[0].titleRaw || stories[0].title);
+        const t2 = shortenHeadline(stories[1].titleRaw || stories[1].title);
+        const t3 = stories[2] ? shortenHeadline(stories[2].titleRaw || stories[2].title) : null;
+
+        const showName = (showInfo && showInfo.title) ? showInfo.title : 'the broadcast';
+        const lines = [];
+        lines.push({
+            who: leadAnchor,
+            text: `I am ${leadAnchor.name}. This is G N N. Tonight on ${showName}: ${formatTeaser(t1)}`,
+            to: coAnchor,
+        });
+
+        if (coAnchor) {
+            let coLine = `Plus: ${formatTeaser(t2)}`;
+            if (t3) coLine += ` And later: ${formatTeaser(t3)}`;
+            lines.push({
+                who: coAnchor,
+                text: coLine,
+                to: leadAnchor,
+            });
+            lines.push({
+                who: leadAnchor,
+                text: 'We begin on the sector wire.',
+                to: coAnchor,
+            });
+        } else {
+            lines.push({
+                who: leadAnchor,
+                text: `Plus: ${formatTeaser(t2)} We begin on the sector wire.`,
+                to: null,
+            });
+        }
+
+        lines.teasedStories = stories.slice(0, t3 ? 3 : 2);
+        return lines;
+    }
+
+    const BREAKING_INTROS = [
+        'We interrupt with breaking news from the sector wire.',
+        'Urgent reports crossing the desk right now.',
+        'An emergency bulletin has just reached station control.',
+        'We are breaking into the rundown with an urgent update.',
+    ];
+
+    function breakingIntro() {
+        return pickFrom(BREAKING_INTROS, BREAKING_INTROS[0]);
+    }
+
     /**
      * Top of the hour: the anchor names themselves first, then the
      * station, then what is coming up. `SHOW_OPEN` lines all begin with
      * the station's identification; the anchor's name is prefixed.
      */
-    function showOpen() {
+    function showOpen(showInfo) {
         const who = lead();
-        const line = pickFrom(SHOW_OPEN, SHOW_OPEN[0]);
+        const showName = (showInfo && showInfo.title) ? showInfo.title : null;
+        const line = showName
+            ? `This is G N N and welcome to ${showName}. Let's get to the news from across the sector tonight.`
+            : pickFrom(SHOW_OPEN, SHOW_OPEN[0]);
         if (!who) return line;
         return `I am ${who.name}. ${line}`;
     }
@@ -460,6 +667,13 @@ const GNNScript = (() => {
      * removed, the id comes off. There is no way to check for the file
      * from the browser without an async fetch, and `twoWay()` runs on the
      * director's tick.
+     *
+     * It is exported as `GNNScript.CORRESPONDENT_READY`. The director
+     * holds the read-only reference and uses it in `beginDebate` — the
+     * debate pool needs the same filter, because a debate guest goes into
+     * the same PIP monitor a two-way uses and the same plate availability
+     * applies. Keeping one copy rather than two means the two pools
+     * cannot disagree about who is on disk.
      */
     const CORRESPONDENT_READY = new Set([
         'alkari', 'bulrathi', 'darlok', 'human', 'klackon',
@@ -1062,6 +1276,215 @@ const GNNScript = (() => {
         };
     }
 
+    /**
+     * GNN Galaxy Shop — Late-night spoof QVC / Home Shopping Network script.
+     * Features high-energy sales pitches, item prices, unit countdowns, and phone hotlines.
+     */
+    function galaxyShop() {
+        const PRODUCTS = [
+            {
+                brand: 'GNN GALAXY SHOP',
+                product: 'Klackon Queen Amber Brooch',
+                price: '399 CREDITS',
+                stock: '14 UNITS LEFT',
+                hook: 'Calling all Terran mineral collectors and jewel connoisseurs!',
+                body: 'Direct from the subterranean hive depths of Kholdan: authentic Klackon queen amber.',
+                claim: 'Mined under high-pressure hive chambers. Guaranteed zero resin impurities.',
+                tag: 'Only 399 Galactic Credits! Operators are standing by in orbit.',
+                legal: 'GNN Galaxy Shop is not liable for spontaneous amber resonance or hive claims.',
+            },
+            {
+                brand: 'ORION SURPLUS OUTLET',
+                product: 'Class-3 Tachyon Deflector Coil',
+                price: '899 CREDITS',
+                stock: '7 IN STOCK',
+                hook: 'Is your civilian star-skiff prepared for micro-meteorite storms?',
+                body: 'Introducing the refurbished Class-3 Tachyon Deflector Coil.',
+                claim: 'Guaranteed to deflect hyper-velocity micro-debris or full credit reimbursement.',
+                tag: 'Call 1-800-RIM-DEAL now! Fits standard civilian hulls with no drydock refit.',
+                legal: 'Void where prohibited by treaty. Deflection field efficacy depends on local gravity well.',
+            },
+            {
+                brand: 'CRYSTAL DERMA LABS',
+                product: 'Silicoid Crystalline Exfoliating Balm',
+                price: '149 CREDITS',
+                stock: '23 FLASKS LEFT',
+                hook: 'Tired of harsh planetary atmospheric weathering on your skin?',
+                body: 'Silicoid Crystalline Balm: the premier dermal treatment from the magma shelf.',
+                claim: 'Hardens humanoid dermal tissue to basalt-grade durability in just three cycles.',
+                tag: 'Order today and receive a complimentary quartz buffing sponge!',
+                legal: 'May cause irreversible epidermal mineralization in non-lithoid humanoids.',
+            },
+            {
+                brand: 'AVIAN REGALIA GALAXY',
+                product: 'Alkari Feather-Gloss & Preen Serum',
+                price: '79 CREDITS',
+                stock: '42 FLASKS LEFT',
+                hook: 'Essential plumage grooming for the modern high-ranking diplomat.',
+                body: 'Alkari Feather-Gloss Serum eliminates ionizing warp static and restores feather sheen.',
+                claim: 'Certified by the Altair Diplomatic Academy for ceremonial presentations.',
+                tag: 'Dial 1-800-RIM-DEAL. Look your absolute best at your next Council summit.',
+                legal: 'Do not ingest. Highly flammable near exposed plasma manifolds.',
+            },
+            {
+                brand: 'FIERAS TACTICAL',
+                product: 'Mrrshan Velocity Hunting Optics',
+                price: '649 CREDITS',
+                stock: '11 SETS LEFT',
+                hook: 'Never lose visual track of hyper-speed targets again.',
+                body: 'Military-spec thermal and infrared tracking visors from the pride workshops of Fieras.',
+                claim: 'Microsecond target lock across all standard atmospheric gas densities.',
+                tag: 'Available exclusively through GNN Galaxy Shop. Claim yours before stock depletes.',
+                legal: 'Export restricted in demilitarized neutral zones under Council Edict 44.',
+            },
+            {
+                brand: 'ORION HOROLOGY',
+                product: 'Orion Executive Chrono-Timepiece',
+                price: '2,400 CREDITS',
+                stock: '9 UNITS LEFT',
+                hook: 'Own a piece of history. And tell the time on it.',
+                body: 'The Orion Executive Chrono-Timepiece, hand-assembled in the mountain workshops of Sirius Prime.',
+                claim: 'Holographic readout dial. Titanium case. Sapphire crystal. Rated to one million cycles.',
+                tag: 'Available in a limited series of four hundred. Claim yours before the series closes.',
+                legal: 'Battery life varies by local gravity. Warranty void if submerged below 400 atmospheres.',
+            },
+            {
+                brand: 'SIRIUS LEISURE CRAFT',
+                product: 'Celeste-Class Personal Yacht',
+                price: '94,000 CREDITS',
+                stock: '3 HULLS AVAILABLE',
+                hook: 'The stars are wide. Your time is not.',
+                body: 'The Celeste-Class personal yacht, from the leisure yards of Sirius Prime.',
+                claim: 'Observation dome, teak-effect aft deck, and a thousand-light-year cruising range on a single core.',
+                tag: 'Financing available to qualified purchasers through the Orion Merchant Bank.',
+                legal: 'Range dependent on load, route and pilot. Cruising range measured under ideal vacuum conditions.',
+            },
+            {
+                brand: 'SIRIUS POWER SYSTEMS',
+                product: 'Tachyon Standard Energy Cell',
+                price: '89 CREDITS',
+                stock: '214 CELLS LEFT',
+                hook: 'One cell. Every appliance on your ship.',
+                body: 'The Tachyon Standard Energy Cell, now rated for the deep vacuum of a Class-2 hull.',
+                claim: 'Twelve thousand cycles. Negative thermal drift. Compatible with all standard pin configurations.',
+                tag: 'Buy the twelve-cell contractor pack and save thirty percent.',
+                legal: 'Do not short across terminals. Do not expose to open plasma. Cell contents under pressure.',
+            },
+            {
+                brand: 'ORION HOROLOGY',
+                product: 'Chronowatch Navigator Edition',
+                price: '1,650 CREDITS',
+                stock: '6 UNITS LEFT',
+                hook: 'For the pilot who still knows the time.',
+                body: 'The Navigator Edition Chronowatch — for orbital approach and surface landing alike.',
+                claim: 'Dual-time planetary standard. Holographic overlay dial. Submersible to two hundred fathoms.',
+                tag: 'Limited production run. Numbered engraving on the case back.',
+                legal: 'Holographic projection requires a recharge cycle every sixty planetary days.',
+            },
+        ];
+        const item = pickFrom(PRODUCTS, PRODUCTS[0]);
+        return {
+            kind: 'qvc',
+            isQVC: true,
+            brand: item.brand,
+            product: item.product,
+            price: item.price,
+            stock: item.stock,
+            phone: '1-800-RIM-DEAL',
+            beats: [
+                { kind: 'hook', text: item.hook },
+                { kind: 'body', text: item.body },
+                { kind: 'claim', text: item.claim },
+                { kind: 'tag', text: item.tag },
+                { kind: 'legal', text: item.legal },
+            ],
+        };
+    }
+
+    /**
+     * Overnight Paid Programming & Shady Infomercials script.
+     * Features class-action legal syndicates, frontier bio-domes, and cognitive tonics.
+     */
+    function infomercial() {
+        const SHOWS = [
+            {
+                brand: 'VEX & SAKKRA ATTORNEYS',
+                product: 'Zortrium Exposure Class Action',
+                phone: '1-888-VEX-SAKKRA',
+                hook: 'Have you or a loved one been exposed to unshielded Zortrium radiation?',
+                body: 'Starfarers and dockworkers stationed at Orion Heavy Industries yards may have suffered chronic cellular decay.',
+                claim: 'You may be entitled to substantial imperial credits under the Trans-Sector Settlement Accord.',
+                tag: 'Call the Law Offices of Vex and Sakkra today. We do not rest until justice is served.',
+                legal: 'Prior imperial settlements do not guarantee identical outcomes in provincial tribunals.',
+            },
+            {
+                brand: 'COLONIAL REAL ESTATE CORP',
+                product: 'Antares IV Bio-Dome Crater Estates',
+                phone: '1-800-BIO-DOME',
+                hook: 'Tired of cramped orbital modules and recycled station air?',
+                body: 'Claim your private luxury bio-dome crater on the newly terraformed rim world of Antares IV.',
+                claim: 'Zero down payment for certified fleet veterans with panoramic views of the binary sunset.',
+                tag: 'Inquire today with Colonial Real Estate. Your frontier sanctuary awaits.',
+                legal: 'Atmospheric scrubbers sold separately. Habitation subject to imperial territorial re-zoning.',
+            },
+            {
+                brand: 'DR. OTH LABORATORIES',
+                product: 'Psilon Synaptic Neuro-Elixir',
+                phone: '1-877-NEURO-IQ',
+                hook: 'Struggling with quantum calculation fatigue and telepathic fog?',
+                body: 'Dr. Oth\'s Synaptic Neuro-Elixir is distilled from pure Mentar cognitive crystal extract.',
+                claim: 'Clinically shown to sharpen subspace computation and harden thoughts against Darlok probes.',
+                tag: 'Order the thirty-cycle supply now and elevate your mental capabilities.',
+                legal: 'Not evaluated by the Galactic Medical Registry. May cause temporary chromatic aura vision.',
+            },
+            {
+                brand: 'COLONIAL FREIGHT GUILD',
+                product: 'Long-Haul Certification Programme',
+                phone: '1-800-HAUL-LONG',
+                hook: 'Are you getting paid what you are worth on the Antares run?',
+                body: 'The Colonial Freight Guild is now accepting drivers for the deep-lane certification.',
+                claim: 'Guild-certified drivers earn on average forty percent more per standard cycle on the same routes.',
+                tag: 'Call 1-800-HAUL-LONG. Operators are standing by in every major shipping hub.',
+                legal: 'Earnings vary by route, cargo class, seniority and local tariff schedules. Not a guarantee of income.',
+            },
+            {
+                brand: 'SIRIUS EXECUTIVE SERVICES',
+                product: 'Executive Presence Masterclass',
+                phone: '1-877-PRESENCE',
+                hook: 'Are you the smartest voice in the room nobody remembers?',
+                body: 'The Sirius Executive Presence Masterclass teaches command-bearing posture, decisive language and quiet authority.',
+                claim: 'Ninety-three percent of graduates reported a promotion within one standard year of completing the programme.',
+                tag: 'Call 1-877-PRESENCE. Courses begin the first cycle of every quarter.',
+                legal: 'Testimonials are individual results and not typical. Prior performance does not guarantee future outcomes.',
+            },
+            {
+                brand: 'TRANS-SECTOR REPAIR SERVICES',
+                product: 'At-Home Hull Patch Kit',
+                phone: '1-888-FIX-HULL',
+                hook: 'Micro-meteorite breach at 04:00 and no drydock within six hours?',
+                body: 'The Trans-Sector At-Home Hull Patch Kit lets a single crew member seal a standard hull breach in under ninety seconds.',
+                claim: 'Certified for pressure ratings up to four atmospheres. Suitable for all standard civilian hulls.',
+                tag: 'Call 1-888-FIX-HULL. Every kit ships with three patch units and a pressure gauge.',
+                legal: 'Not rated for military hulls or pressurised cargo sections. Sealing a hull does not substitute for a proper drydock inspection.',
+            },
+        ];
+        const item = pickFrom(SHOWS, SHOWS[0]);
+        return {
+            kind: 'infomercial',
+            isInfomercial: true,
+            brand: item.brand,
+            product: item.product,
+            phone: item.phone,
+            beats: [
+                { kind: 'hook', text: item.hook },
+                { kind: 'body', text: item.body },
+                { kind: 'claim', text: item.claim },
+                { kind: 'tag', text: item.tag },
+                { kind: 'legal', text: item.legal },
+            ],
+        };
+    }
+
     // ---------------------------------------------------------
     // Ticker
     // ---------------------------------------------------------
@@ -1116,9 +1539,12 @@ const GNNScript = (() => {
     return {
         properNouns, numbers, keywords, sourceText,
         sectorWire, banter, banterBeat, toss, hold,
-        ident, signoff, commercial, promo,
+        ident, signoff, commercial, promo, galaxyShop, infomercial,
         showOpen, intoBreak, outOfBreak, showClose, exchange, desk,
         twoWay,
         tickerSegments, chyron, sponsorName,
+        shortenHeadline, rundownOpen, breakingIntro,
+        /** The species with a correspondent plate on disk — read-only. */
+        CORRESPONDENT_READY,
     };
 })();

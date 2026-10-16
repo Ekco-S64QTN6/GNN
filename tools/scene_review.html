@@ -16,111 +16,294 @@
             font-family: ui-monospace, 'JetBrains Mono', monospace;
             margin: 0;
             padding: 0;
+            height: 100vh;
+            overflow: hidden;
         }
 
         #wrap {
             display: grid;
-            grid-template-columns: 280px 1fr;
-            height: 100vh;
+            grid-template-columns: 340px 1fr;
+            height: calc(100vh - 28px);
         }
 
         #side {
             border-right: 1px solid #1f1f2e;
-            padding: 20px;
+            padding: 14px;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
 
         #side h1 {
-            font-size: 0.9rem;
-            letter-spacing: 0.1em;
-            margin: 0 0 1.2em;
+            font-size: 0.8rem;
+            letter-spacing: 0.15em;
+            margin: 0;
             color: #6fc3df;
         }
 
-        #side button {
-            display: block;
-            width: 100%;
-            margin-bottom: 8px;
-            padding: 10px;
-            font-family: inherit;
-            font-size: 0.75rem;
+        .mode-buttons {
+            display: flex;
+            gap: 4px;
+        }
+
+        .mode-buttons button {
+            flex: 1;
+            padding: 8px 4px;
+            font-size: 0.68rem;
             background: #14141e;
-            color: #e0e0ec;
+            color: #a0a0b8;
             border: 1px solid #2a2a3e;
-            border-radius: 4px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .mode-buttons button.active {
+            background: #0a2540;
+            color: #9fe6ff;
+            border-color: #6fc3df;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .controls button {
+            padding: 8px;
+            font-family: inherit;
+            font-size: 0.7rem;
+            background: #1a3a4a;
+            color: #cfeaff;
+            border: 1px solid #2a5a6e;
+            border-radius: 3px;
             cursor: pointer;
             text-align: left;
         }
 
-        #side button:hover:not(:disabled) {
-            background: #1e1e2e;
-            border-color: #6fc3df;
+        .controls button:hover:not(:disabled) {
+            background: #2a5a6e;
         }
 
-        #side button:disabled {
+        .controls button:disabled {
             opacity: 0.4;
             cursor: default;
         }
 
-        #side button.active {
-            background: #0a2540;
-            border-color: #6fc3df;
+        .controls select {
+            width: 100%;
+            padding: 8px;
+            font-family: inherit;
+            font-size: 0.72rem;
+            background: #14141e;
+            color: #e0e0ec;
+            border: 1px solid #2a2a3e;
+            border-radius: 3px;
         }
 
-        #side hr {
+        hr {
             border: 0;
             border-top: 1px solid #1f1f2e;
-            margin: 16px 0;
+            margin: 2px 0;
         }
 
-        #controls {
+        #detail {
             display: flex;
             flex-direction: column;
             gap: 8px;
-            margin-bottom: 16px;
         }
 
-        #controls button {
-            background: #1a3a4a;
-            border-color: #2a5a6e;
-            text-align: center;
-            font-weight: bold;
-        }
-
-        #main {
-            padding: 20px;
-            overflow-y: auto;
-        }
-
-        #stage {
-            display: block;
+        #detail-canvas {
             background: #000;
             image-rendering: pixelated;
             border: 1px solid #2a2a3e;
-            max-width: 100%;
+            width: 100%;
+            height: auto;
+            display: block;
         }
 
-        #status {
-            margin-top: 1em;
-            font-size: 0.75rem;
-            line-height: 1.6;
+        #scrubber {
+            width: 100%;
+        }
+
+        #detail-info {
+            font-size: 0.66rem;
+            line-height: 1.55;
             color: #9a9ab0;
             white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 220px;
+            overflow-y: auto;
         }
 
-        #results {
-            margin-top: 1em;
-            font-size: 0.75rem;
-            line-height: 1.8;
+        #deny-panel {
+            border: 1px solid #5a1a1a;
+            border-radius: 3px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 0.66rem;
         }
 
-        #results a {
-            color: #6fc3df;
-            text-decoration: none;
+        #deny-panel h2 {
+            font-size: 0.7rem;
+            margin: 0;
+            letter-spacing: 0.1em;
+            color: #ff8080;
         }
 
-        #results a:hover {
-            text-decoration: underline;
+        #deny-panel .count {
+            font-size: 0.62rem;
+            color: #8a8aa0;
+        }
+
+        #deny-panel button {
+            padding: 6px;
+            font-family: inherit;
+            font-size: 0.66rem;
+            background: #2a1a1a;
+            color: #ffc0c0;
+            border: 1px solid #5a1a1a;
+            border-radius: 3px;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        #deny-panel button:hover {
+            background: #3a1a1a;
+        }
+
+        #main {
+            overflow-y: auto;
+            padding: 14px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 12px;
+        }
+
+        .tile {
+            background: #0c0c14;
+            border: 1px solid #2a2a3e;
+            border-radius: 4px;
+            padding: 8px;
+            cursor: pointer;
+            transition: border-color 0.12s, opacity 0.12s;
+            position: relative;
+        }
+
+        .tile:hover {
+            border-color: #6fc3df;
+        }
+
+        .tile.selected {
+            border-color: #9fe6ff;
+            background: #0a2540;
+        }
+
+        .tile.denied {
+            opacity: 0.35;
+            border-color: #5a1a1a;
+        }
+
+        .tile.denied:hover {
+            border-color: #8a2a2a;
+        }
+
+        .deny-btn {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            padding: 2px 5px;
+            font-size: 0.6rem;
+            font-family: inherit;
+            background: #2a1a1a;
+            color: #ffc0c0;
+            border: 1px solid #5a1a1a;
+            border-radius: 2px;
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        .deny-btn:hover {
+            background: #5a1a1a;
+            color: #ffe0e0;
+        }
+
+        .tile.denied .deny-btn {
+            background: #8a2a2a;
+            color: #fff;
+            border-color: #c04040;
+        }
+
+        .tile canvas,
+        .tile img {
+            display: block;
+            width: 100%;
+            height: auto;
+            background: #000;
+            image-rendering: pixelated;
+            aspect-ratio: 16 / 10;
+            object-fit: contain;
+        }
+
+        .tile .label {
+            margin-top: 6px;
+            font-size: 0.72rem;
+            color: #cfeaff;
+            letter-spacing: 0.05em;
+            padding-right: 32px;
+        }
+
+        .tile .note {
+            font-size: 0.62rem;
+            color: #6a6a80;
+            margin-top: 2px;
+        }
+
+        .tile .assets {
+            font-size: 0.6rem;
+            color: #8a8aa0;
+            margin-top: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tile .badge {
+            display: inline-block;
+            padding: 1px 5px;
+            border-radius: 2px;
+            font-size: 0.55rem;
+            background: #1a3a4a;
+            color: #9fe6ff;
+            margin-left: 4px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 28px;
+            line-height: 28px;
+            background: #05050a;
+            padding: 0 14px;
+            font-size: 0.68rem;
+            color: #6a6a80;
+            border-top: 1px solid #1f1f2e;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
     </style>
 </head>
@@ -129,266 +312,682 @@
     <div id="wrap">
         <aside id="side">
             <h1>SCENE REVIEW</h1>
-            <div id="controls">
-                <button id="render-video" disabled>Render all → video (.webm)</button>
-                <button id="render-sheet" disabled>Render all → contact sheet (.png)</button>
-                <button id="stop" disabled>Stop</button>
+
+            <div class="mode-buttons">
+                <button data-mode="recipes" class="active">Recipes</button>
+                <button data-mode="cutscenes">Cutscenes</button>
             </div>
+
             <hr>
-            <div id="recipe-list"></div>
+
+            <div class="controls" id="controls-recipes">
+                <button id="reroll">Re-roll all recipes</button>
+                <button id="pause">Pause all</button>
+                <button id="render-sheet">Export sheet (selected)</button>
+            </div>
+
+            <div class="controls hidden" id="controls-cutscenes">
+                <select id="archive-select"></select>
+                <button id="play-item">Play / Pause item</button>
+                <button id="step-prev">◀ Prev frame</button>
+                <button id="step-next">Next frame ▶</button>
+            </div>
+
+            <div id="deny-panel">
+                <h2>DENY LIST</h2>
+                <div class="count" id="deny-count">0 flagged</div>
+                <button id="deny-current" disabled>⊘ Deny current item</button>
+                <button id="deny-export">⤓ Export flags (JSON)</button>
+                <button id="deny-import">⤒ Import flags (paste)</button>
+                <button id="deny-clear">✕ Clear all flags</button>
+            </div>
+
+            <hr>
+
+            <div id="detail" class="hidden">
+                <canvas id="detail-canvas" width="640" height="400"></canvas>
+                <input type="range" id="scrubber" min="0" max="1000" value="0">
+                <div id="detail-info"></div>
+            </div>
         </aside>
+
         <main id="main">
-            <canvas id="stage" width="640" height="400"></canvas>
-            <div id="status">Loading assets…</div>
-            <div id="results"></div>
+            <div id="recipes-view">
+                <div class="grid" id="recipe-grid"></div>
+            </div>
+            <div id="cutscenes-view" class="hidden">
+                <div class="grid" id="item-grid"></div>
+            </div>
         </main>
     </div>
+
+    <div id="status-bar">Loading assets…</div>
 
     <script src="/js/asset-registry.js"></script>
     <script src="/js/scene-compositor.js"></script>
     <script>
         'use strict';
 
-        // The nine recipes, in the order they appear in scene-compositor.js.
-        // The note is shown as a tooltip on the sidebar button.
-        const RECIPES = [
-            { name: 'convoy', note: 'Freighter convoy crossing a skyline' },
-            { name: 'tactical', note: 'Tactical plot: starfield + drifting target' },
-            { name: 'survey', note: 'Orbital survey: planet + scan bar' },
-            { name: 'council', note: 'Council floor with delegate cut-ins' },
-            { name: 'interview', note: 'Interview two-shot' },
-            { name: 'industry', note: 'Industrial floor: colony panels + machinery' },
-            { name: 'anomaly', note: 'Gravitic anomaly: vortex + inward debris' },
-            { name: 'cyber', note: 'Data centre: espionage plates' },
-            { name: 'deepfield', note: 'Deep field: nebula stack' },
-        ];
+        const REVIEW = (() => {
+            const $ = (id) => document.getElementById(id);
+            const setStatus = (msg) => { $('status-bar').textContent = msg; };
 
-        // Renders per recipe. The recipes are randomised, so two renders of the
-        // same recipe do not look alike. Two is enough to see variety without
-        // turning the review into a chore.
-        const REPEATS = 2;
+            const state = {
+                mode: 'recipes',
+                recipes: [],
+                scenes: {},
+                tiles: {},
+                selectedRecipe: null,
+                paused: false,
+                scrubT: 0,
+                manifest: null,
+                currentArchive: null,
+                currentItem: null,
+                currentFrame: 0,
+                playing: false,
+                lastFrameTime: 0,
+                lastTick: 0,
+            };
 
-        const VIDEO_FPS = 30;
-        const SHEET_COLS = 4;
-        const SHEET_ROWS = 2;
-        const SHEET_CELL_W = 640;
-        const SHEET_CELL_H = 400;
+            const RECIPE_NOTES = {
+                convoy: 'Freighter convoy crossing a skyline',
+                tactical: 'Starfield + drifting target',
+                survey: 'Planet + scan bar',
+                council: 'Council floor — establishing shot',
+                interview: 'EMBASSY: room + ambassador + rep',
+                industry: 'Industrial floor: skyline + machinery',
+                anomaly: 'Vortex + inward debris',
+                deepfield: 'Nebula stack, no subject',
+            };
 
-        const $ = (id) => document.getElementById(id);
-        const stage = $('stage');
-        const stageCtx = stage.getContext('2d');
-        stageCtx.imageSmoothingEnabled = false;
+            // ============================================================
+            // Deny list UI
+            // ============================================================
 
-        const statusEl = $('status');
-        const resultsEl = $('results');
-        const listEl = $('recipe-list');
-        const btnVideo = $('render-video');
-        const btnSheet = $('render-sheet');
-        const btnStop = $('stop');
-
-        let stopping = false;
-
-        function setStatus(msg) { statusEl.textContent = msg; }
-        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-        /** Draw the scene's shared buffer into the preview canvas. */
-        function previewScene(buf) {
-            stageCtx.clearRect(0, 0, stage.width, stage.height);
-            stageCtx.drawImage(buf, 0, 0, stage.width, stage.height);
-        }
-
-        async function loadAssets() {
-            await GNNAssets.init();
-        }
-
-        /**
-         * Render a scene into the preview canvas over its full duration, at
-         * real-time speed. `onFrame` is optional and gets the buffer and the
-         * frame index on each tick.
-         */
-        async function playScene(scene, onFrame) {
-            const duration = scene.duration || 8000;
-            const frameMs = 1000 / VIDEO_FPS;
-            const totalFrames = Math.ceil(duration / frameMs);
-
-            for (let i = 0; i < totalFrames; i++) {
-                if (stopping) return;
-                const elapsed = i * frameMs;
-                const buf = GNNSceneCompositor.draw(scene, elapsed);
-                previewScene(buf);
-                if (onFrame) onFrame(buf, i);
-                await sleep(frameMs);
+            function updateDenyCount() {
+                const list = GNNSceneCompositor.getDenyList();
+                const total = list.static.length + list.dynamic.length;
+                $('deny-count').textContent =
+                    `${total} flagged (${list.static.length} built-in, ${list.dynamic.length} yours)`;
             }
-        }
 
-        /** Record one scene as a .webm via MediaRecorder. */
-        async function recordScene(name) {
-            const scene = await GNNSceneCompositor.synthesize(name);
-            if (!scene) return null;
-
-            const stream = stage.captureStream(VIDEO_FPS);
-            const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-                ? 'video/webm;codecs=vp9'
-                : 'video/webm';
-            const rec = new MediaRecorder(stream, {
-                mimeType: mime,
-                videoBitsPerSecond: 4000000,
-            });
-            const chunks = [];
-            rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-
-            const stopped = new Promise(r => { rec.onstop = r; });
-            rec.start(200);
-
-            await playScene(scene);
-
-            rec.stop();
-            await stopped;
-
-            return new Blob(chunks, { type: 'video/webm' });
-        }
-
-        /** Render a scene as a grid of stills across its duration. */
-        async function contactSheetScene(name) {
-            const scene = await GNNSceneCompositor.synthesize(name);
-            if (!scene) return null;
-
-            const cols = SHEET_COLS, rows = SHEET_ROWS;
-            const cw = SHEET_CELL_W, ch = SHEET_CELL_H;
-            const sheet = document.createElement('canvas');
-            sheet.width = cols * cw;
-            sheet.height = rows * ch;
-            const sctx = sheet.getContext('2d');
-            sctx.imageSmoothingEnabled = false;
-            sctx.fillStyle = '#000';
-            sctx.fillRect(0, 0, sheet.width, sheet.height);
-
-            const duration = scene.duration || 8000;
-            const n = cols * rows;
-
-            for (let i = 0; i < n; i++) {
-                if (stopping) return null;
-                const t = (duration - 1) * (i / (n - 1));
-                const buf = GNNSceneCompositor.draw(scene, t);
-                previewScene(buf);
-                const cx = (i % cols) * cw;
-                const cy = Math.floor(i / cols) * ch;
-                sctx.drawImage(buf, cx, cy, cw, ch);
-                sctx.strokeStyle = '#2a2a3e';
-                sctx.lineWidth = 1;
-                sctx.strokeRect(cx + 0.5, cy + 0.5, cw - 1, ch - 1);
-                await sleep(30);
+            function refreshTileDenyVisuals() {
+                // For cutscene tiles, the deny state is per-item. For recipe
+                // tiles there is nothing to flag — a recipe is a rule, not an
+                // asset — so only cutscene tiles carry the deny button.
+                document.querySelectorAll('#item-grid .tile').forEach((tile) => {
+                    const id = tile.dataset.id;
+                    if (!id) return;
+                    const denied = GNNSceneCompositor.isDenied(id);
+                    tile.classList.toggle('denied', denied);
+                    const btn = tile.querySelector('.deny-btn');
+                    if (btn) btn.textContent = denied ? '⊘' : '⊘';
+                    if (btn) btn.title = denied ? 'Un-deny this item' : 'Deny this item';
+                });
+                $('deny-current').disabled = !state.currentItem
+                    || state.mode !== 'cutscenes';
+                if (state.currentItem && state.mode === 'cutscenes') {
+                    const d = GNNSceneCompositor.isDenied(state.currentItem.id);
+                    $('deny-current').textContent = d
+                        ? '⊘ Un-deny current item'
+                        : '⊘ Deny current item';
+                }
+                updateDenyCount();
             }
-            return sheet;
-        }
 
-        function downloadBlob(blob, filename) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(url), 5000);
-        }
+            function toggleDeny(id) {
+                if (!id) return;
+                const now = !GNNSceneCompositor.isDenied(id);
+                GNNSceneCompositor.setDenied(id, now);
+                refreshTileDenyVisuals();
+                // The selected recipe tile may be drawing an item that just
+                // got denied; re-roll to remove it from any live scene.
+                if (state.mode === 'recipes') rerollAll();
+            }
 
-        function noteResult(name, blob, ext) {
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `${name}.${ext}`;
-            link.textContent = `${name}.${ext} — ${(blob.size / 1024).toFixed(0)} KB`;
-            const line = document.createElement('div');
-            line.appendChild(link);
-            resultsEl.appendChild(line);
-        }
+            // ============================================================
+            // Recipes mode
+            // ============================================================
 
-        async function renderAll(mode) {
-            stopping = false;
-            btnVideo.disabled = true;
-            btnSheet.disabled = true;
-            btnStop.disabled = false;
-            resultsEl.innerHTML = '';
+            async function initRecipes() {
+                const names = (typeof GNNSceneCompositor !== 'undefined'
+                    && GNNSceneCompositor.recipes)
+                    ? GNNSceneCompositor.recipes()
+                    : [];
+                state.recipes = names.map(n => ({
+                    name: n,
+                    note: RECIPE_NOTES[n] || '',
+                }));
+                await buildAllScenes();
+                buildRecipeGrid();
+            }
 
-            for (const recipe of RECIPES) {
-                for (let r = 0; r < REPEATS; r++) {
-                    if (stopping) break;
-                    const suffix = REPEATS > 1 ? `_r${r + 1}` : '';
-                    setStatus(`Rendering ${recipe.name}${suffix} …`);
-
-                    if (mode === 'video') {
-                        const blob = await recordScene(recipe.name);
-                        if (blob && blob.size) {
-                            downloadBlob(blob, `${recipe.name}${suffix}.webm`);
-                            noteResult(`${recipe.name}${suffix}`, blob, 'webm');
-                        }
-                    } else {
-                        const sheet = await contactSheetScene(recipe.name);
-                        if (sheet) {
-                            const blob = await new Promise(r => sheet.toBlob(r, 'image/png'));
-                            downloadBlob(blob, `${recipe.name}${suffix}.png`);
-                            noteResult(`${recipe.name}${suffix}`, blob, 'png');
-                        }
+            async function buildAllScenes() {
+                state.scenes = {};
+                for (const r of state.recipes) {
+                    try {
+                        state.scenes[r.name] = await GNNSceneCompositor.synthesize(r.name);
+                    } catch (err) {
+                        console.error('[review] synthesize failed for', r.name, err);
+                        state.scenes[r.name] = null;
                     }
-                    // A beat between downloads — the browser will queue them otherwise.
-                    await sleep(400);
+                }
+                let ok = 0, fail = 0;
+                for (const r of state.recipes) {
+                    if (state.scenes[r.name]) ok++; else fail++;
+                }
+                setStatus(`Built ${ok}/${state.recipes.length} recipe scenes${fail ? ' (' + fail + ' failed)' : ''}`);
+            }
+
+            function buildRecipeGrid() {
+                const grid = $('recipe-grid');
+                grid.innerHTML = '';
+                state.tiles = {};
+                for (const r of state.recipes) {
+                    const scene = state.scenes[r.name];
+
+                    const tile = document.createElement('div');
+                    tile.className = 'tile';
+                    tile.dataset.name = r.name;
+                    if (r.name === state.selectedRecipe) tile.classList.add('selected');
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 320;
+                    canvas.height = 200;
+                    tile.appendChild(canvas);
+
+                    const label = document.createElement('div');
+                    label.className = 'label';
+                    label.textContent = r.name;
+                    if (!scene) {
+                        const b = document.createElement('span');
+                        b.className = 'badge';
+                        b.style.background = '#5a1a1a';
+                        b.style.color = '#ff9999';
+                        b.textContent = 'FAILED';
+                        label.appendChild(b);
+                    }
+                    tile.appendChild(label);
+
+                    const note = document.createElement('div');
+                    note.className = 'note';
+                    note.textContent = r.note;
+                    tile.appendChild(note);
+
+                    const assets = document.createElement('div');
+                    assets.className = 'assets';
+                    if (scene) {
+                        const ids = scene.layers
+                            .filter(l => l && l.entry)
+                            .map(l => l.entry.id)
+                            .join(' · ');
+                        assets.textContent = ids || '(generated plates only)';
+                    } else {
+                        assets.textContent = '(no scene)';
+                    }
+                    tile.appendChild(assets);
+
+                    tile.addEventListener('click', () => selectRecipe(r.name));
+                    grid.appendChild(tile);
+
+                    state.tiles[r.name] = {
+                        canvas,
+                        ctx: canvas.getContext('2d'),
+                    };
                 }
             }
 
-            setStatus(stopping
-                ? 'Stopped.'
-                : 'Done. Files are in your Downloads folder.');
-            btnVideo.disabled = false;
-            btnSheet.disabled = false;
-            btnStop.disabled = true;
-        }
-
-        function buildRecipeList() {
-            listEl.innerHTML = '';
-            for (const r of RECIPES) {
-                const b = document.createElement('button');
-                b.textContent = r.name;
-                b.title = r.note;
-                b.addEventListener('click', async () => {
-                    document.querySelectorAll('#recipe-list button')
-                        .forEach(x => x.classList.remove('active'));
-                    b.classList.add('active');
-                    setStatus(`Previewing ${r.name} …`);
-                    const scene = await GNNSceneCompositor.synthesize(r.name);
-                    if (scene) await playScene(scene);
-                    setStatus(`Finished ${r.name}.`);
+            function selectRecipe(name) {
+                state.selectedRecipe = name;
+                state.scrubT = 0;
+                document.querySelectorAll('#recipe-grid .tile').forEach(t => {
+                    t.classList.toggle('selected', t.dataset.name === name);
                 });
-                listEl.appendChild(b);
-            }
-        }
 
-        btnVideo.addEventListener('click', () => renderAll('video'));
-        btnSheet.addEventListener('click', () => renderAll('sheet'));
-        btnStop.addEventListener('click', () => {
-            stopping = true;
-            btnStop.disabled = true;
-        });
+                const scene = state.scenes[name];
+                const detail = $('detail');
+                const info = $('detail-info');
+                const canvas = $('detail-canvas');
+                detail.classList.remove('hidden');
 
-        (async () => {
-            buildRecipeList();
-            try {
-                await loadAssets();
-                btnVideo.disabled = false;
-                btnSheet.disabled = false;
-                setStatus(
-                    'Ready.\n\n' +
-                    'Click a recipe on the left to preview it in place.\n' +
-                    'Or render all to video, or all to contact sheets.\n\n' +
-                    'Note: recipes are randomised — every render is a fresh scene. ' +
-                    `The tool renders each recipe ${REPEATS} times so you see variety.\n\n` +
-                    'Files land in your browser\'s Downloads folder. Move them into ' +
-                    'docs/scene-review/ when done.'
-                );
-            } catch (err) {
-                setStatus('Asset load failed: ' + err.message);
-                console.error(err);
+                if (!scene) {
+                    canvas.width = 320;
+                    canvas.height = 200;
+                    info.textContent = `Recipe: ${name}\n\n!! scene failed to build — check console`;
+                    return;
+                }
+
+                canvas.width = 320;
+                canvas.height = 200;
+
+                const lines = [
+                    `Recipe: ${name}`,
+                    `Duration: ${scene.duration} ms`,
+                    `Layers: ${scene.layers.length}`,
+                    '',
+                ];
+                scene.layers.forEach((l, i) => {
+                    if (!l) return;
+                    const kind = l.entry ? l.entry.id : (l.frames && l.frames[0] ? 'raw image' : 'empty');
+                    const motion = l.motion || 'still';
+                    const fps = l.fps ? `${l.fps}fps` : 'static';
+                    lines.push(`  ${i + 1}. ${kind}`);
+                    lines.push(`     motion: ${motion}, ${fps}`);
+                    if (l.entry) {
+                        lines.push(`     size: ${l.entry.w}×${l.entry.h}, ${l.entry.frames} frames, role: ${l.entry.role}`);
+                    }
+                });
+                info.textContent = lines.join('\n');
+
+                setStatus(`Selected recipe: ${name}`);
             }
+
+            async function rerollAll() {
+                setStatus('Re-rolling every recipe…');
+                await buildAllScenes();
+                buildRecipeGrid();
+                if (state.selectedRecipe) selectRecipe(state.selectedRecipe);
+            }
+
+            // ============================================================
+            // Cutscenes mode
+            // ============================================================
+
+            async function initCutscenes() {
+                try {
+                    const m = await fetch('/assets/gfx-manifest.json').then(r => r.json());
+                    state.manifest = m;
+                } catch (err) {
+                    console.error('[review] manifest load failed', err);
+                    return;
+                }
+                const sel = $('archive-select');
+                sel.innerHTML = '';
+                const names = Object.keys(state.manifest).sort();
+                // MoO2 archives are namespaced with a "_moo2" suffix where
+                // they collide with a MoO1 name (SHIPS, MONSTER, PLANETS).
+                // Group them at the bottom of the list with a marker so it is
+                // obvious which library an archive is from.
+                for (const name of names) {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = `${name}  (${state.manifest[name].length})`;
+                    sel.appendChild(opt);
+                }
+                sel.addEventListener('change', () => {
+                    state.currentArchive = sel.value;
+                    buildItemGrid();
+                });
+                state.currentArchive = names[0];
+                buildItemGrid();
+            }
+
+            function buildItemGrid() {
+                const grid = $('item-grid');
+                grid.innerHTML = '';
+                const entries = state.manifest[state.currentArchive] || [];
+                for (const e of entries) {
+                    const tile = document.createElement('div');
+                    tile.className = 'tile';
+                    tile.dataset.id = e.id;
+                    if (state.currentItem && state.currentItem.id === e.id) {
+                        tile.classList.add('selected');
+                    }
+
+                    // Deny toggle, top-right.
+                    const denyBtn = document.createElement('button');
+                    denyBtn.className = 'deny-btn';
+                    denyBtn.textContent = '⊘';
+                    denyBtn.title = GNNSceneCompositor.isDenied(e.id)
+                        ? 'Un-deny this item'
+                        : 'Deny this item';
+                    denyBtn.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        toggleDeny(e.id);
+                    });
+                    tile.appendChild(denyBtn);
+
+                    const names = Object.keys(state.manifest).sort();
+                    // MoO2 archives are namespaced with a "_moo2" suffix where
+                    const img = document.createElement('img');
+                    img.loading = 'lazy';
+                    // framePath handles source routing: MoO2 entries carry
+                    // `source: 'moo2'`, and the registry's framePath already
+                    // builds assets/cutscenes/moo2/<dir>/item_XX_frame_YYY.png
+                    // for those.
+                    img.src = GNNAssets.framePath(e, e.hero || 0);              // they collide with a MoO1 name (SHIPS, MONSTER, PLANETS).
+                    // Group them at the bottom of the list with a marker so it is
+                    // obvious which library an archive is from.
+                    img.alt = e.id;
+                    tile.appendChild(img);
+
+                    const label = document.createElement('div');
+                    label.className = 'label';
+                    label.textContent = `item ${String(e.item).padStart(2, '0')}`;
+                    const b = document.createElement('span');
+                    b.className = 'badge';
+                    b.textContent = e.role;
+                    label.appendChild(b);
+                    tile.appendChild(label);
+
+                    const note = document.createElement('div');
+                    note.className = 'note';
+                    note.textContent = `${e.w}×${e.h}, ${e.frames} frame${e.frames === 1 ? '' : 's'}, coverage ${e.coverage}`;
+                    tile.appendChild(note);
+
+                    const assets = document.createElement('div');
+                    assets.className = 'assets';
+                    const pools = (e.pools || []).join(', ');
+                    assets.textContent = pools ? `pools: ${pools}` : '(no pools)';
+                    tile.appendChild(assets);
+
+                    tile.addEventListener('click', () => selectItem(e));
+                    grid.appendChild(tile);
+                }
+                refreshTileDenyVisuals();
+                setStatus(`${state.currentArchive}: ${entries.length} items`);
+            }
+
+            function selectItem(entry) {
+                state.currentItem = entry;
+                state.currentFrame = entry.hero || 0;
+                state.playing = false;
+
+                document.querySelectorAll('#item-grid .tile').forEach(t => {
+                    t.classList.toggle('selected', t.dataset.id === entry.id);
+                });
+
+                const detail = $('detail');
+                detail.classList.remove('hidden');
+                const canvas = $('detail-canvas');
+                canvas.width = entry.w;
+                canvas.height = entry.h;
+
+                const lines = [
+                    `Item: ${entry.id}`,
+                    `Archive: ${entry.dir}  ·  item ${entry.item}`,
+                    `Size: ${entry.w}×${entry.h}`,
+                    `Frames: ${entry.frames}`,
+                    `Role: ${entry.role}`,
+                    `Coverage: ${entry.coverage}`,
+                    `Luminance: ${entry.lum}`,
+                    `Colours: ${entry.colors}`,
+                    `Noise: ${entry.noise}`,
+                    `UI score: ${entry.ui}`,
+                    `Pools: ${(entry.pools || []).join(', ') || '—'}`,
+                    `Denied: ${GNNSceneCompositor.isDenied(entry.id) ? 'YES' : 'no'}`,
+                ];
+                $('detail-info').textContent = lines.join('\n');
+
+                drawItemFrame();
+                refreshTileDenyVisuals();
+            }
+
+            function drawItemFrame() {
+                const e = state.currentItem;
+                if (!e) return;
+                const canvas = $('detail-canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.imageSmoothingEnabled = false;
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = GNNAssets.framePath(e, state.currentFrame);
+            }
+
+            function stepItem(delta) {
+                const e = state.currentItem;
+                if (!e || e.frames <= 1) return;
+                state.currentFrame = ((state.currentFrame + delta) % e.frames + e.frames) % e.frames;
+                $('scrubber').value = Math.round(1000 * state.currentFrame / (e.frames - 1 || 1));
+                drawItemFrame();
+            }
+
+            function toggleItemPlay() {
+                if (!state.currentItem || state.currentItem.frames <= 1) return;
+                state.playing = !state.playing;
+                state.lastFrameTime = performance.now();
+            }
+
+            // ============================================================
+            // Render loop
+            // ============================================================
+
+            function startLoop() {
+                const tick = (now) => {
+                    const dt = state.lastTick ? now - state.lastTick : 0;
+                    state.lastTick = now;
+
+                    if (state.mode === 'recipes') {
+                        if (!state.paused && state.selectedRecipe) {
+                            const scene = state.scenes[state.selectedRecipe];
+                            if (scene) {
+                                state.scrubT = (state.scrubT + dt) % (scene.duration || 8000);
+                                $('scrubber').value = Math.round(1000 * state.scrubT / (scene.duration || 8000));
+                            }
+                        }
+
+                        for (const r of state.recipes) {
+                            const scene = state.scenes[r.name];
+                            const tile = state.tiles[r.name];
+                            if (!scene || !tile) continue;
+                            const elapsed = (now % (scene.duration || 8000));
+                            const buf = GNNSceneCompositor.draw(scene, elapsed);
+                            tile.ctx.imageSmoothingEnabled = false;
+                            tile.ctx.drawImage(buf, 0, 0, tile.canvas.width, tile.canvas.height);
+                        }
+
+                        if (state.selectedRecipe) {
+                            const scene = state.scenes[state.selectedRecipe];
+                            if (scene) {
+                                const buf = GNNSceneCompositor.draw(scene, state.scrubT);
+                                const canvas = $('detail-canvas');
+                                const ctx = canvas.getContext('2d');
+                                ctx.imageSmoothingEnabled = false;
+                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                ctx.drawImage(buf, 0, 0, canvas.width, canvas.height);
+                            }
+                        }
+                    } else {
+                        if (state.playing && state.currentItem) {
+                            const e = state.currentItem;
+                            const frameMs = 1000 / 12;
+                            if (now - state.lastFrameTime >= frameMs) {
+                                state.lastFrameTime = now;
+                                state.currentFrame = (state.currentFrame + 1) % e.frames;
+                                $('scrubber').value = Math.round(1000 * state.currentFrame / (e.frames - 1 || 1));
+                                drawItemFrame();
+                            }
+                        }
+                    }
+
+                    requestAnimationFrame(tick);
+                };
+                requestAnimationFrame(tick);
+            }
+
+            // ============================================================
+            // Mode switching and control wiring
+            // ============================================================
+
+            function setMode(mode) {
+                state.mode = mode;
+                document.querySelectorAll('.mode-buttons button').forEach(b => {
+                    b.classList.toggle('active', b.dataset.mode === mode);
+                });
+                $('recipes-view').classList.toggle('hidden', mode !== 'recipes');
+                $('cutscenes-view').classList.toggle('hidden', mode !== 'cutscenes');
+                $('controls-recipes').classList.toggle('hidden', mode !== 'recipes');
+                $('controls-cutscenes').classList.toggle('hidden', mode !== 'cutscenes');
+
+                if (mode === 'recipes' && state.selectedRecipe) {
+                    selectRecipe(state.selectedRecipe);
+                } else if (mode === 'cutscenes' && state.currentItem) {
+                    selectItem(state.currentItem);
+                } else if (mode === 'cutscenes' && !state.currentItem) {
+                    $('detail').classList.add('hidden');
+                }
+                refreshTileDenyVisuals();
+            }
+
+            function wireControls() {
+                document.querySelectorAll('.mode-buttons button').forEach(b => {
+                    b.addEventListener('click', () => setMode(b.dataset.mode));
+                });
+
+                $('reroll').addEventListener('click', rerollAll);
+
+                $('pause').addEventListener('click', () => {
+                    state.paused = !state.paused;
+                    $('pause').textContent = state.paused ? 'Resume all' : 'Pause all';
+                });
+
+                $('render-sheet').addEventListener('click', async () => {
+                    const name = state.selectedRecipe;
+                    if (!name) { setStatus('Select a recipe first.'); return; }
+                    const scene = state.scenes[name];
+                    if (!scene) { setStatus('No scene for that recipe.'); return; }
+                    setStatus(`Rendering contact sheet for ${name}…`);
+                    const sheet = await buildContactSheet(scene, 4, 2);
+                    downloadCanvas(sheet, `${name}_sheet.png`);
+                    setStatus(`Contact sheet for ${name} downloaded.`);
+                });
+
+                $('scrubber').addEventListener('input', () => {
+                    const v = Number($('scrubber').value) / 1000;
+                    if (state.mode === 'recipes' && state.selectedRecipe) {
+                        const scene = state.scenes[state.selectedRecipe];
+                        if (scene) {
+                            state.paused = true;
+                            $('pause').textContent = 'Resume all';
+                            state.scrubT = v * (scene.duration || 8000);
+                        }
+                    } else if (state.mode === 'cutscenes' && state.currentItem) {
+                        const e = state.currentItem;
+                        state.playing = false;
+                        state.currentFrame = Math.round(v * (e.frames - 1 || 1));
+                        drawItemFrame();
+                    }
+                });
+
+                $('play-item').addEventListener('click', toggleItemPlay);
+                $('step-prev').addEventListener('click', () => stepItem(-1));
+                $('step-next').addEventListener('click', () => stepItem(1));
+
+                $('deny-current').addEventListener('click', () => {
+                    if (state.currentItem) toggleDeny(state.currentItem.id);
+                });
+
+                $('deny-clear').addEventListener('click', () => {
+                    if (!confirm('Clear every flag you have added in this browser? Built-in denials are not affected.')) return;
+                    GNNSceneCompositor.clearDynamicDeny();
+                    refreshTileDenyVisuals();
+                    if (state.mode === 'recipes') rerollAll();
+                    setStatus('Dynamic deny flags cleared.');
+                });
+
+                $('deny-export').addEventListener('click', () => {
+                    const list = GNNSceneCompositor.getDenyList();
+                    const blob = new Blob([JSON.stringify(list, null, 2)],
+                        { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'gnn-deny-list.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 5000);
+                    setStatus('Deny list exported.');
+                });
+
+                $('deny-import').addEventListener('click', () => {
+                    const raw = prompt('Paste the "dynamic" array from a previous export:');
+                    if (!raw) return;
+                    try {
+                        const parsed = JSON.parse(raw);
+                        const ids = Array.isArray(parsed) ? parsed
+                            : (Array.isArray(parsed.dynamic) ? parsed.dynamic : []);
+                        GNNSceneCompositor.importDynamicDeny(ids);
+                        refreshTileDenyVisuals();
+                        if (state.mode === 'recipes') rerollAll();
+                        setStatus(`Imported ${ids.length} deny flags.`);
+                    } catch (err) {
+                        setStatus('Import failed: ' + err.message);
+                    }
+                });
+            }
+
+            function buildContactSheet(scene, cols, rows) {
+                const cellW = 320, cellH = 200;
+                const sheet = document.createElement('canvas');
+                sheet.width = cols * cellW;
+                sheet.height = rows * cellH;
+                const ctx = sheet.getContext('2d');
+                ctx.imageSmoothingEnabled = false;
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, sheet.width, sheet.height);
+                const duration = scene.duration || 8000;
+                const n = cols * rows;
+                for (let i = 0; i < n; i++) {
+                    const t = (duration - 1) * (i / (n - 1));
+                    const buf = GNNSceneCompositor.draw(scene, t);
+                    const cx = (i % cols) * cellW;
+                    const cy = Math.floor(i / cols) * cellH;
+                    ctx.drawImage(buf, cx, cy, cellW, cellH);
+                    ctx.strokeStyle = '#2a2a3e';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(cx + 0.5, cy + 0.5, cellW - 1, cellH - 1);
+                    ctx.fillStyle = '#6fc3df';
+                    ctx.font = '11px monospace';
+                    ctx.fillText(`${(t / 1000).toFixed(1)}s`, cx + 6, cy + 14);
+                }
+                return Promise.resolve(sheet);
+            }
+
+            function downloadCanvas(canvas, filename) {
+                canvas.toBlob(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 5000);
+                }, 'image/png');
+            }
+
+            // ============================================================
+            // Bootstrap
+            // ============================================================
+
+            async function init() {
+                setStatus('Loading assets…');
+                try {
+                    await GNNAssets.init();
+                } catch (err) {
+                    setStatus('Asset load failed: ' + err.message);
+                    console.error(err);
+                    return;
+                }
+
+                wireControls();
+
+                await initRecipes();
+                await initCutscenes();
+                updateDenyCount();
+
+                startLoop();
+                setStatus('Ready — recipes play in the grid; click a tile for detail. ⊘ flags an asset.');
+            }
+
+            return { init, rerollAll };
         })();
+
+        REVIEW.init();
     </script>
 </body>
 

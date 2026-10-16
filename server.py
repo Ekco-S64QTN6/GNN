@@ -13,6 +13,8 @@ Routes
     /api/voices       the running engine's voice catalogue
     /api/localnews    local digest fallback when RSS is rate-limited
     /api/market       live market quotes
+    /api/feed         curated RSS/Atom feed proxy
+    /api/news-ledger  shared persistent story ledger (GET reads, PUT merges)
 
 The TTS route prefers the local Kokoro engine. If Kokoro is missing it
 falls back to edge-tts, and if that is missing too it answers 503 and
@@ -32,13 +34,24 @@ back to the browser. Same pattern as /api/localnews.
 
 Without it, the equities are absent and only crypto shows on the
 crawl. With it, the full row is present.
+
+The /api/localnews route reads *every* news_brief on disk, not just the
+newest one. Returning only the newest left the station with about twenty
+stories to draw from for an entire session — the same headline cycled
+back every fifteen minutes, and the same six headlines appeared across
+every show all night. Fourteen daily briefs is roughly two hundred and
+eighty distinct stories, and the ledger now records which of them have
+already been read so a story cannot air twice in one installation.
 """
 
 import asyncio
 import atexit
+import datetime
+import hashlib
 import http.server
 import json
 import os
+import re
 import shutil
 import signal
 import socketserver
@@ -46,17 +59,128 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
 PORT = int(os.environ.get('GNN_PORT', 8080))
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 PIDFILE = os.path.join(DIRECTORY, '.gnn-server.pid')
-# The same file --bg redirects the server's stdout and stderr into. The
-# /api/log route writes to it explicitly rather than relying on the shell
-# redirect, so browser-side diagnostic lines land here even when the
-# server runs in the foreground and its own output goes to the terminal.
+# The technical server log
 LOG = os.path.join(DIRECTORY, 'gnn-server.log')
+# The clean, dedicated broadcast transcript log
+TRANSCRIPT_LOG = os.path.join(DIRECTORY, 'gnn-transcript.log')
+# The shared story ledger. Every story the station has ever ingested lives
+# here with a status of pending / queued / aired, and no story that reaches
+# 'aired' is ever dispatched again. Kept beside the logs because it is
+# server state — the browser reads and writes it through /api/news-ledger
+# so a cleared profile cannot roll history back.
+LEDGER = os.path.join(DIRECTORY, 'gnn-news-ledger.json')
+# The show-block configuration edited by tools/show-editor.html.
+SHOW_CONFIG = os.path.join(DIRECTORY, 'assets', 'generated', 'show-config.json')
+
+# Size capping: default 250MB, configurable up to 1GB (1000MB) via GNN_MAX_LOG_MB
+MAX_LOG_SIZE_MB = int(os.environ.get('GNN_MAX_LOG_MB', 250))
+MAX_LOG_SIZE_BYTES = max(10, min(1000, MAX_LOG_SIZE_MB)) * 1024 * 1024
+MAX_BACKUPS = int(os.environ.get('GNN_LOG_BACKUPS', 3))
+
+_log_rotate_lock = threading.Lock()
+
+
+def rotate_file_if_needed(path):
+    """Rotate log file if it exceeds MAX_LOG_SIZE_BYTES, retaining up to MAX_BACKUPS archives."""
+    try:
+        if not os.path.exists(path):
+            return
+        if os.path.getsize(path) < MAX_LOG_SIZE_BYTES:
+            return
+
+        with _log_rotate_lock:
+            if not os.path.exists(path) or os.path.getsize(path) < MAX_LOG_SIZE_BYTES:
+                return
+
+            for i in range(MAX_BACKUPS - 1, 0, -1):
+                sfn = f"{path}.{i}"
+                dfn = f"{path}.{i + 1}"
+                if os.path.exists(sfn):
+                    if os.path.exists(dfn):
+                        os.remove(dfn)
+                    os.rename(sfn, dfn)
+
+            dfn = f"{path}.1"
+            if os.path.exists(dfn):
+                os.remove(dfn)
+            os.rename(path, dfn)
+
+            now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(f"[{now_str}] [System] Log rotated (exceeded {MAX_LOG_SIZE_MB}MB). Previous entries archived in {os.path.basename(dfn)}\n")
+    except Exception:
+        pass
+
+
+class TeeStream:
+    """Duplicate stream writes to both the original stream and gnn-server.log with rotation support."""
+    def __init__(self, original, log_file):
+        self.original = original
+        self.log_file = log_file
+        self._lock = threading.Lock()
+
+    def write(self, data):
+        self.original.write(data)
+        if not data:
+            return
+        try:
+            rotate_file_if_needed(self.log_file)
+            with self._lock:
+                with open(self.log_file, 'a', encoding='utf-8') as fh:
+                    fh.write(data)
+                    fh.flush()
+        except OSError:
+            pass
+
+    def flush(self):
+        self.original.flush()
+
+    def fileno(self):
+        return self.original.fileno()
+
+    def isatty(self):
+        return getattr(self.original, 'isatty', lambda: False)()
+
+
+def setup_server_logging():
+    """Ensure all server stdout and stderr writes are mirrored into LOG."""
+    try:
+        import fcntl
+        for fd in (1, 2):
+            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_APPEND)
+    except Exception:
+        pass
+
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(line_buffering=True)
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(line_buffering=True)
+    except Exception:
+        pass
+
+    try:
+        if os.path.exists(LOG) and hasattr(sys.stdout, 'fileno'):
+            s_log = os.stat(LOG)
+            s_out = os.fstat(sys.stdout.fileno())
+            if s_log.st_ino == s_out.st_ino and s_log.st_dev == s_out.st_dev:
+                return
+    except Exception:
+        pass
+
+    sys.stdout = TeeStream(sys.stdout, LOG)
+    sys.stderr = TeeStream(sys.stderr, LOG)
+
+
+setup_server_logging()
 
 ALLOWED_VOICE = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_')
 MAX_TEXT = 1200
@@ -670,13 +794,99 @@ def _refresh_market():
     return quotes
 
 
+# --- persistent news ledger -------------------------------------------
+#
+# The server holds the shared story ledger. Every story the station has ever
+# ingested lives here with a status of pending / queued / aired; the client
+# reads it at boot, merges the browser's copy in, and PUTs back any change.
+# An 'aired' record is terminal — a stale browser's queued copy never rolls
+# it back, so a story that has been read once is never read again, no matter
+# how many tabs are open or how many Chromium profiles have been wiped.
+#
+# The ledger is a single JSON file, rewritten atomically. It grows for the
+# life of the installation; entries are not expired, because an old story
+# that has already aired is exactly the kind of thing that must not come
+# back six weeks later when an RSS feed republishes the same headline.
+
+_ledger_lock = threading.Lock()
+_ledger_cache = None
+
+
+def _title_hash(title):
+    """Stable content hash of a normalised headline."""
+    norm = re.sub(r'[^a-z0-9]+', ' ', str(title or '').lower()).strip()
+    if not norm:
+        return ''
+    return hashlib.sha1(norm.encode('utf-8')).hexdigest()[:16]
+
+
+def _load_ledger():
+    """Load the ledger into memory, or an empty one if it does not exist."""
+    global _ledger_cache
+    if _ledger_cache is not None:
+        return _ledger_cache
+    try:
+        with open(LEDGER, encoding='utf-8') as fh:
+            data = json.load(fh)
+            if not isinstance(data, dict) or 'items' not in data:
+                data = {'version': 1, 'items': {}}
+            if not isinstance(data['items'], dict):
+                # Tolerate the list form the client uses.
+                items = {}
+                for record in data['items'] or []:
+                    if isinstance(record, dict):
+                        key = str(record.get('key') or
+                                  record.get('ledgerKey') or
+                                  _title_hash(record.get('title')))
+                        if key:
+                            items[key] = record
+                data['items'] = items
+            _ledger_cache = data
+    except (OSError, json.JSONDecodeError):
+        _ledger_cache = {'version': 1, 'items': {}}
+    return _ledger_cache
+
+
+def _save_ledger():
+    """Atomically rewrite the ledger file."""
+    tmp = LEDGER + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        json.dump(_ledger_cache, fh, indent=2, ensure_ascii=False)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, LEDGER)
+
+
+def _merge_ledger_record(existing, incoming):
+    """Merge one incoming record over an existing one. 'aired' is terminal."""
+    if not existing:
+        return dict(incoming)
+    merged = dict(existing)
+    merged.update(incoming)
+    # An aired record never rolls back. The reportedAt and reportedShow
+    # fields survive from whichever side first set them.
+    if existing.get('status') == 'aired' or incoming.get('status') == 'aired':
+        merged['status'] = 'aired'
+        merged['reportedAt'] = (existing.get('reportedAt')
+                                or incoming.get('reportedAt'))
+        merged['reportedShow'] = (existing.get('reportedShow')
+                                  or incoming.get('reportedShow'))
+    # Alias and source lists union rather than replace. Different browsers
+    # see different feeds; every provenance is kept.
+    aliases = set(existing.get('aliasKeys') or [])
+    aliases.update(incoming.get('aliasKeys') or [])
+    merged['aliasKeys'] = sorted(aliases)
+    sources = set(existing.get('sources') or [])
+    sources.update(incoming.get('sources') or [])
+    merged['sources'] = sorted(sources)
+    return merged
+
+
 class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
-    # Ceiling on a single browser log line, in bytes. A diagnostic line is
-    # a couple of hundred bytes at most; anything larger is either an
-    # accident or abuse and gets rejected rather than written.
-    LOG_LINE_MAX = 2000
+    _log_file_lock = threading.Lock()
+    _transcript_file_lock = threading.Lock()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
@@ -692,137 +902,489 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def log_message(self, fmt, *args):
-        if '/api/' in (self.path or ''):
-            sys.stderr.write('[GNN] %s\n' % (fmt % args))
+        # Do not log /api/log or /api/transcript requests to avoid log noise/recursion
+        if self.path and (self.path.startswith('/api/log') or self.path.startswith('/api/transcript')):
+            return
+        code = str(args[1]) if len(args) > 1 else ''
+        # Log all /api/ requests, or any HTTP errors (4xx / 5xx) on static assets
+        if '/api/' in (self.path or '') or (code and code.startswith(('4', '5'))):
+            stamp = datetime.datetime.now().strftime('%H:%M:%S')
+            sys.stderr.write('[%s] [GNN Server] %s\n' % (stamp, fmt % args))
+            sys.stderr.flush()
 
     # -- routing ------------------------------------------------
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path.rstrip('/') == '/api/tts':
+        path = parsed.path.rstrip('/')
+        if path == '/api/tts':
             return self.handle_tts(urllib.parse.parse_qs(parsed.query))
-        if parsed.path.rstrip('/') == '/api/status':
+        if path == '/api/status':
             return self.handle_status()
-        if parsed.path.rstrip('/') == '/api/voices':
+        if path == '/api/voices':
             return self.handle_voices()
-        if parsed.path.rstrip('/') == '/api/localnews':
+        if path == '/api/localnews':
             return self.handle_localnews()
-        if parsed.path.rstrip('/') == '/api/market':
+        if path == '/api/market':
             return self.handle_market()
+        if path == '/api/feed':
+            return self.handle_feed(urllib.parse.parse_qs(parsed.query))
+        if path == '/api/news-ledger':
+            return self.handle_newsledger_get()
+        if path == '/api/config':
+            return self.handle_config_get()
+        if path == '/api/config/editor-options':
+            return self.handle_editor_options()
         return super().do_GET()
 
     def do_POST(self):
-        # The only POST route this server serves. Anything else is a 404
-        # rather than a fall-through to SimpleHTTPRequestHandler, which
-        # only implements GET and HEAD and would give a confusing error.
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path.rstrip('/') == '/api/log':
+        path = parsed.path.rstrip('/')
+        if path == '/api/log':
             return self.handle_log()
+        if path == '/api/transcript':
+            return self.handle_transcript()
         return self.send_bytes(b'{"error":"not found"}', 'application/json', 404)
 
+    def do_PUT(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path.rstrip('/')
+        if path == '/api/news-ledger':
+            return self.handle_newsledger_put()
+        if path == '/api/config':
+            return self.handle_config_put()
+        return self.send_bytes(b'{"error":"method not allowed"}',
+                               'application/json', 405)
+
     # -- browser log sink ---------------------------------------
-    #
-    # The client-side diagnostics — the [TTS] lines that trace the boot
-    # race — happen in the browser and have no way to reach a file on
-    # this machine's disk without being told to. This endpoint is that
-    # telling: the browser POSTs one line per call, the server appends
-    # it to gnn-server.log, and the line lands in the same file the
-    # Python side already writes to.
-    #
-    # Deliberately best-effort. A log call that fails is not worth failing
-    # a page load over, and the browser's own console.log still works
-    # regardless of whether this route is reachable.
 
     def handle_log(self):
         try:
             length = int(self.headers.get('Content-Length', '0'))
         except ValueError:
             length = 0
-        if length <= 0 or length > self.LOG_LINE_MAX:
+        if length <= 0:
             return self.send_bytes(b'{"ok":false}', 'application/json', 400)
+
+        MAX_READ = 256 * 1024
         try:
-            raw = self.rfile.read(length)
-            line = raw.decode('utf-8', 'replace').rstrip('\r\n')
+            raw = self.rfile.read(min(length, MAX_READ))
+            if length > MAX_READ:
+                rem = length - MAX_READ
+                while rem > 0:
+                    chunk = self.rfile.read(min(rem, 65536))
+                    if not chunk:
+                        break
+                    rem -= len(chunk)
+            body = raw.decode('utf-8', 'replace').rstrip('\r\n')
         except (OSError, UnicodeError):
             return self.send_bytes(b'{"ok":false}', 'application/json', 400)
-        if not line:
+
+        if not body:
             return self.send_bytes(b'{"ok":true}', 'application/json')
 
-        # Append to gnn-server.log. O_APPEND is atomic for writes under a
-        # few KB on every filesystem this project runs on, so interleaving
-        # with the shell's own redirect of the server's stdout and stderr
-        # is safe — lines do not splice.
-        try:
-            import datetime
-            stamp = datetime.datetime.now().strftime('%H:%M:%S')
-            with open(LOG, 'a', encoding='utf-8') as fh:
-                fh.write('[%s] [Browser] %s\n' % (stamp, line))
-        except OSError:
-            # Disk full, permissions, whatever — the browser still has its
-            # console and the page is not worth breaking over a log.
-            pass
+        now_str = datetime.datetime.now().strftime('%H:%M:%S')
+        lines_to_write = []
+
+        parsed_json = False
+        content_type = self.headers.get('Content-Type', '')
+        if 'application/json' in content_type or body.lstrip().startswith(('{', '[')):
+            try:
+                data = json.loads(body)
+                parsed_json = True
+                entries = data if isinstance(data, list) else [data]
+                for item in entries:
+                    if not isinstance(item, dict):
+                        lines_to_write.append('[%s] [Browser] %s' % (now_str, item))
+                        continue
+                    lvl = str(item.get('level', 'INFO')).upper()
+                    tag = item.get('tag', '')
+                    msg = str(item.get('message', ''))
+                    stack = item.get('stack', '')
+                    item_time = item.get('time', now_str)
+
+                    prefix = '[%s] [Browser:%s]' % (item_time, lvl)
+                    if tag:
+                        prefix += ' [%s]' % tag
+
+                    for m_line in msg.splitlines():
+                        lines_to_write.append('%s %s' % (prefix, m_line))
+                    if stack:
+                        for s_line in str(stack).splitlines():
+                            lines_to_write.append('[%s] [Browser:%s]   %s' % (item_time, lvl, s_line))
+            except Exception:
+                parsed_json = False
+
+        if not parsed_json:
+            for line in body.splitlines():
+                line = line.rstrip()
+                if not line:
+                    continue
+                if line.startswith('[') and len(line) > 10 and line[3] == ':' and line[6] == ':':
+                    lines_to_write.append('[Browser] %s' % line)
+                else:
+                    lines_to_write.append('[%s] [Browser] %s' % (now_str, line))
+
+        if lines_to_write:
+            try:
+                rotate_file_if_needed(LOG)
+                with GNNRequestHandler._log_file_lock:
+                    with open(LOG, 'a', encoding='utf-8') as fh:
+                        for l in lines_to_write:
+                            fh.write(l + '\n')
+                        fh.flush()
+            except OSError:
+                pass
+
         return self.send_bytes(b'{"ok":true}', 'application/json')
 
-    # rss2json has a daily cap, and when it is reached every feed returns an
-    # error and the channel has nothing to read. The Kaiacord project drops a
-    # Gemini-summarised digest into knowledge_base/news/daily every day, which
-    # is a local file and cannot rate-limit. Served here as a fallback the
-    # feed manager can fall back on.
+    # -- broadcast transcript sink ------------------------------
+
+    def handle_transcript(self):
+        try:
+            length = int(self.headers.get('Content-Length', '0'))
+        except ValueError:
+            length = 0
+        if length <= 0:
+            return self.send_bytes(b'{"ok":false}', 'application/json', 400)
+
+        MAX_READ = 512 * 1024
+        try:
+            raw = self.rfile.read(min(length, MAX_READ))
+            if length > MAX_READ:
+                rem = length - MAX_READ
+                while rem > 0:
+                    chunk = self.rfile.read(min(rem, 65536))
+                    if not chunk:
+                        break
+                    rem -= len(chunk)
+            body = raw.decode('utf-8', 'replace').rstrip('\r\n')
+        except (OSError, UnicodeError):
+            return self.send_bytes(b'{"ok":false}', 'application/json', 400)
+
+        if not body:
+            return self.send_bytes(b'{"ok":true}', 'application/json')
+
+        now_ms = datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]
+        lines_to_write = []
+
+        parsed_json = False
+        content_type = self.headers.get('Content-Type', '')
+        if 'application/json' in content_type or body.lstrip().startswith(('{', '[')):
+            try:
+                data = json.loads(body)
+                parsed_json = True
+                entries = data if isinstance(data, list) else [data]
+                for item in entries:
+                    if not isinstance(item, dict):
+                        s = str(item)
+                        if s.startswith('[') and len(s) > 13 and s[3] == ':' and s[6] == ':' and s[9] == '.':
+                            lines_to_write.append(s)
+                        else:
+                            lines_to_write.append('[%s] %s' % (now_ms, s))
+                        continue
+
+                    # Direct formatted lines or list of formatted lines
+                    if 'lines' in item and isinstance(item['lines'], list):
+                        lines_to_write.extend([str(l) for l in item['lines']])
+                    elif 'formatted' in item and item['formatted']:
+                        fmt_val = item['formatted']
+                        if isinstance(fmt_val, list):
+                            lines_to_write.extend([str(l) for l in fmt_val])
+                        else:
+                            lines_to_write.extend(str(fmt_val).splitlines())
+                    else:
+                        ts = item.get('timestamp') or item.get('time') or now_ms
+                        tag = str(item.get('type') or item.get('tag') or 'EVENT').upper()
+                        msg = item.get('text') or item.get('message') or ''
+                        lines_to_write.append('[%s] [%s] %s' % (ts, tag, msg))
+            except Exception:
+                parsed_json = False
+
+        if not parsed_json:
+            for line in body.splitlines():
+                line = line.rstrip()
+                if not line:
+                    continue
+                # If line already starts with [HH:MM:SS.mmm], preserve it
+                if line.startswith('[') and len(line) > 13 and line[3] == ':' and line[6] == ':' and line[9] == '.':
+                    lines_to_write.append(line)
+                elif line.startswith('[') and len(line) > 9 and line[3] == ':' and line[6] == ':':
+                    lines_to_write.append('[%s.%s %s' % (line[1:9], '000]', line[10:].lstrip()))
+                else:
+                    lines_to_write.append('[%s] %s' % (now_ms, line))
+
+        if lines_to_write:
+            try:
+                rotate_file_if_needed(TRANSCRIPT_LOG)
+                with GNNRequestHandler._transcript_file_lock:
+                    with open(TRANSCRIPT_LOG, 'a', encoding='utf-8') as fh:
+                        for l in lines_to_write:
+                            fh.write(l + '\n')
+                        fh.flush()
+            except OSError:
+                pass
+
+        return self.send_bytes(b'{"ok":true}', 'application/json')
+
+    # Curated RSS/Atom sources only. The allowlist prevents this route from
+    # becoming an arbitrary URL fetcher (SSRF). Redirects are checked too.
+    FEED_ALLOWED_HOSTS = {
+        'feeds.arstechnica.com', 'feeds.bbci.co.uk',
+        'feeds.content.dowjones.io', 'news.un.org', 'news.ycombinator.com',
+        'phys.org', 'spaceflightnow.com', 'techcrunch.com',
+        'www.aljazeera.com', 'www.esa.int', 'www.espn.com',
+        'www.livescience.com', 'www.nasa.gov', 'www.nature.com',
+        'www.sciencedaily.com', 'www.technologyreview.com',
+        'www.theverge.com', 'www.wired.com',
+    }
+    FEED_MAX_BYTES = 5 * 1024 * 1024
+
+    def handle_feed(self, query):
+        raw_url = (query.get('url') or [''])[0]
+        try:
+            parsed = urllib.parse.urlparse(raw_url)
+            if (parsed.scheme != 'https' or not parsed.hostname
+                    or parsed.username or parsed.password
+                    or parsed.port not in (None, 443)
+                    or parsed.hostname.lower() not in self.FEED_ALLOWED_HOSTS):
+                return self.send_bytes(b'{"error":"feed URL not allowed"}',
+                                       'application/json', 400)
+
+            allowed_hosts = self.FEED_ALLOWED_HOSTS
+
+            class SafeRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, req, fp, code, msg, headers, newurl):
+                    target = urllib.parse.urlparse(newurl)
+                    if (target.scheme != 'https' or not target.hostname
+                            or target.hostname.lower() not in allowed_hosts
+                            or target.username or target.password
+                            or target.port not in (None, 443)):
+                        raise urllib.error.HTTPError(
+                            newurl, code, 'Redirect host not allowed', headers, fp)
+                    return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+            request = urllib.request.Request(
+                raw_url, headers={'User-Agent': 'GNN-Newsroom/1.0',
+                                   'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml'})
+            opener = urllib.request.build_opener(SafeRedirect())
+            with opener.open(request, timeout=10) as response:
+                final = urllib.parse.urlparse(response.geturl())
+                if (final.scheme != 'https' or not final.hostname
+                        or final.hostname.lower() not in self.FEED_ALLOWED_HOSTS):
+                    return self.send_bytes(b'{"error":"feed redirect not allowed"}',
+                                           'application/json', 502)
+                body = response.read(self.FEED_MAX_BYTES + 1)
+                if len(body) > self.FEED_MAX_BYTES:
+                    return self.send_bytes(b'{"error":"feed too large"}',
+                                           'application/json', 502)
+                if response.status != 200:
+                    return self.send_bytes(b'{"error":"upstream failed"}',
+                                           'application/json', 502)
+            return self.send_bytes(body, 'application/xml; charset=utf-8')
+        except urllib.error.HTTPError as err:
+            stamp = datetime.datetime.now().strftime('%H:%M:%S')
+            # Rejected redirects raise HTTPError with the redirect's own code
+            # (301/302/307...), which is not suitable for a JSON error response.
+            # Clamp those to 502 while preserving genuine upstream 4xx/5xx codes,
+            # including 429 so the client can activate its rate-limit handling.
+            code = err.code if 400 <= err.code < 600 else 502
+            sys.stderr.write('[%s] [GNN Feed] %s -> HTTP %s: %s\n' %
+                             (stamp, raw_url, err.code, err.reason))
+            sys.stderr.flush()
+            return self.send_bytes(
+                json.dumps({'error': 'upstream HTTP %s' % err.code}).encode(),
+                'application/json', code)
+        except Exception as err:
+            sys.stderr.write('[GNN] feed proxy failed %s: %s\n' % (raw_url, err))
+            return self.send_bytes(b'{"error":"upstream failed"}',
+                                   'application/json', 502)
+
+    # Prefer Kaiacord's item-level news_brief over news_summary:
+    # summaries can contain "no news" placeholders, which
+    # are not stories and must never be handed to an anchor as headlines.
     NEWS_DIRS = [
         os.path.expanduser('~/github/Kaiacord/knowledge_base/news/daily'),
         os.path.expanduser('~/github/Kaiacord/knowledge_base/news'),
     ]
-    # The digest's own section headings, mapped onto the show blocks in
-    # docs/ROADMAP.md so the scheduler can target them like any other feed.
-    NEWS_SECTIONS = {
-        'GENERAL NEWS': 'world', 'WORLD': 'world', 'INTERNATIONAL': 'world',
-        'US POLITICS': 'diplomacy', 'POLITICS': 'diplomacy',
-        'BUSINESS': 'markets', 'ECONOMY': 'markets', 'MARKETS': 'markets',
-        'TECH': 'tech', 'TECHNOLOGY': 'tech', 'SCIENCE': 'science',
-        'SPORTS': 'sport', 'SPORT': 'sport', 'HEALTH': 'science',
-        'ENTERTAINMENT': 'world',
-    }
+    NEWS_BRIEF_PREFIX = 'news_brief_'
 
-    def handle_localnews(self):
-        """The newest local digest, as items the feed manager understands."""
-        path = None
-        for d in self.NEWS_DIRS:
-            if not os.path.isdir(d):
+    NEWS_SECTIONS = {
+        'GENERAL NEWS': 'world', 'GENERAL_NEWS': 'world',
+        'WORLD': 'world', 'INTERNATIONAL': 'world',
+        'US POLITICS': 'diplomacy', 'US_POLITICS': 'diplomacy',
+        'POLITICS': 'diplomacy', 'GLOBAL GEOPOLITICS': 'diplomacy',
+        'GLOBAL_GEOPOLITICS': 'diplomacy',
+        'BUSINESS': 'markets', 'BUSINESS AND ECONOMY': 'markets',
+        'BUSINESS_AND_ECONOMY': 'markets', 'ECONOMY': 'markets',
+        'MARKETS': 'markets', 'TECH': 'tech', 'TECHNOLOGY': 'tech',
+        'TECHNOLOGY AND INFRASTRUCTURE': 'tech',
+        'TECHNOLOGY_AND_INFRASTRUCTURE': 'tech',
+        'SCIENCE': 'science', 'SCIENCE AND HEALTH': 'science',
+        'SCIENCE_AND_HEALTH': 'science', 'SPORTS': 'sport', 'SPORT': 'sport',
+        'HEALTH': 'science', 'CULTURE AND ENTERTAINMENT': 'world',
+        'CULTURE_AND_ENTERTAINMENT': 'world', 'ENTERTAINMENT': 'world',
+        'SECURITY INCIDENTS': 'security', 'SECURITY_INCIDENTS': 'security',
+        'HACKER CULTURE': 'security', 'HACKER_CULTURE': 'security',
+    }
+    # A digest placeholder, not a reportable story. Keep regex escapes single
+    # inside raw strings (e.g. r"\b" is a word boundary; r"\\b" is not).
+    NON_STORY_LINE = re.compile(
+        r'^\s*(?:'
+        r'no\b.{0,60}\b(?:news|update|updates|developments?|stories|reports?|details)'
+        r'|nothing\s+to\s+report'
+        r'|no\s+further\s+(?:details|information|comment)'
+        r'|no\s+verified\s+developments?'
+        r'|no\s+verifiable\s+quote'
+        r'|more\s+on\s+this\s+later'
+        r'|developing\s+story'
+        r')(?:\s+(?:today|yet|so\s+far|at\s+this\s+time|available|reported))?'
+        r'\s*[.!]?\s*$', re.IGNORECASE)
+
+    # -- local news briefs --------------------------------------
+
+    def _all_brief_paths(self):
+        """Return every news_brief on disk, newest calendar date first.
+
+        Returns all of them, not just the newest. Returning only the newest
+        was the original bug: the station ingested roughly twenty stories,
+        aired them all, and then cycled them back on the same schedule every
+        fifteen minutes and across every show. Fourteen daily briefs is
+        roughly two hundred and eighty distinct stories.
+        """
+        candidates = []
+        for directory in self.NEWS_DIRS:
+            if not os.path.isdir(directory):
                 continue
-            files = [os.path.join(d, f) for f in os.listdir(d)
-                     if f.endswith('.md')]
-            if files:
-                path = max(files, key=os.path.getmtime)
-                break
-        if not path:
-            return self.send_bytes(json.dumps({'items': []}).encode(),
-                                   'application/json')
-        items, section = [], 'world'
+            try:
+                for name in os.listdir(directory):
+                    lower = name.lower()
+                    if (lower.startswith(self.NEWS_BRIEF_PREFIX)
+                            and lower.endswith('.md')):
+                        full = os.path.join(directory, name)
+                        if os.path.isfile(full):
+                            match = re.search(r'(20\d{6})', name)
+                            date_key = match.group(1) if match else ''
+                            candidates.append(
+                                (date_key, os.path.getmtime(full), full))
+            except OSError:
+                continue
+        # If no briefs are on disk, fall back to news_summary files so the
+        # station is not silent in an installation that only has summaries.
+        if not candidates:
+            for directory in self.NEWS_DIRS:
+                if not os.path.isdir(directory):
+                    continue
+                try:
+                    for name in os.listdir(directory):
+                        lower = name.lower()
+                        if (lower.startswith('news_summary_')
+                                and lower.endswith('.md')):
+                            full = os.path.join(directory, name)
+                            if os.path.isfile(full):
+                                match = re.search(r'(20\d{6})', name)
+                                candidates.append(
+                                    (match.group(1) if match else '',
+                                     os.path.getmtime(full), full))
+                except OSError:
+                    continue
+        candidates.sort(key=lambda row: (row[0], row[1]), reverse=True)
+        return [row[2] for row in candidates]
+
+    def _parse_brief(self, path):
+        """Parse one brief into a list of story items.
+
+        The filename's own date is attached as pubDate so the client's
+        recency scoring can prefer a fresh brief over an older one without
+        guessing from the file's mtime.
+        """
+        items = []
+        section = 'world'
+        in_front_matter = False
+        body_started = False
         try:
             with open(path, encoding='utf-8') as fh:
                 for raw in fh:
-                    line = raw.rstrip()
+                    line = raw.strip()
+                    if line == '---':
+                        if not body_started:
+                            in_front_matter = not in_front_matter
+                        continue
+                    if in_front_matter or not line:
+                        continue
+                    if raw[:1].isspace():
+                        # Nested detail lines are not their own story.
+                        continue
+                    body_started = True
                     if line.startswith('#'):
                         head = line.lstrip('#').strip().upper()
-                        section = self.NEWS_SECTIONS.get(head, 'world')
+                        if head in ('EXECUTIVE_SUMMARY', 'EXECUTIVE SUMMARY',
+                                    'NEWS BRIEF', 'SUMMARY'):
+                            section = None
+                        else:
+                            section = self.NEWS_SECTIONS.get(head, 'world')
                         continue
-                    if not line.startswith('- '):
+                    if section is None or not line.startswith('- '):
                         continue
                     text = line[2:].strip()
-                    # The digest writes "&" and "/" as shorthand; the anchor
-                    # has to say words.
-                    text = text.replace(' & ', ' and ').replace('/', ', ')
-                    if len(text) < 25:
+                    if not text or text.upper().startswith('QUOTE:'):
                         continue
-                    # One sentence: it is a headline, not a story, so the
-                    # title carries it and there is no summary to echo.
-                    items.append({'title': text.rstrip('.'),
-                                  'description': '',
-                                  'category': section})
-        except OSError:
-            pass
-        body = json.dumps({'source': os.path.basename(path),
-                           'items': items}).encode()
+                    if self.NON_STORY_LINE.match(text):
+                        continue
+                    # A short taxonomy label ("World Events:") is a filing
+                    # marker, not part of the story the anchor reads.
+                    if ': ' in text:
+                        prefix, remainder = text.split(': ', 1)
+                        if (len(prefix) <= 32
+                                and prefix.replace('_', ' ').isalpha()):
+                            text = remainder.strip()
+                    text = (text.replace(' & ', ' and ')
+                            .replace('/', ', ').rstrip('.').strip())
+                    if len(text) < 25 or self.NON_STORY_LINE.match(text):
+                        continue
+                    match_date = re.search(r'(20\d{2})(\d{2})(\d{2})',
+                                           os.path.basename(path))
+                    pub_date = ''
+                    if match_date:
+                        pub_date = '%s-%s-%sT12:00:00Z' % match_date.groups()
+                    items.append({
+                        'title': text,
+                        'description': '',
+                        'category': section or 'world',
+                        'source': os.path.basename(path),
+                        'pubDate': pub_date,
+                    })
+        except OSError as err:
+            sys.stderr.write('[GNN] brief read failed (%s): %s\n'
+                             % (os.path.basename(path), err))
+        return items
+
+    def handle_localnews(self):
+        """Serve the deduplicated union of every brief on disk."""
+        paths = self._all_brief_paths()
+        if not paths:
+            return self.send_bytes(
+                json.dumps({'source': None, 'items': []}).encode(),
+                'application/json')
+
+        seen = set()
+        items = []
+        for path in paths:
+            for item in self._parse_brief(path):
+                key = _title_hash(item['title'])
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                items.append(item)
+
+        stamp = datetime.datetime.now().strftime('%H:%M:%S')
+        sys.stderr.write('[%s] [GNN Ledger] local briefs: %d files, %d unique\n'
+                         % (stamp, len(paths), len(items)))
+        sys.stderr.flush()
+        body = json.dumps({
+            'source': '%d briefs' % len(paths),
+            'items': items,
+        }).encode()
         return self.send_bytes(body, 'application/json')
 
     # -- market quotes ------------------------------------------
@@ -859,6 +1421,218 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
                              'serving %d stale\n' % len(payload['quotes']))
         return self.send_bytes(json.dumps(payload).encode(),
                                'application/json')
+
+    # -- persistent news ledger ---------------------------------
+
+    def _read_json_body(self, max_bytes=1024 * 1024):
+        """Read a JSON body from the request, or None on any failure.
+
+        The body is *always* consumed, even when it exceeds `max_bytes`
+        and will be rejected. Leaving bytes in the socket is how a
+        keep-alive connection goes wrong: Python's http.server reads
+        the next request line from the leftover body, sees a huge
+        opaque run of bytes, and answers 414 Request-URI Too Long.
+        That was filling the log every time the ledger crossed the
+        old 1 MB ceiling.
+        """
+        try:
+            length = int(self.headers.get('Content-Length', '0'))
+        except ValueError:
+            return None
+        if length <= 0:
+            return None
+
+        payload = self.rfile.read(min(length, max_bytes))
+        remaining = length - len(payload)
+        while remaining > 0:
+            chunk = self.rfile.read(min(remaining, 65536))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+
+        if length > max_bytes:
+            return None
+        try:
+            return json.loads(payload.decode('utf-8', 'replace'))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return None
+
+    # -- show config editor -------------------------------------
+    # The runtime reads this config at boot. tools/show-editor.html edits it
+    # through /api/config. Writes use a temporary file and atomic replace so
+    # an interrupted save cannot leave a truncated configuration.
+
+    def handle_config_get(self):
+        try:
+            with open(SHOW_CONFIG, encoding='utf-8') as fh:
+                payload = fh.read()
+            body = json.dumps(json.loads(payload)).encode('utf-8')
+        except FileNotFoundError:
+            stamp = datetime.datetime.now().strftime('%H:%M:%S')
+            sys.stderr.write('[%s] [GNN Config] no show-config.json at %s\n'
+                             % (stamp, SHOW_CONFIG))
+            sys.stderr.flush()
+            body = b'{}'
+        except (OSError, json.JSONDecodeError) as err:
+            sys.stderr.write('[GNN] show-config read failed: %s\n' % err)
+            body = b'{}'
+        return self.send_bytes(body, 'application/json')
+
+    def handle_config_put(self):
+        body = self._read_json_body(max_bytes=4 * 1024 * 1024)
+        if not isinstance(body, dict):
+            return self.send_bytes(b'{"error":"bad body"}',
+                                   'application/json', 400)
+
+        shows = body.get('shows')
+        if not isinstance(shows, list):
+            return self.send_bytes(
+                b'{"error":"shows must be an array"}',
+                'application/json', 400)
+        for i, show in enumerate(shows):
+            if not isinstance(show, dict):
+                return self.send_bytes(
+                    json.dumps({'error': 'show %d is not an object' % i}).encode(),
+                    'application/json', 400)
+            if not show.get('id') or not isinstance(show.get('pair'), list):
+                return self.send_bytes(
+                    json.dumps({'error': 'show %d missing id or pair' % i}).encode(),
+                    'application/json', 400)
+
+        tmp = SHOW_CONFIG + '.tmp'
+        try:
+            os.makedirs(os.path.dirname(SHOW_CONFIG), exist_ok=True)
+            with open(tmp, 'w', encoding='utf-8') as fh:
+                json.dump(body, fh, indent=2, ensure_ascii=False)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, SHOW_CONFIG)
+        except OSError as err:
+            sys.stderr.write('[GNN] show-config write failed: %s\n' % err)
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
+            return self.send_bytes(
+                json.dumps({'error': 'write failed: %s' % err}).encode(),
+                'application/json', 500)
+
+        stamp = datetime.datetime.now().strftime('%H:%M:%S')
+        sys.stderr.write('[%s] [GNN Config] saved %d shows\n'
+                         % (stamp, len(shows)))
+        sys.stderr.flush()
+        return self.send_bytes(
+            json.dumps({'ok': True, 'shows': len(shows)}).encode(),
+            'application/json')
+
+    def handle_editor_options(self):
+        """Return editor dropdown options discovered from the assets on disk."""
+        gen = os.path.join(DIRECTORY, 'assets', 'generated')
+
+        def ls(sub, ext='.png'):
+            directory = os.path.join(gen, sub)
+            if not os.path.isdir(directory):
+                return []
+            return sorted(f for f in os.listdir(directory) if f.endswith(ext))
+
+        anchor_files = ls('anchors')
+        suffix = '_desk_hero.png'
+        anchors = sorted(set(
+            name[:-len(suffix)] for name in anchor_files
+            if name.endswith(suffix)))
+
+        music_dir = os.path.join(DIRECTORY, 'assets', 'audio', 'music')
+        music = []
+        if os.path.isdir(music_dir):
+            music = sorted(name for name in os.listdir(music_dir)
+                           if name.endswith('.ogg'))
+
+        payload = {
+            'sets': ls('set'),
+            'backdrops': ls('backdrops'),
+            'titlecards': ls('titlecards'),
+            'anchors': anchors,
+            'music': music,
+            'voices': [{'id': voice, 'label': label}
+                       for voice, label in LOCAL_VOICES],
+        }
+        return self.send_bytes(json.dumps(payload).encode('utf-8'),
+                               'application/json')
+
+    def handle_newsledger_get(self):
+        """Return the full ledger as a JSON object.
+
+        Shape is `{ version, updatedAt, items }` where `items` is the
+        dict form keyed by story hash. The client accepts either the dict
+        form or a list form; the dict is what the server stores.
+        """
+        ledger = _load_ledger()
+        payload = {
+            'version': ledger.get('version', 1),
+            'updatedAt': ledger.get('updatedAt'),
+            'items': ledger.get('items', {}),
+        }
+        return self.send_bytes(json.dumps(payload).encode('utf-8'),
+                               'application/json')
+
+    def handle_newsledger_put(self):
+        """Merge the incoming records into the ledger, then persist.
+
+        Merging is the whole point of the endpoint: two browsers can have
+        divergent views of the same story, and only the server's merge rule
+        ('aired' wins, aliases and sources union) keeps them from oscillating
+        between queued and aired on every PUT.
+
+        The size ceiling is 16 MB, not the 1 MB default the other routes
+        use. The ledger grows for the life of the installation and nothing
+        is ever expired, so a station that has been on air for a few weeks
+        will legitimately exceed 1 MB on the write side. The old default
+        silently rejected the PUT at the socket layer, the browser saw a
+        400 it could not explain, and the file was never written.
+        """
+        body = self._read_json_body(max_bytes=16 * 1024 * 1024)
+        if not body or not isinstance(body, dict):
+            return self.send_bytes(b'{"error":"bad body"}',
+                                   'application/json', 400)
+        incoming_items = body.get('items') or {}
+        if isinstance(incoming_items, list):
+            # Tolerate the list form the client might send.
+            converted = {}
+            for record in incoming_items:
+                if not isinstance(record, dict):
+                    continue
+                key = str(record.get('key') or record.get('ledgerKey')
+                          or _title_hash(record.get('title')))
+                if key:
+                    converted[key] = record
+            incoming_items = converted
+        if not isinstance(incoming_items, dict):
+            return self.send_bytes(b'{"error":"items must be object or list"}',
+                                   'application/json', 400)
+
+        merged_count = 0
+        ledger = _load_ledger()
+        with _ledger_lock:
+            items = ledger.setdefault('items', {})
+            for key, record in incoming_items.items():
+                if not isinstance(record, dict) or not record.get('title'):
+                    continue
+                items[key] = _merge_ledger_record(items.get(key), record)
+                merged_count += 1
+            ledger['version'] = 1
+            ledger['updatedAt'] = datetime.datetime.now(
+                datetime.timezone.utc).isoformat()
+            _save_ledger()
+
+        stamp = datetime.datetime.now().strftime('%H:%M:%S')
+        sys.stderr.write('[%s] [GNN Ledger] merged %d records, total %d\n'
+                         % (stamp, merged_count, len(ledger.get('items', {}))))
+        sys.stderr.flush()
+        return self.send_bytes(
+            json.dumps({'ok': True, 'count': len(ledger.get('items', {}))}
+                       ).encode('utf-8'),
+            'application/json')
 
     def send_bytes(self, payload, ctype, code=200):
         self.send_response(code)
@@ -917,8 +1691,14 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             seq = int(q.get('seq', ['0'])[0])
         except ValueError:
             seq = 0
+        t0 = time.time()
         sid = clean_session(q.get('sid', [''])[0])
         note_sequence(sid, seq)
+        stamp = datetime.datetime.now().strftime('%H:%M:%S')
+        preview = (text[:50] + '...') if len(text) > 50 else text
+        sys.stderr.write('[%s] [GNN Server:TTS] request voice=%s local=%s seq=%d: "%s"\n' %
+                         (stamp, voice, use_local, seq, preview))
+        sys.stderr.flush()
 
         # edge-tts opens its own websocket per call; serialise so a rapid skip
         # storm cannot open dozens at once. Wait in slices so a request the
@@ -934,7 +1714,9 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             audio = (synthesize_local(text, voice, rate) if use_local
                      else synthesize(text, voice, rate, pitch))
         except Exception as err:                      # noqa: BLE001 - report to client
-            sys.stderr.write('[GNN] tts failed voice=%s: %s\n' % (voice, err))
+            stamp = datetime.datetime.now().strftime('%H:%M:%S')
+            sys.stderr.write('[%s] [GNN Server:TTS] failed voice=%s: %s\n' % (stamp, voice, err))
+            sys.stderr.flush()
             return self.send_bytes(
                 json.dumps({'error': str(err)}).encode(), 'application/json', 502)
         finally:
@@ -943,6 +1725,11 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
         if not audio:
             return self.send_bytes(b'{"error":"empty synthesis"}', 'application/json', 502)
         payload, ctype = normalize(audio)
+        dur_ms = int((time.time() - t0) * 1000)
+        stamp = datetime.datetime.now().strftime('%H:%M:%S')
+        sys.stderr.write('[%s] [GNN Server:TTS] synthesized voice=%s bytes=%d in %dms\n' %
+                         (stamp, voice, len(payload), dur_ms))
+        sys.stderr.flush()
         self.send_bytes(payload, ctype)
 
 
@@ -986,18 +1773,22 @@ def run_server():
             except ValueError:
                 pass
 
-        print('[GNN Server] http://localhost:%d  (pid %d)' % (PORT, os.getpid()))
+        stamp = datetime.datetime.now().strftime('%H:%M:%S')
+        print('[%s] [GNN Server] http://localhost:%d  (pid %d)' % (stamp, PORT, os.getpid()))
+        print('[%s] [GNN Server] server log: %s (max %dMB, %d backups)' % (stamp, LOG, MAX_LOG_SIZE_MB, MAX_BACKUPS))
+        print('[%s] [GNN Server] transcript log: %s' % (stamp, TRANSCRIPT_LOG))
+        print('[%s] [GNN Server] news ledger: %s' % (stamp, LEDGER))
         if HAVE_LOCAL:
             engine = 'kokoro (local, nothing leaves this machine)'
         elif HAVE_TTS:
             engine = 'edge-tts (calls Microsoft)'
         else:
             engine = 'UNAVAILABLE - start with ./start.sh so the venv is used'
-        print('[GNN Server] voice engine: %s' % engine)
-        print('[GNN Server] market: %s'
-              % ('yahoo (curl_cffi) + coingecko' if HAVE_CURL_CFFI
+        print('[%s] [GNN Server] voice engine: %s' % (stamp, engine))
+        print('[%s] [GNN Server] market: %s'
+              % (stamp, 'yahoo (curl_cffi) + coingecko' if HAVE_CURL_CFFI
                  else 'coingecko only — pip install curl_cffi for equities'))
-        print('[GNN Server] stop with Ctrl-C, or ./stop.sh')
+        print('[%s] [GNN Server] stop with Ctrl-C, or ./stop.sh' % stamp)
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
@@ -1005,7 +1796,8 @@ def run_server():
         finally:
             httpd.server_close()
             clear_pidfile()
-            print('\n[GNN Server] off air.')
+            stamp = datetime.datetime.now().strftime('%H:%M:%S')
+            print('\n[%s] [GNN Server] off air.' % stamp)
 
 
 if __name__ == '__main__':

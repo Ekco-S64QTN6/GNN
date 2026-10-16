@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <base href="/">
+    <title>GNN Interview Tuner</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #08080c;
+            color: #e0e0ec;
+            font-family: ui-monospace, 'JetBrains Mono', monospace;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #wrap {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            height: 100vh;
+        }
+
+        #side {
+            border-right: 1px solid #1f1f2e;
+            padding: 14px;
+            overflow-y: auto;
+        }
+
+        #side h1 {
+            font-size: 0.82rem;
+            letter-spacing: 0.15em;
+            margin: 0 0 12px;
+            color: #6fc3df;
+        }
+
+        section {
+            border: 1px solid #1f1f2e;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #0c0c14;
+        }
+
+        section h2 {
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            margin: 0 0 8px;
+            color: #9fe6ff;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 50px 1fr 70px;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 0.68rem;
+        }
+
+        .row label {
+            color: #8a8aa0;
+            letter-spacing: 0.05em;
+        }
+
+        .row input[type=range] {
+            width: 100%;
+            accent-color: #6fc3df;
+        }
+
+        .row input[type=number] {
+            width: 100%;
+            padding: 3px 4px;
+            background: #14141e;
+            color: #e0e0ec;
+            border: 1px solid #2a2a3e;
+            border-radius: 2px;
+            font-family: inherit;
+            font-size: 0.66rem;
+        }
+
+        .row select {
+            grid-column: 2 / span 2;
+            padding: 4px;
+            background: #14141e;
+            color: #e0e0ec;
+            border: 1px solid #2a2a3e;
+            border-radius: 2px;
+            font-family: inherit;
+            font-size: 0.68rem;
+        }
+
+        .wide-btn {
+            display: block;
+            width: 100%;
+            padding: 8px;
+            margin-top: 6px;
+            font-family: inherit;
+            font-size: 0.7rem;
+            background: #1a3a4a;
+            color: #cfeaff;
+            border: 1px solid #2a5a6e;
+            border-radius: 3px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .wide-btn:hover {
+            background: #2a5a6e;
+        }
+
+        .wide-btn.warn {
+            background: #3a1a1a;
+            border-color: #5a1a1a;
+            color: #ffc0c0;
+        }
+
+        .wide-btn.warn:hover {
+            background: #5a1a1a;
+        }
+
+        .wide-btn.good {
+            background: #1a4a2a;
+            border-color: #2a6e3a;
+            color: #c0ffc0;
+        }
+
+        .wide-btn.good:hover {
+            background: #2a6e3a;
+        }
+
+        #status {
+            font-size: 0.62rem;
+            color: #6a6a80;
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+
+        #status.ok {
+            color: #80ff80;
+        }
+
+        #status.err {
+            color: #ff8080;
+        }
+
+        #main {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 20px;
+        }
+
+        #stage {
+            background: #000;
+            image-rendering: pixelated;
+            border: 1px solid #2a2a3e;
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+        }
+
+        .hint {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            font-size: 0.62rem;
+            color: #4a4a5a;
+        }
+
+        .copy-overlay {
+            position: fixed;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a4a2a;
+            color: #c0ffc0;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 0.72rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 10;
+        }
+
+        .copy-overlay.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="wrap">
+        <aside id="side">
+            <h1>INTERVIEW TUNER</h1>
+
+            <section>
+                <h2>Room — EMBASSY/item_01</h2>
+                <div class="row">
+                    <label>scale</label>
+                    <input type="range" id="roomScale" min="0.5" max="3" step="0.001">
+                    <input type="number" id="roomScaleN" step="0.001">
+                </div>
+                <div class="row">
+                    <label>dx</label>
+                    <input type="range" id="roomDx" min="-200" max="200" step="1">
+                    <input type="number" id="roomDxN" step="1">
+                </div>
+                <div class="row">
+                    <label>dy</label>
+                    <input type="range" id="roomDy" min="-100" max="100" step="1">
+                    <input type="number" id="roomDyN" step="1">
+                </div>
+            </section>
+
+            <section>
+                <h2>Ambassador — EMBASSY 02-11</h2>
+                <div class="row">
+                    <label>item</label>
+                    <select id="figureId"></select>
+                </div>
+                <div class="row">
+                    <label>scale</label>
+                    <input type="range" id="ambScale" min="0.5" max="3" step="0.001">
+                    <input type="number" id="ambScaleN" step="0.001">
+                </div>
+                <div class="row">
+                    <label>dx</label>
+                    <input type="range" id="ambDx" min="-200" max="200" step="1">
+                    <input type="number" id="ambDxN" step="1">
+                </div>
+                <div class="row">
+                    <label>dy</label>
+                    <input type="range" id="ambDy" min="-100" max="100" step="1">
+                    <input type="number" id="ambDyN" step="1">
+                </div>
+                <div style="font-size:0.62rem; color:#6a6a80; margin-top:4px;">
+                    <label><input type="checkbox" id="lockAmbScale" checked> lock scale to room</label>
+                </div>
+                <button class="wide-btn" id="playBtn">Pause animation</button>
+            </section>
+
+            <section>
+                <h2>Rep — EMBASSY 12-17</h2>
+                <div class="row">
+                    <label>item</label>
+                    <select id="repId"></select>
+                </div>
+                <div class="row">
+                    <label>scale</label>
+                    <input type="range" id="repScale" min="0.5" max="2" step="0.001">
+                    <input type="number" id="repScaleN" step="0.001">
+                </div>
+                <div class="row">
+                    <label>dx</label>
+                    <input type="range" id="repDx" min="-200" max="200" step="1">
+                    <input type="number" id="repDxN" step="1">
+                </div>
+                <div class="row">
+                    <label>dy</label>
+                    <input type="range" id="repDy" min="-100" max="100" step="1">
+                    <input type="number" id="repDyN" step="1">
+                </div>
+            </section>
+
+            <section>
+                <button class="wide-btn warn" id="resetBtn">Reset to defaults</button>
+                <button class="wide-btn good" id="copyBtn">Copy values as JSON</button>
+            </section>
+
+            <div id="status">Loading…</div>
+        </aside>
+
+        <main>
+            <span class="hint">Set the room and ambassador scales equal so her background strip lines up.</span>
+            <canvas id="stage" width="1280" height="800"></canvas>
+        </main>
+    </div>
+
+    <div class="copy-overlay" id="copyOverlay">Values copied to clipboard</div>
+
+    <script src="/js/asset-registry.js"></script>
+    <script src="/js/scene-compositor.js"></script>
+    <script>
+        'use strict';
+
+        (async function () {
+            const $ = (id) => document.getElementById(id);
+            const status = $('status');
+            const canvas = $('stage');
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+
+            const STORAGE_KEY = 'gnn.interviewTuner';
+
+            const state = {
+                scene: null,
+                elapsed: 0,
+                playing: true,
+                lastTick: 0,
+                rebuilding: false,
+            };
+
+            const params = [
+                'roomScale', 'roomDx', 'roomDy',
+                'ambScale', 'ambDx', 'ambDy',
+                'repScale', 'repDx', 'repDy',
+            ];
+
+            // Read saved values from localStorage, falling back to the
+            // module's INTERVIEW_DEFAULTS.
+            function readInitial() {
+                const defaults = Object.assign({}, GNNSceneCompositor.INTERVIEW_DEFAULTS);
+                defaults.figureId = null;
+                defaults.repId = null;
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (!raw) return defaults;
+                    const saved = JSON.parse(raw);
+                    for (const k of params) {
+                        if (typeof saved[k] === 'number') defaults[k] = saved[k];
+                    }
+                    if (saved.figureId) defaults.figureId = saved.figureId;
+                    if (saved.repId) defaults.repId = saved.repId;
+                } catch (_) { }
+                return defaults;
+            }
+
+            const current = readInitial();
+
+            function persist() {
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+                } catch (_) { }
+            }
+
+            // Wire each input pair to the current-state object and to its
+            // counterpart. The slider and the number field stay in sync.
+            function bind(id, key, parse) {
+                const slider = $(id);
+                const number = $(id + 'N');
+                if (!slider || !number) return;
+                const update = (v) => {
+                    const n = parse(v);
+                    current[key] = n;
+                    slider.value = n;
+                    number.value = n;
+                };
+                slider.addEventListener('input', () => {
+                    update(slider.value);
+                    if (key === 'roomScale' && $('lockAmbScale').checked) {
+                        current.ambScale = current.roomScale;
+                        $('ambScale').value = current.roomScale;
+                        $('ambScaleN').value = current.roomScale;
+                    }
+                    persist();
+                    rebuild();
+                });
+                number.addEventListener('input', () => {
+                    update(number.value);
+                    if (key === 'roomScale' && $('lockAmbScale').checked) {
+                        current.ambScale = current.roomScale;
+                        $('ambScale').value = current.roomScale;
+                        $('ambScaleN').value = current.roomScale;
+                    }
+                    persist();
+                    rebuild();
+                });
+            }
+
+            bind('roomScale', 'roomScale', parseFloat);
+            bind('roomDx', 'roomDx', parseInt);
+            bind('roomDy', 'roomDy', parseInt);
+            bind('ambScale', 'ambScale', parseFloat);
+            bind('ambDx', 'ambDx', parseInt);
+            bind('ambDy', 'ambDy', parseInt);
+            bind('repScale', 'repScale', parseFloat);
+            bind('repDx', 'repDx', parseInt);
+            bind('repDy', 'repDy', parseInt);
+
+            function initValues() {
+                for (const k of params) {
+                    const v = current[k];
+                    $('roomScale').value = current.roomScale;
+                    $('roomScaleN').value = current.roomScale;
+                    $('roomDx').value = current.roomDx;
+                    $('roomDxN').value = current.roomDx;
+                    $('roomDy').value = current.roomDy;
+                    $('roomDyN').value = current.roomDy;
+                    $('ambScale').value = current.ambScale;
+                    $('ambScaleN').value = current.ambScale;
+                    $('ambDx').value = current.ambDx;
+                    $('ambDxN').value = current.ambDx;
+                    $('ambDy').value = current.ambDy;
+                    $('ambDyN').value = current.ambDy;
+                    $('repScale').value = current.repScale;
+                    $('repScaleN').value = current.repScale;
+                    $('repDx').value = current.repDx;
+                    $('repDxN').value = current.repDx;
+                    $('repDy').value = current.repDy;
+                    $('repDyN').value = current.repDy;
+                    break;
+                }
+            }
+
+            function buildDropdowns() {
+                const all = GNNAssets.all;
+                const figures = all.filter((e) => /^EMBASSY\/item_(0[2-9]|1[01])$/.test(e.id));
+                const reps = all.filter((e) => /^EMBASSY\/item_1[2-7]$/.test(e.id));
+
+                const figSel = $('figureId');
+                figSel.innerHTML = '<option value="">(random)</option>';
+                for (const e of figures) {
+                    const o = document.createElement('option');
+                    o.value = e.id;
+                    o.textContent = `item ${String(e.item).padStart(2, '0')} — ${e.w}x${e.h}`;
+                    figSel.appendChild(o);
+                }
+                figSel.value = current.figureId || '';
+                figSel.addEventListener('change', () => {
+                    current.figureId = figSel.value || null;
+                    persist();
+                    rebuild();
+                });
+
+                const repSel = $('repId');
+                repSel.innerHTML = '<option value="">(random)</option>';
+                for (const e of reps) {
+                    const o = document.createElement('option');
+                    o.value = e.id;
+                    o.textContent = `item ${String(e.item).padStart(2, '0')} — ${e.w}x${e.h}`;
+                    repSel.appendChild(o);
+                }
+                repSel.value = current.repId || '';
+                repSel.addEventListener('change', () => {
+                    current.repId = repSel.value || null;
+                    persist();
+                    rebuild();
+                });
+            }
+
+            async function rebuild() {
+                if (state.rebuilding) return;
+                state.rebuilding = true;
+                try {
+                    state.scene = await GNNSceneCompositor.composeInterview({
+                        roomScale: current.roomScale,
+                        roomDx: current.roomDx,
+                        roomDy: current.roomDy,
+                        ambScale: current.ambScale,
+                        ambDx: current.ambDx,
+                        ambDy: current.ambDy,
+                        repScale: current.repScale,
+                        repDx: current.repDx,
+                        repDy: current.repDy,
+                        figureId: current.figureId,
+                        repId: current.repId,
+                    });
+                    const ids = state.scene.layers
+                        .map((l) => l && l.entry ? l.entry.id : 'raw')
+                        .join(' · ');
+                    status.className = 'ok';
+                    status.textContent = 'Scene built: ' + ids;
+                } catch (err) {
+                    status.className = 'err';
+                    status.textContent = 'Scene build failed: ' + (err.message || err);
+                } finally {
+                    state.rebuilding = false;
+                }
+            }
+
+            function drawFrame() {
+                if (!state.scene) return;
+                const buf = GNNSceneCompositor.draw(state.scene, state.elapsed);
+                ctx.imageSmoothingEnabled = false;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(buf, 0, 0, canvas.width, canvas.height);
+            }
+
+            function tick(now) {
+                const dt = state.lastTick ? now - state.lastTick : 0;
+                state.lastTick = now;
+                if (state.playing) {
+                    state.elapsed = (state.elapsed + dt) % 8000;
+                }
+                drawFrame();
+                requestAnimationFrame(tick);
+            }
+
+            $('playBtn').addEventListener('click', () => {
+                state.playing = !state.playing;
+                $('playBtn').textContent = state.playing ? 'Pause animation' : 'Play animation';
+            });
+
+            $('resetBtn').addEventListener('click', () => {
+                const d = GNNSceneCompositor.INTERVIEW_DEFAULTS;
+                for (const k of params) current[k] = d[k];
+                current.figureId = null;
+                current.repId = null;
+                $('figureId').value = '';
+                $('repId').value = '';
+                initValues();
+                persist();
+                rebuild();
+                status.className = '';
+                status.textContent = 'Reset to defaults.';
+            });
+
+            $('copyBtn').addEventListener('click', async () => {
+                const out = {};
+                for (const k of params) out[k] = current[k];
+                const json = JSON.stringify(out, null, 2);
+                try {
+                    await navigator.clipboard.writeText(json);
+                    const o = $('copyOverlay');
+                    o.classList.add('show');
+                    setTimeout(() => o.classList.remove('show'), 1400);
+                    status.className = 'ok';
+                    status.textContent = 'Values copied. Paste back into INTERVIEW_DEFAULTS.';
+                } catch (err) {
+                    // Clipboard API may be blocked on non-HTTPS. Fall back to
+                    // dumping the values in the status area so they can be
+                    // copied by hand.
+                    status.className = 'err';
+                    status.textContent = 'Could not write to clipboard. Values:\n' + json;
+                }
+            });
+
+            // Bootstrap.
+            status.textContent = 'Loading assets…';
+            try {
+                await GNNAssets.init();
+            } catch (err) {
+                status.className = 'err';
+                status.textContent = 'Asset load failed: ' + (err.message || err);
+                return;
+            }
+            buildDropdowns();
+            initValues();
+            await rebuild();
+            requestAnimationFrame(tick);
+        })();
+    </script>
+</body>
+
+</html>

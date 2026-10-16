@@ -9,7 +9,7 @@ in a studio that keeps the game's archive as its footage library.
 [![No dependencies](https://img.shields.io/badge/frontend-vanilla_JS-f7df1e?style=flat-square&logo=javascript&logoColor=black)](#)
 [![Python](https://img.shields.io/badge/server-python_3.8%2B-3776ab?style=flat-square&logo=python&logoColor=white)](#)
 [![Canvas](https://img.shields.io/badge/render-HTML5_canvas_full--window-6fc3df?style=flat-square)](#)
-[![Assets](https://img.shields.io/badge/assets-873_items_·_4316_frames-9c6bff?style=flat-square)](#)
+[![Assets](https://img.shields.io/badge/assets-713_items_·_3984_frames-9c6bff?style=flat-square)](#)
 [![Audio](https://img.shields.io/badge/audio-41_SFX_·_40_tracks-54e08a?style=flat-square)](#)
 [![Voice](https://img.shields.io/badge/voice-kokoro--82M_local-ff9de2?style=flat-square)](#)
 [![Cast](https://img.shields.io/badge/cast-12_characters_·_11_generated-ffb454?style=flat-square)](#)
@@ -61,7 +61,7 @@ commercials, and the easter eggs a viewer finds by looking.
 
 The channel is built on two sources.
 
-**The archive.** Decoded out of the original `.LBX` files: **873 graphics
+**The archive.** Decoded out of the original `.LBX` files: **713 graphics
 items, 4,316 frames, 41 sound effects, 40 music tracks and the 154 news
 bulletins the original in-game anchor read**. It supplies the sound, the
 music, the cutaway footage, the robot who still has a real 25-cel lip matrix,
@@ -108,10 +108,11 @@ or straight to camera.</em>
 git clone https://github.com/Ekco-S64QTN6/GNN.git
 cd GNN
 
-# Local voice engine. Arch and other PEP 668 distros refuse system-wide pip,
-# and Kokoro's phonemiser has no wheels for Python 3.14, so use 3.12 here.
+# Local voice engine & market proxy dependencies. Arch and other PEP 668 distros
+# refuse system-wide pip, and Kokoro's phonemiser has no wheels for Python 3.14,
+# so use Python 3.10-3.12 here.
 python3.12 -m venv .venv
-.venv/bin/pip install kokoro soundfile edge-tts
+.venv/bin/pip install kokoro soundfile edge-tts curl_cffi
 
 ./broadcast.sh                # opens in its own window
 ```
@@ -442,7 +443,7 @@ the television.
 **The one rule:** no module outside `asset-registry.js` may name an asset path.
 Everything asks the registry for *a kind of thing* — "a clean bright backdrop
 wider than 140px", "four readout plates bigger than a button", "an alarm longer
-than a second". That is what makes the whole 873-item library reachable instead
+than a second". That is what makes the whole 713-item library reachable instead
 of the handful of hard-coded items earlier passes could use.
 
 ---
@@ -532,7 +533,7 @@ The app ships with `assets/` populated and needs nothing else:
 
 ```bash
 python3 tools/verify_assets.py
-# graphics : 873 items, 1382 spot-checked frames, 418 gifs
+# graphics : 713 items, 1382 spot-checked frames, 418 gifs
 # audio    : 41 effects, 5 stings, 40 music beds
 # OK — every runtime asset resolves inside the project.
 ```

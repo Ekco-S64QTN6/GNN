@@ -466,6 +466,7 @@ body {
     background: rgba(10, 12, 26, 0.7);
     align-self: center;
     margin-left: 12px;
+    white-space: nowrap;
     transition: color var(--transition), border-color var(--transition);
 }
 

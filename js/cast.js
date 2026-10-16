@@ -5,7 +5,7 @@
    newsroom and a text-to-speech demo with pictures.
 
    Everything a line needs in order to sound like a particular
-   person saying it lives here: the voice, how they talk, what
+   character saying it lives here: the voice, how they talk, what
    they will not shut up about, and what they think of whoever
    is sitting next to them. The script writer reads this; it
    invents nothing about the characters itself.
@@ -55,7 +55,13 @@ const GNNCast = (() => {
      *               reading a name
      *   name        what a name card would say
      *   role        their billing
-     *   voice       the speech model that reads for them
+     *   voice       the voice that reads for them. Usually a Kokoro voice
+     *               id (`am_michael`, `af_bella`, …); the station's own
+     *               machine reads through `vox_unit`, which is a DSP
+     *               chain in `server.py` over `am_michael` rather than a
+     *               voice model of its own. The two are interchangeable
+     *               here — the client passes whatever is in this field to
+     *               `/api/tts` and the server resolves it.
      *   register    how they phrase things, used to pick between variants
      *   fixation    what they steer every story toward
      *   tic         a signature phrase, used sparingly
@@ -232,6 +238,47 @@ const GNNCast = (() => {
                 "Over to you.",
             ],
         },
+
+        // ---------------------------------------------------------
+        // Unit 7 — the station's own machine
+        // ---------------------------------------------------------
+        //
+        // He is not an anchor. He is station automation: the voice that
+        // reads the booth ident at the top of the hour, the voice that
+        // steps in when a secret fires, the dry counterpoint in a panel.
+        // He is on the roster like everyone else but he does not take a
+        // seat — `main.js`'s `SHOW_PAIRS` excludes him, so he is never
+        // drawn at the desk.
+        //
+        // His voice is `vox_unit`, which is not a Kokoro model. It is a
+        // DSP chain in `server.py` that takes `am_michael` and runs him
+        // through a pitch drop, a 55 Hz tremolo, a chorus detune, a band
+        // limit and a bitcrusher. The result is a machine voice that no
+        // speech model ships with, because speech models are all trained
+        // to sound like people and this one should not.
+        //
+        // His art used to be the MOO1 robot, keyed out of his newscast
+        // scene as twenty-five cels and driven off the animator's frame
+        // index. He is now a generated anchor like every other species —
+        // `robot_desk_hero.png`, `robot_speaking.png`, `robot_listening.png`,
+        // `robot_listening_flip.png` in `assets/generated/anchors/` —
+        // loaded through the same `loadAnchorSet()` path, and his speaking
+        // plate is conditioned whole rather than mouth-swapped (he is in
+        // `WHOLE_SPEAKING` in `condition_plates.py`; the mouth detector
+        // does not reliably find his mouth either).
+        //
+        // His profile below was written for the keyed-out MOO1 sprite and
+        // has not needed a rewrite for the generated one: the banks are
+        // written to the voice and the character, and the voice and the
+        // character are unchanged. The one thing worth knowing when
+        // reading the lines is that the visual is now a proper drawn robot
+        // rather than a small 1993 sprite composited into the studio, so
+        // the register is as dry as it reads on purpose.
+        //
+        // The MOO1 anchor cels themselves are preserved in
+        // `assets/anchor_frames/` and `assets/globe_frames/` for a future
+        // easter egg, a station ident shot, or anything that wants the
+        // original sprite. Nothing reads them this frame.
         robot: {
             id: 'robot', colour: '#8fe0ff', machine: true, name: 'Unit 7', role: 'Station Automation',
             voice: 'vox_unit', register: 'flat', mood: 'unbothered',

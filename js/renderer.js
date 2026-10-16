@@ -67,8 +67,14 @@ const GNNRenderer = (() => {
     // What is seen through the window, and where the glass is.
     let backdrop = null;
     let setWindow = null;
-    let deskPlate = null;
     let seated = [];
+    // The station's own machine. Loaded through the same anchor pipeline
+    // as every other species — `robot_desk_hero.png`, `robot_speaking.png`,
+    // `robot_listening.png`, `robot_listening_flip.png` — but not seated:
+    // Unit 7 reads the booth ident and is a station voice, not an anchor.
+    // The plate is loaded and held so a future easter egg, a station
+    // ident shot or a "Unit 7 reports" beat has the art in hand without
+    // a reload. Nothing reads it this frame; see `drawCast()`.
     let robot = null;
 
     // The row the anchors sit on, as a fraction of frame height, for the
@@ -152,7 +158,6 @@ const GNNRenderer = (() => {
         // own value when the layout did not carry one, which is what a
         // pre-desk-line generated/ tree looks like.
         currentDeskLine = assets.deskLine || DESK_LINE;
-        deskPlate = assets.desk || null;
         seated = assets.seated || [];
         robot = assets.robot || null;
 
@@ -264,7 +269,26 @@ const GNNRenderer = (() => {
         c.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
     }
 
-    function drawViewport(now, frames, icon) {
+    /**
+     * `frames` is the animator's `{ anchor, globe }` output. It is no
+     * longer read here.
+     *
+     * `frames.anchor` used to index the MOO1 robot's 25-cel lip matrix.
+     * The robot now goes through the same anchor pipeline as every other
+     * species — his `_speaking` plate carries the open mouth — so there is
+     * nothing for a cel index to drive, and the two-state flap reads
+     * `GNNAnimator.mouthOpen()` directly.
+     *
+     * `frames.globe` was for a holographic globe that is not drawn any
+     * more; `GNNGlitch.globeOverride()` still exists and the animator
+     * still produces the value, but no code path consumes it.
+     *
+     * The parameter is kept so `main.js` does not need to change. When
+     * something wants the animator's per-frame state again — a station
+     * ident shot with Unit 7, a revived globe, a per-frame fault read —
+     * it is already here.
+     */
+    function drawViewport(now, icon) {
         const c = vctx;
         c.imageSmoothingEnabled = false;
         c.clearRect(0, 0, VIEW.w, VIEW.h);
@@ -282,23 +306,30 @@ const GNNRenderer = (() => {
             // place it shows — and it has to be drawn in the window's own
             // rectangle, mapped through the same cover transform the room
             // gets, or it slides against the glass when the frame resizes.
-            if (setPlate && backdrop && setWindow) {
+            let wx = 0, wy = 0, ww = VIEW.w, wh = VIEW.h;
+            if (setPlate && setWindow) {
                 const sc = Math.max(VIEW.w / setPlate.width,
                     VIEW.h / setPlate.height);
                 const dw = setPlate.width * sc;
                 const dh = setPlate.height * sc;
                 const ox = (VIEW.w - dw) / 2;
                 const oy = (VIEW.h - dh) / 2;
-                c.drawImage(backdrop,
-                    ox + setWindow.x0 * dw, oy + setWindow.y0 * dh,
-                    (setWindow.x1 - setWindow.x0) * dw,
-                    (setWindow.y1 - setWindow.y0) * dh);
+                wx = ox + setWindow.x0 * dw;
+                wy = oy + setWindow.y0 * dh;
+                ww = (setWindow.x1 - setWindow.x0) * dw;
+                wh = (setWindow.y1 - setWindow.y0) * dh;
+                if (backdrop) {
+                    c.drawImage(backdrop, wx, wy, ww, wh);
+                }
+            } else if (backdrop) {
+                drawCover(c, backdrop, VIEW.w, VIEW.h);
             }
+
+            // Draw ghost anomaly outside the studio windows, on the backdrop layer behind the hosts
+            drawGhost(c, now, wx, wy, ww, wh);
+
             if (setPlate) drawCover(c, setPlate, VIEW.w, VIEW.h);
-            drawCast(c, frames.anchor);
-            // Only when the desk is its own plate. With the desk drawn into
-            // the set, the anchors are already sitting at it.
-            if (deskPlate) drawDesk(c, deskPlate);
+            drawCast(c);
             if (icon && !GNNCutsceneManager.isCutawayActive()) {
                 drawIconPlate(c, icon);
             }
@@ -368,9 +399,10 @@ const GNNRenderer = (() => {
         c.restore();
     }
 
-    // Where the cast and the desk sit, as fractions of the frame. Kept here
-    // rather than in the plate files so a replacement plate does not have to
-    // reproduce someone else's margins.
+    // Where the cast sits, as fractions of the frame. Kept here rather than
+    // in the plate files so a replacement plate does not have to reproduce
+    // someone else's margins.
+    //
     // Measured off a minute of Pixel News Network rather than guessed at
     // twice. There, the head and shoulders showing above the desk come to
     // about a sixth of the frame, the desk runs off the bottom edge instead
@@ -378,102 +410,67 @@ const GNNRenderer = (() => {
     // room between them. At 0.46 and a desk 0.75 of the frame tall, one
     // anchor filled the window and there was nowhere to put a second.
     //
-    // CAST.h is the whole plate; most of its lower half is behind the desk.
-    // `seat` is where the plate's bottom edge lands, and the desk is drawn
-    // over it: they have to overlap, or the anchors float above the desk
-    // with a band of floor showing between.
-    // Measured off the owner's reference frame by scanning a column through
-    // an anchor: head top at 0.285 of the frame and the desk's top edge at
-    // 0.551, which puts a quarter of the frame on the people and a quarter
-    // on the desk. Ours had the heads starting at 0.38 behind a desk that
+    // CAST.h is the whole plate; most of its lower half is behind the desk
+    // drawn into the set, which the anchors are drawn over. Measured off
+    // the owner's reference frame by scanning a column through an anchor:
+    // head top at 0.285 of the frame and the desk's top edge at 0.551,
+    // which puts a quarter of the frame on the people and a quarter on
+    // the desk. Ours had the heads starting at 0.38 behind a desk that
     // began at 0.665 — the camera too close and the desk too low, so they
     // read as standing behind a counter rather than sitting at one.
-    const CAST = { h: 0.300, seat: 0.60 };
+    const CAST = { h: 0.300 };
     const SEATS = {
         1: [0.50],
         2: [0.37, 0.63],
         3: [0.28, 0.50, 0.72],
     };
-    // The desk is sized by height, between the seat line and just past the
-    // bottom of the frame, and its width follows from that.
-    //
-    // Sized by width it was 1280 across and so 425 tall in a 720 frame: the
-    // oval top filled the shot and the front panel — the lit strip, the
-    // hazard stripes, the emblem, the part that makes it a news desk — was
-    // below the bottom edge. What was left read as a boardroom table a few
-    // metres in front of the anchors.
-    // Bottom at 0.79, matching the reference, which leaves floor visible
-    // below the desk. At 0.90 the desk ran to 35% of the frame against the
-    // reference's 24% and swallowed the people sitting at it.
-    // `overlap` is how far the desk is drawn up over the anchors. 0.049
-    // hides a chest cropped at the bottom of its plate, which is what the
-    // current cast art is.
-    //
-    // When the cast is regenerated with hands, this wants to go to roughly
-    // zero. The hands are the lowest thing on the plate and have to land
-    // just above the desk's top edge to read as resting on it — drawn any
-    // further up and the desk covers them, which is the whole point of
-    // redrawing them.
-    // 0.015 now the cast has hands. The old 0.049 existed to hide a chest
-    // cropped at the bottom of its plate; with hands there, the hands are
-    // the lowest thing and the desk has to start just under them so they
-    // read as resting on it rather than behind it.
-    const DESK = { overlap: 0.015, bottom: 0.79 };
 
-    // Where the desk's top edge sits when the desk is drawn into the set
-    // plate rather than supplied separately.
+    // The row the anchors' hands rest on, as a fraction of frame height.
+    // Every set carries its own in `layout.json` — the studio and its two
+    // near siblings share the studio's value, the other seven do not — and
+    // the live value is `currentDeskLine`. This constant is only the
+    // fallback for a set that did not carry one, which is what a
+    // pre-desk-line generated/ tree looks like.
     //
-    // Two plates have to agree on perspective, lighting, palette and style,
-    // and separately generated ones never quite do — which is most of why
-    // the desk never looked like it belonged in the room. One scene with
-    // the desk already in it cannot disagree with itself.
-    //
-    // This works because the cast plates end at the hands with nothing
-    // below them, so there is no body for a desk to need to hide. The
-    // anchors are simply drawn on top, with their hands landing on the
-    // surface.
-    // Measured off the set plate, and off the owner's own markup of it:
-    // the desk's top surface runs from its back edge at 0.435 to its
-    // front lip at 0.497, and the anchors belong at the BACK of that
-    // surface — the far third, where someone seated at a desk actually
-    // puts their forearms. Resting them on the front lip put the pair
-    // right at the camera and made them look oversized for the room.
-    //
-    // The anchors meet the *front* lip, not the back edge. Seated at the
-    // back edge they put their hands down at the far side of the desk and
-    // their bodies floated clear of it — read as two people standing
-    // behind a table rather than sitting at one, and no amount of
-    // resizing fixes that, because the fault is where the bottom of the
-    // plate lands, not how wide it is. Meeting the front lip, the torso
-    // covers the desk's top surface, which is what a person sitting at a
-    // desk does to it from a head-on camera.
-    //
-    // `DESK_LINE` is the studio set's own value, kept here as the fallback
-    // for a set that did not carry one from `layout.json`. The live value
-    // is `currentDeskLine`, above, and every draw path reads that. This
-    // constant exists only so the fallback has a name and a comment.
+    // The seat line was tuned by eye against the studio plate. The desk's
+    // top surface runs from its back edge at 0.435 to its front lip at
+    // 0.497, and the anchors meet the *front* lip: seated at the back edge
+    // they put their hands down at the far side of the desk and their
+    // bodies floated clear of it — read as two people standing behind a
+    // table rather than sitting at one, and no amount of resizing fixes
+    // that, because the fault is where the bottom of the plate lands, not
+    // how wide it is. Meeting the front lip, the torso covers the desk's
+    // top surface, which is what a person sitting at a desk does to it
+    // from a head-on camera.
     const DESK_LINE = 0.468;
-    const deskTop = () => CAST.seat - DESK.overlap;
 
     /**
      * The desk. The anchor whose turn it is takes the lip frame the animator
      * worked out; everyone else holds `listening`, which is what makes a
      * desk read as a desk rather than as three portraits in a row.
+     *
+     * Every cast member is drawn from the same two-state art: a `hero`
+     * plate and a `speaking` plate that differ only inside the mouth.
+     * `condition_plates.py` builds the speaking plate as the finished
+     * hero with its mouth swapped in, so a flap physically cannot move
+     * anything but the mouth — no body transplant, no registration slack,
+     * no whole-plate shimmer from two generations that disagree.
+     *
+     * The MOO1 robot used to be the exception: his `speaking` plate was
+     * one of twenty-five keyed cels indexed off the animator's frame
+     * number. He is now a generated anchor like everyone else — his
+     * speaking plate carries the open mouth — and the branch that read
+     * `person.frames` was removed here in the same change.
      */
-    function drawCast(c, lipFrame) {
+    function drawCast(c) {
         const list = seated.slice(0, 3);
         if (!list.length) return;
         const seats = SEATS[list.length] || SEATS[1];
         const h = CAST.h * VIEW.h;
-        // Hands land on the desk's top edge: just under it when the desk is
-        // a separate plate drawn over them, just on it when the desk is part
-        // of the set and they are drawn over it.
-        //
-        // `currentDeskLine`, not the constant. Every set has its own desk
-        // height — the studio's is one value, the archive room's is
-        // another — and this is the read that lets the cast sit at the
-        // right height for whichever room is on air.
-        const seatY = deskPlate ? CAST.seat : currentDeskLine;
+        // The seat line for the room on air. Every set carries its own in
+        // `layout.json` and this is the read that lets the cast sit at the
+        // right height for whichever room is showing.
+        const seatY = currentDeskLine;
         // Whoever is speaking *this line*, not whoever holds the chair on
         // the rundown.
         //
@@ -498,31 +495,21 @@ const GNNRenderer = (() => {
         const chairRef = noActiveSeat ? 0 : chair;
         list.forEach((person, i) => {
             const active = !noActiveSeat && i === chairRef;
-            let img;
-            if (person.frames && person.frames.length) {
-                // A cast member with a real lip matrix — the MOO1 robot has
-                // 25 cels — drives it directly off the animator's frame
-                // instead of being reduced to two mouth states.
-                img = active
-                    ? (person.frames[lipFrame] || person.frames[0])
-                    : person.frames[0];
-            } else {
-                // Two mouth states, opened by the animator's jaw rather
-                // than by a threshold guessed at here.
-                const open = (typeof GNNAnimator !== 'undefined'
-                    && GNNAnimator.mouthOpen) ? GNNAnimator.mouthOpen() : false;
-                // Listeners turn toward the speaker: the plate as drawn
-                // looks one way, so a seat on the speaker's right wants it
-                // mirrored or it is looking off the side of the set.
-                //
-                // When no seat is active, everyone is a listener and the
-                // mirroring is decided against the middle of the row, since
-                // there is no speaker to turn toward.
-                const turnRef = noActiveSeat ? Math.floor(list.length / 2) : chairRef;
-                img = active
-                    ? (open ? person.speaking : person.hero)
-                    : (i > turnRef ? person.listeningFlip : person.listening);
-            }
+            // Two mouth states, opened by the animator's jaw rather than by
+            // a threshold guessed at here.
+            const open = (typeof GNNAnimator !== 'undefined'
+                && GNNAnimator.mouthOpen) ? GNNAnimator.mouthOpen() : false;
+            // Listeners turn toward the speaker: the plate as drawn looks
+            // one way, so a seat on the speaker's right wants it mirrored
+            // or it is looking off the side of the set.
+            //
+            // When no seat is active, everyone is a listener and the
+            // mirroring is decided against the middle of the row, since
+            // there is no speaker to turn toward.
+            const turnRef = noActiveSeat ? Math.floor(list.length / 2) : chairRef;
+            const img = active
+                ? (open ? person.speaking : person.hero)
+                : (i > turnRef ? person.listeningFlip : person.listening);
             if (!img) return;
             const w = img.width * (h / img.height);
             const x = seats[i] * VIEW.w - w / 2;
@@ -577,13 +564,6 @@ const GNNRenderer = (() => {
         const t = (now - f.since) / FADE_MS;
         if (t >= 1) { f.prev = null; return null; }
         return { img: f.prev, t };
-    }
-
-    function drawDesk(c, img) {
-        const top = deskTop() * VIEW.h;
-        const h = DESK.bottom * VIEW.h - top;
-        const w = img.width * (h / img.height);
-        c.drawImage(img, (VIEW.w - w) / 2, top, w, h);
     }
 
     /** A studio monitor: the art, inset in a lit bezel. */
@@ -690,20 +670,28 @@ const GNNRenderer = (() => {
         ctx.restore();
     }
 
-    function drawGhost(now) {
+    function drawGhost(c, now, wx, wy, ww, wh) {
+        if (typeof GNNGlitch === 'undefined') return;
+        const fault = GNNGlitch.activeName();
+        if (fault !== 'ghost_signal' && fault !== 'interference') return;
         const img = GNNGlitch.ghostAsset();
         if (!img) return;
-        const hard = GNNGlitch.activeName() === 'interference';
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(VIEW.x, VIEW.y, VIEW.w, VIEW.h);
-        ctx.clip();
-        ctx.globalAlpha = hard ? 0.75 + Math.random() * 0.25
+        const hard = fault === 'interference';
+        c.save();
+        c.beginPath();
+        c.rect(wx, wy, ww, wh);
+        c.clip();
+        c.globalAlpha = hard ? 0.75 + Math.random() * 0.25
             : 0.45 + Math.random() * 0.35;
-        ctx.globalCompositeOperation = hard ? 'source-over' : 'lighter';
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(img, VIEW.x, VIEW.y, VIEW.w, VIEW.h);
-        ctx.restore();
+        c.globalCompositeOperation = hard ? 'source-over' : 'lighter';
+        c.imageSmoothingEnabled = false;
+        const sc = Math.max(ww / img.width, wh / img.height);
+        const dw = img.width * sc;
+        const dh = img.height * sc;
+        const dx = wx + (ww - dw) / 2;
+        const dy = wy + (wh - dh) / 2;
+        c.drawImage(img, dx, dy, dw, dh);
+        c.restore();
     }
 
     function drawOrionBadge(now) {
@@ -719,6 +707,15 @@ const GNNRenderer = (() => {
     // Frame
     // ---------------------------------------------------------
 
+    /**
+     * One frame.
+     *
+     * `frames` is the animator's per-frame output, currently
+     * `{ anchor, globe }`, and is passed straight through from `main.js`.
+     * It is not read here any more — see the long comment on
+     * `drawViewport()` — but the parameter is kept so the caller does not
+     * need to change and so a revived use has somewhere to land.
+     */
     function renderFrame(now, frames, icon) {
         if (!ctx) return;
         try {
@@ -728,12 +725,10 @@ const GNNRenderer = (() => {
             ctx.fillStyle = '#05080e';
             ctx.fillRect(0, 0, VIEW.w, VIEW.h);
 
-            drawViewport(now, frames, icon);
+            drawViewport(now, icon);
             blitViewport(now);
 
             if (GNNGlitch.isBreaking(now)) drawAlertBorder(now);
-            const fault = GNNGlitch.activeName();
-            if (fault === 'ghost_signal' || fault === 'interference') drawGhost(now);
             if (GNNGlitch.isOrionMode()) drawOrionBadge(now);
 
             // A commercial is a self-contained segment that sets its own
@@ -764,7 +759,7 @@ const GNNRenderer = (() => {
         // the renderer actually drew rather than on where the studio's own
         // desk would have put it. A set whose desk sits higher or lower
         // than the studio's moves its anchors and its hit regions together.
-        const seatY = deskPlate ? CAST.seat : currentDeskLine;
+        const seatY = currentDeskLine;
         return {
             monitor: {
                 x: ICON.x * VIEW.w, y: ICON.y * VIEW.h,
@@ -772,7 +767,10 @@ const GNNRenderer = (() => {
             },
             // The upper third of each plate is the head.
             faces: list.map((person, i) => {
-                const img = person.frames ? person.frames[0] : person.hero;
+                // Every cast member carries `hero`. The `person.frames`
+                // fallback that used to sit here was for the MOO1 robot's
+                // cel array, which no longer exists — see `drawCast()`.
+                const img = person.hero;
                 const w = img ? img.width * (h / img.height) : h;
                 return {
                     x: seats[i] * VIEW.w - w / 2,

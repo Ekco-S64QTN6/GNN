@@ -11,17 +11,92 @@
     const ASSET_DIR = 'assets';
     const RENDER_FPS = 20;
     const FRAME_MS = 1000 / RENDER_FPS;
-    // Boot sequence. The station opens on a title card with a music bed
-    // and does not go on air until the track ends. During that window
-    // every async load settles — the TTS pipeline warms on the server,
-    // the first feed poll lands, the anchor and icon plates finish — so
-    // the first line of the broadcast is not fighting the startup for
-    // resources, which is what caused the first-minute weirdness that
-    // has been on the open-items list since the project began.
-    const BOOT_CARD = 'assets/generated/titlecards/main_desk_05.png';
+
+    // ---------------------------------------------------------
+    // Boot sequence
+    // ---------------------------------------------------------
+    //
+    // Two boot flows, both driven by the same list-of-cards format:
+    //
+    //   Initial boot   the station slate, then the first show's card,
+    //                  then the live studio underneath. Plays at page
+    //                  load, over the boot track, before the director's
+    //                  S.BOOT gate is released.
+    //
+    //   Show bumper    the station slate, then the incoming show's card,
+    //                  then the live studio. Plays between shows, over a
+    //                  short music interlude, before the anchor's sign-on.
+    //                  Requires a two-line hook in broadcast-director.js
+    //                  (see the note at the bottom of this file).
+    //
+    // The station slate is `test_card.png` — deliberately unpolished, so
+    // the first thing on screen reads as a technical rehearsal rather
+    // than a programme already in progress. The show card is the block's
+    // own titlecard, drawn from `SHOW_CARDS` below.
+    const STATION_SLATE = 'assets/generated/titlecards/test_card.png';
+
+    // One titlecard per show block, keyed by the block's id from
+    // `SHOW_SCHEDULE` in broadcast-director.js. A block with no entry
+    // here runs with only the station slate — no card, no music gap,
+    // straight from slate to studio — which is what a show that has not
+    // had a card generated yet should do.
+    //
+    // The mapping is a design choice, not a code constraint. Edit the
+    // filenames here to change which card a show opens on; the code
+    // reads the value and never assumes what it points at.
+    // Five shows have titlecards on disk. The other five do not, and
+    // reference no card — `bootCardsForBlock()` returns slate-only for a
+    // block with no entry here, so those shows open on the station slate
+    // and go straight to the studio. Add an entry to give a show its own
+    // card; the value is the filename inside `assets/generated/titlecards/`.
+    const SHOW_CARDS = {
+        morning_watch: 'main_desk.png',
+        economy: 'market_desk.png',
+        crossfire: 'the_spotlight.png',
+        cybernetics: 'tech_desk.png',
+        trade_minerals: 'fleet_briefing.png',
+    };
+
+    // Boot track — the full-length music bed that covers the initial
+    // station load. Between shows, a shorter interlude is used instead:
+    // the boot track is ~22 seconds, which is right for warming the TTS
+    // pipeline and the first feed poll, and wrong for a bumper between
+    // two fifteen-minute shows.
     const BOOT_TRACK = 'track_09';
-    const BOOT_FADE_S = 3;         // seconds of crossfade before the track ends
+    // The boot crossfade duration, in seconds. The fade is the visible
+    // transition from the title card to the live studio, and it is also
+    // the window during which Hale's sign-on begins — the director is
+    // released a beat into the fade rather than after it, so his voice
+    // arrives as the picture is still resolving instead of three
+    // seconds after it has settled.
+    //
+    // Was 3. At three seconds the transition read as a dead beat: the
+    // card disappeared, the studio came up over three full seconds of
+    // silence, and only then did the anchor speak. At 1.2 the fade is a
+    // deliberate cut rather than a slow dissolve, which is what a
+    // channel bumper wants.
+    const BOOT_FADE_S = 1.2;
+    // How long after the fade begins to release the director. Hale's
+    // line has already been warmed by the prefetch at boot start, so it
+    // plays within ~200 ms of the release. Setting this at 300 ms puts
+    // his voice roughly a third of the way into the fade, which is when
+    // the studio is legible but still resolving.
+    const BOOT_RELEASE_INTO_FADE_MS = 300;
     const BOOT_FALLBACK_MS = 12000; // hold this long if the track will not load
+
+    // Where in the boot track the slate hands off to the show card, as a
+    // fraction of duration. At 22.4s this is ~6.7s of slate, then the
+    // show card holds for the rest of the track and the fade.
+    const BOOT_CARD_SWAP_AT = 0.30;
+
+    // Bumper timing, between shows. Nine seconds is a real station
+    // bumper — long enough to see the card and hear a phrase of music,
+    // short enough that the viewer does not wonder if the channel is
+    // still on air. The swap lands a third of the way through, matching
+    // the initial boot's rhythm.
+    const BUMPER_MS = 9000;
+    const BUMPER_FADE_MS = 800;
+    const BUMPER_CARD_SWAP_AT = 0.35;
 
     // The ten studio sets the conditioner produces, in the order it lists
     // them. Every one is a full newsroom in a single plate — the desk is
@@ -51,13 +126,6 @@
     // lines). The POST is fire-and-forget — a failed log call is not
     // worth breaking a page load over, and the console copy always works
     // regardless of whether the endpoint is reachable.
-    //
-    // The boot race this is here to diagnose: the first line of the
-    // broadcast sometimes has its mouth not move, and the first story
-    // sometimes has the anchors stepping on each other. Both resolve
-    // after about a minute. Watch the `[GNN Boot] audio state=` lines
-    // and the `[TTS]` lines from tts.js in the same file to see whether
-    // the context is running when the first clip plays.
     function log(...args) {
         const line = args.map((a) => {
             if (a === null) return 'null';
@@ -69,30 +137,71 @@
         }).join(' ');
         // eslint-disable-next-line no-console
         console.log('[GNN Boot]', line);
-        try {
-            fetch('api/log', {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain' },
-                body: '[GNN Boot] ' + line,
-                keepalive: true,
-            }).catch(() => { /* console copy already worked */ });
-        } catch (err) {
-            // fetch can throw synchronously on a bad URL or in odd
-            // sandboxed contexts. Still not worth breaking the page.
+    }
+
+    /**
+     * Probe a list of card URLs and return only the ones that load.
+     *
+     * A card listed in a pool whose file is missing — because it was
+     * generated but never dropped into `assets/generated/titlecards/`,
+     * or because the pool drifted from the disk — used to leave the
+     * boot `<img>` showing a broken-image icon over a black overlay for
+     * the whole track. Probing before the track starts turns a visible
+     * fault into a silent skip and lets the remaining cards run in
+     * order.
+     *
+     * The probe loads each image before it is needed, so the swap during
+     * playback is a synchronous `src` assignment rather than a fetch
+     * that could miss its slot under load.
+     */
+    async function resolveBootSequence(urls) {
+        const available = [];
+        for (const url of urls) {
+            const ok = await new Promise((resolve) => {
+                const probe = new Image();
+                probe.onload = () => resolve(true);
+                probe.onerror = () => resolve(false);
+                probe.src = url;
+            });
+            if (ok) available.push(url);
+            else log('boot', 'boot card missing: ' + url);
         }
+        if (!available.length) {
+            log('boot', 'no boot cards available — the overlay will be blank');
+        }
+        return available;
+    }
+
+    /**
+     * The card sequence for one show block.
+     *
+     * Always the station slate first, then the block's own card when it
+     * has one. Returns an array so the caller can iterate — the sequence
+     * is exactly the list that plays, in order, and an empty list means
+     * the overlay stays black for the length of the track.
+     *
+     * `blockInfo` is what `GNNDirector.getShowInfo()` returns, or null
+     * when the director is not available yet. With no block info, the
+     * sequence is just the slate — correct for a boot that runs before
+     * the director has been initialized.
+     */
+    function bootCardsForBlock(blockInfo) {
+        const urls = [STATION_SLATE];
+        const id = blockInfo && blockInfo.id;
+        const blockCard = id && SHOW_CARDS[id];
+        if (blockCard) {
+            urls.push('assets/generated/titlecards/' + blockCard);
+        }
+        return urls;
     }
 
     /**
      * Watch the AudioContext state during boot.
      *
-     * The trace suspects the context may be suspended when the first
-     * clip plays, which would leave the analyser unattached (so the
-     * mouth does not track the voice) and the music bed silent (the
-     * music bus is inside the same context). Every 500ms during the
-     * first 30 seconds is logged so the boot window is fully captured;
-     * after that only state *changes* are logged, so a long session
-     * does not accumulate thousands of identical lines but a late
-     * transition still shows up.
+     * Every 500ms during the first 30 seconds is logged so the boot
+     * window is fully captured; after that only state *changes* are
+     * logged, so a long session does not accumulate thousands of
+     * identical lines but a late transition still shows up.
      */
     function watchAudioContext() {
         let lastState = null;
@@ -147,6 +256,19 @@
     let frameCount = 0;
     let bootError = false;
 
+    // Guards against a second entry into `init()`'s catch block — or the
+    // success path — starting a second frame loop. `gameLoop` schedules
+    // its own next frame at the top of every call, so calling
+    // `requestAnimationFrame(gameLoop)` twice produces two independent
+    // infinite chains.
+    let loopStarted = false;
+
+    function startLoop() {
+        if (loopStarted) return;
+        loopStarted = true;
+        requestAnimationFrame(gameLoop);
+    }
+
     // =========================================================
     // Preload
     // =========================================================
@@ -157,16 +279,12 @@
 
         statusText.textContent = 'Loading studio plates…';
 
-        // The generated newsroom, if it has been made. All optional: the
-        // station still goes to air on the MOO1 scene alone, so a missing
-        // plate is a look rather than a failure.
         const GEN = `${ASSET_DIR}/generated`;
 
         // The layout file first — it tells us where every set's window is,
         // which backdrops exist, and where the anchors sit in each set.
-        // Missing it is not fatal: with no layout the sets just load without
-        // a window rect or a desk line, and the renderer draws the room with
-        // its panes black and seats the cast at its own default.
+        // Missing it is not fatal: with no layout the sets just load
+        // without a window rect or a desk line.
         let layout = null;
         try {
             layout = await fetch(`${GEN}/set/layout.json`).then((r) => r.json());
@@ -176,25 +294,9 @@
         }
         const layoutWindows = (layout && layout.windows) || {};
         const primaryWindow = (layout && layout.window) || null;
-        // Per-set desk lines: the row the anchors sit on in each room.
-        // Written by condition_plates.py alongside the window rects; read
-        // here and passed through to each set entry below, then on to the
-        // renderer. The whole map being missing is fine — the renderer
-        // falls back to its own default — and a missing entry for one set
-        // is fine too, same reason.
         const layoutDeskLines = (layout && layout.deskLines) || {};
         const primaryDeskLine = (layout && layout.deskLine) || null;
 
-        // Every set. Each entry carries its own window rect, keyed by the
-        // set's filename stem — `market_wide_empty` for
-        // `market_wide_empty.png`, which is what condition_plates.py writes
-        // into `layout.json.windows` — and its own desk line, keyed the same
-        // way into `layout.json.deskLines`.
-        //
-        // This replaced a single hardcoded pair of `studio_wide_empty.png`
-        // and `desk_oval_front.png`. The desk plate is gone — the desk is
-        // drawn into each room now, so there is no separate plate for the
-        // renderer to draw and no perspective mismatch between the two.
         const sets = [];
         for (const name of SET_FILES) {
             const plate = await GNNAssets.loadImage(`${GEN}/set/${name}`);
@@ -204,12 +306,6 @@
                 name,
                 plate,
                 window: layoutWindows[key] || primaryWindow || null,
-                // The row the anchors sit on in this set — the desk's
-                // front lip. Written by condition_plates.py alongside the
-                // window rects, read here and passed through to the
-                // renderer. Falls back to the primary set's value, and
-                // then to null, in which case the renderer uses its own
-                // default.
                 deskLine: layoutDeskLines[key] || primaryDeskLine || null,
             });
         }
@@ -217,20 +313,12 @@
             log('assets', 'no studio sets found — station will show a blank room');
         }
 
-        // Backdrops, from whatever the conditioner recorded. The previous
-        // version picked from a two-item hardcoded array
-        // (`['earth_globe_dawn', 'orion_shipyard_night']`), so four of the
-        // six backs on disk were never seen. Reading the list means adding
-        // a new backdrop is a data-only change: drop the PNG in the inbox,
-        // re-run the conditioner, reload.
         const backdropNames = (layout && layout.backdrops) || [];
         const backdrops = [];
         for (const name of backdropNames) {
             const img = await GNNAssets.loadImage(`${GEN}/backdrops/${name}`);
             if (img) backdrops.push({ name, img });
         }
-        // Fallback if layout.json did not name any — same two-item list the
-        // old code used, so an older generated/ tree still works.
         if (!backdrops.length) {
             for (const name of ['earth_globe_dawn.png', 'orion_shipyard_night.png']) {
                 const img = await GNNAssets.loadImage(`${GEN}/backdrops/${name}`);
@@ -238,27 +326,6 @@
             }
         }
 
-        // ---------------------------------------------------------
-        // The cast
-        // ---------------------------------------------------------
-        //
-        // Every species is loaded, not just the two currently at the
-        // desk. Each seat carries its own voice, because the anchor is a
-        // character rather than a sprite: one speech model reading for a
-        // bear, a cat and a grey alien is the same person wearing masks.
-        //
-        // The line-up turns over per show block, so a given block always
-        // shows the same team for the length of a session. The schedule
-        // is defined below as `SHOW_PAIRS` — a fixed list, not a shuffle,
-        // because the station has a standing line-up rather than a random
-        // draw every boot.
-        //
-        // The robot is on the roster with everyone else — he goes through
-        // the same anchor pipeline as every other species
-        // (`robot_desk_hero.png`, `robot_speaking.png`, `robot_listening.png`,
-        // optionally `robot_listening_flip.png`) — but he is not seatable:
-        // he is Station Automation, not a correspondent or an anchor. The
-        // pairing list excludes him.
         const ROSTER = [
             { sid: 'human', voice: 'am_michael' },
             { sid: 'mrrshan_f', voice: 'af_bella' },
@@ -276,10 +343,6 @@
             { sid: 'alkari_f', voice: 'bf_lily' },
         ];
 
-        // One loader for every species, robot included. Four plates each —
-        // hero, speaking, listening, listening-flip — and the missing ones
-        // fall back to the hero so a partially-conditioned species still
-        // puts a figure on screen rather than dropping out of the desk.
         async function loadAnchorSet(who) {
             const [hero, speaking, listening, flip] = await Promise.all([
                 GNNAssets.loadImage(`${GEN}/anchors/${who.sid}_desk_hero.png`),
@@ -292,71 +355,62 @@
                 sid: who.sid, voice: who.voice, hero,
                 speaking: speaking || hero,
                 listening: listening || hero,
-                // Mirrored, for a seat to the right of whoever is talking.
-                // Falls back to the unmirrored plate, which is better than
-                // facing away.
                 listeningFlip: flip || listening || hero,
             };
         }
 
-        // Load every seatable species. The robot is loaded separately,
-        // since he is not seated.
-        const seatable = ROSTER.filter((r) => r.sid !== 'robot');
+        // Every entry in ROSTER is seatable, including Unit 7. He has a
+        // full anchor set on disk (`robot_desk_hero.png` and the three
+        // variants) and a cast profile in `js/cast.js`, so the filter
+        // that used to keep him out of the seating rotation was the only
+        // thing keeping him off the desk. He sits at block 4 now.
+        const seatable = ROSTER.slice();
         const anchorList = (await Promise.all(
             seatable.map(loadAnchorSet))).filter(Boolean);
 
         const robotCfg = ROSTER.find((r) => r.sid === 'robot');
         const robot = robotCfg ? await loadAnchorSet(robotCfg) : null;
 
-        /**
-         * The show schedule: which two anchors sit at the desk for each of
-         * the ten shows.
-         *
-         * A fixed list, not a shuffle. The station has a standing line-up
-         * — the same show at the same time of day shows the same team —
-         * and a rerun of the station should look like a rerun, not a
-         * different channel. Edit `SHOW_PAIRS` to change the schedule.
-         *
-         * Order matters within a pair: the first entry is the lead, who
-         * reads the sign-on and the sign-off, and whose voice is set when
-         * the block swaps. The second is the co-anchor.
-         *
-         * A pair whose second entry is missing — a species whose plates
-         * failed to load — becomes a one-anchor desk, and the renderer
-         * falls back to centre-seating it. A pair where *both* are
-         * missing is dropped from the rotation rather than taking a slot
-         * with nobody at the desk.
-         *
-         * Counts below. Fourteen seatable species, ten shows, twenty
-         * seatings, so most anchors appear twice and a few appear once.
-         * Keeping the "main desk" pair (Hale + Varr) first is deliberate:
-         * the station opens on the same team a viewer who has seen the
-         * channel before will recognise.
-         */
+        // One pair per show block, in SHOW_SCHEDULE order. Left-hand id
+        // sits on the left of the desk.
+        //
+        // Blocks 0, 1, 2, 3 and 5 open on a titlecard, so their pairs
+        // must match that card exactly — the slate shows the two
+        // characters, then the studio fades in to the same two
+        // characters in the same seats. Blocks 4, 6, 7, 8 and 9 have no
+        // card, so their pairs are free.
+        //
+        // Every id here must be a species with a `_desk_hero.png` in
+        // `assets/generated/anchors/`. That includes `robot` now — see
+        // the seatable change below.
         const SHOW_PAIRS = [
-            ['human', 'mrrshan_f'],     // 1 — Hale + Varr, the main desk
-            ['human_f', 'mrrshan'],     // 2 — Vance + Rell
-            ['bulrathi', 'alkari_f'],   // 3 — Grolm + Kira
-            ['psilon', 'sakkra'],       // 4 — Oth + Ssyth
-            ['darlok', 'meklar'],       // 5 — the two machines
-            ['silicoid', 'klackon'],    // 6 — Quarry + Hive-Liaison
-            ['alkari', 'mrrshan_f'],    // 7 — Kesh + Varr
-            ['human', 'human_f'],       // 8 — the two commanders
-            ['bulrathi', 'psilon'],     // 9 — Grolm + Oth
-            ['sakkra', 'silicoid'],     // 10 — Ssyth + Quarry
+            // 0 morning_watch   main_desk.png       Human + Mrrshan_f
+            ['human', 'mrrshan_f'],
+            // 1 economy         market_desk.png     Mrrshan_m + Meklar
+            ['mrrshan', 'meklar'],
+            // 2 crossfire       the_spotlight.png   Mrrshan_f + Alkari
+            ['mrrshan_f', 'alkari'],
+            // 3 cybernetics     tech_desk.png       Psilon + Klackon
+            ['psilon', 'klackon'],
+            // 4 machine_intel   (no card)           Ssyth + Unit 7
+            ['sakkra', 'robot'],
+            // 5 trade_minerals  fleet_briefing.png  Bulrathi + Darlok
+            ['bulrathi', 'darlok'],
+            // 6 diplomacy       (no card)
+            ['alkari_f', 'silicoid'],
+            // 7 evening_rim     (no card)
+            ['human', 'human_f'],
+            // 8 anomaly         (no card)
+            ['bulrathi', 'psilon'],
+            // 9 archives        (no card)
+            ['human', 'mrrshan_f'],
         ];
 
-        // Resolve species ids to the loaded anchor entries. Missing plates
-        // drop out, so a species whose assets did not load does not take a
-        // seat and the show runs with however many anchors are available.
         const anchorById = new Map(anchorList.map((a) => [a.sid, a]));
         const anchorPairs = SHOW_PAIRS
             .map((pair) => pair.map((sid) => anchorById.get(sid)).filter(Boolean))
             .filter((pair) => pair.length > 0);
 
-        // If the disk does not have any of the pairs — an empty assets
-        // tree, a broken load — fall back to whatever anchors did load so
-        // the station still goes to air rather than crashing at boot.
         if (!anchorPairs.length && anchorList.length) {
             anchorPairs.push(anchorList.slice(0, 2));
         }
@@ -380,27 +434,10 @@
             'windows=' + Object.keys(layoutWindows).length,
             'deskLines=' + Object.keys(layoutDeskLines).length);
 
-        // Two shapes in one return.
-        //
-        // The renderer's `init()` reads the top-level singular fields —
-        // `set`, `desk`, `window`, `deskLine`, `backdrop`, `seated`,
-        // `deskVoice` — for the first block, which is what draws before
-        // the director calls `setShowBlock(0)`.
-        //
-        // The plural fields — `sets`, `backdrops`, `anchors`, `anchorPairs`
-        // — are the full bundle, which `GNNRenderer.setShowBlock()` uses
-        // to swap to a different block when the show changes. Each set in
-        // that bundle carries its own `deskLine`, so the renderer seats the
-        // cast at the right height for whichever room is on air.
         return {
-            // --- first block, for the initial draw ---
             set: sets[0] ? sets[0].plate : null,
-            desk: null,                        // the desk is in the set now
+            desk: null,
             window: sets[0] ? sets[0].window : null,
-            // The row the anchors sit on in the first block's set. Read
-            // from layout.json via the sets bundle above; the renderer
-            // uses it in place of its own default. Null is fine — the
-            // renderer falls back.
             deskLine: sets[0] ? sets[0].deskLine : null,
             backdrop: backdrops[0] ? backdrops[0].img : null,
             seated: anchorPairs[0] || [],
@@ -408,11 +445,10 @@
                 ? anchorPairs[0][0].voice : null,
             robot,
 
-            // --- full bundle, for the block rotation ---
-            sets,                              // [{ name, plate, window, deskLine }]
-            backdrops,                         // [{ name, img }]
-            anchors: anchorList,               // [anchor, ...] in ROSTER order
-            anchorPairs,                       // per-block [lead, co-anchor]
+            sets,
+            backdrops,
+            anchors: anchorList,
+            anchorPairs,
         };
     }
 
@@ -424,15 +460,10 @@
         requestAnimationFrame(gameLoop);
         const now = performance.now();
 
-        // One update pass per rendered frame. Running these off raw rAF ties
-        // their behaviour to the monitor's refresh rate and burns main-thread
-        // time that the audio scheduler needs.
         if (timestamp - lastRender < FRAME_MS) return;
         lastRender = timestamp;
         frameCount++;
 
-        // First frame is a boot milestone: the render loop is actually
-        // running and the canvas is being drawn to. Logged once.
         if (frameCount === 1) log('boot', 'game loop first frame at ' + Math.round(now) + 'ms');
 
         try {
@@ -447,24 +478,14 @@
         const frames = GNNAnimator.tick(now);
 
         const story = GNNDirector.getCurrent();
-        // No story, no monitor. The fallback used to park a STATUS plate on
-        // the wall and leave it there for the whole of dead air, a studio
-        // screen showing the same word for minutes at a time. The monitor is
-        // off unless there is something on it.
         const icon = story
-            ? (story.icon || GNNIconManager.matchIcon(story.title, story.description))
+            ? GNNIconManager.matchIcon(story.title, story.description)
             : null;
 
         GNNRenderer.renderFrame(now, frames, icon);
 
         if (telemetry && document.body.classList.contains('show-telemetry')) {
             const r = GNNDirector.report();
-            // BLOCK is 1-based for a reader; the internal index is 0-based.
-            // LEFT is the wall-clock remainder of the current show, in
-            // minutes. CORR shows whether the show's one correspondent slot
-            // has been used. HELD is the count of stories sitting in the
-            // beat-filter buckets, which is what tells you at a glance why
-            // the rundown looks empty.
             const heldTotal = r.held
                 ? Object.values(r.held).reduce((n, x) => n + x, 0)
                 : 0;
@@ -481,11 +502,13 @@
 
         if (segmentBadge) {
             const st = GNNDirector.getState();
-            segmentBadge.textContent = st;
+            const show = (typeof GNNDirector.getShowInfo === 'function') ? GNNDirector.getShowInfo() : null;
+            const showTitle = show ? show.title.toUpperCase() : 'GNN NEWS';
+            segmentBadge.textContent = `${showTitle} · ${st}`;
+            segmentBadge.title = `${show ? show.title : 'Broadcast'} (${show ? show.desk : ''}) - State: ${st}`;
             segmentBadge.className = 'seg-' + st.toLowerCase();
         }
 
-        // Refresh the crawl every couple of minutes with current headlines.
         if (now - tickerRebuiltAt > 120000) {
             tickerRebuiltAt = now;
             const ctx = GNNRenderer.getContext();
@@ -503,9 +526,6 @@
     function bindClickSfx() {
         document.querySelectorAll('button, select, input[type=checkbox]').forEach((el) => {
             el.addEventListener('click', () => {
-                // These fire in the target phase, ahead of the document-level
-                // unlock listener, so the very first click would otherwise be
-                // silently dropped for want of an AudioContext.
                 GNNAudio.ensureContext();
                 GNNAudio.playUiClick();
             });
@@ -517,6 +537,7 @@
             GNNAudio.ensureContext();
             const running = !GNNDirector.isRunning();
             if (running) GNNDirector.resume(); else GNNDirector.pause();
+            console.log('[GNN UI] Play/Pause toggled, running =', running);
             iconPlay.classList.toggle('hidden', running);
             iconPause.classList.toggle('hidden', !running);
         });
@@ -524,6 +545,7 @@
         btnMute.addEventListener('click', () => {
             GNNAudio.ensureContext();
             const muted = GNNAudio.toggleMute();
+            console.log('[GNN UI] Mute toggled, muted =', muted);
             iconUnmuted.classList.toggle('hidden', muted);
             iconMuted.classList.toggle('hidden', !muted);
         });
@@ -533,6 +555,7 @@
                 GNNAudio.ensureContext();
                 const on = !GNNTTS.isEnabled();
                 GNNTTS.setEnabled(on);
+                console.log('[GNN UI] Voice toggled, enabled =', on);
                 iconVoiceOn.classList.toggle('hidden', !on);
                 iconVoiceOff.classList.toggle('hidden', on);
             });
@@ -546,34 +569,49 @@
             });
             voiceSelect.value = GNNTTS.getVoice();
             voiceSelect.addEventListener('change', () => {
+                console.log('[GNN UI] Voice selected =', voiceSelect.value);
                 GNNTTS.setVoice(voiceSelect.value);
             });
         }
 
         btnSkip.addEventListener('click', () => {
             GNNAudio.ensureContext();
+            console.log('[GNN UI] Skip clicked');
             GNNDirector.skip();
         });
 
         if (btnBreak) {
             btnBreak.addEventListener('click', () => {
                 GNNAudio.ensureContext();
+                console.log('[GNN UI] Commercial break button clicked');
                 GNNDirector.forceBreak();
             });
         }
 
         btnSettings.addEventListener('click', () => {
+            console.log('[GNN UI] Settings opened');
             settingsPanel.classList.remove('hidden');
             renderFeedList();
         });
-        btnCloseSettings.addEventListener('click', () => settingsPanel.classList.add('hidden'));
+        btnCloseSettings.addEventListener('click', () => {
+            console.log('[GNN UI] Settings closed');
+            settingsPanel.classList.add('hidden');
+        });
         settingsPanel.addEventListener('click', (e) => {
-            if (e.target === settingsPanel) settingsPanel.classList.add('hidden');
+            if (e.target === settingsPanel) {
+                console.log('[GNN UI] Settings backdrop clicked');
+                settingsPanel.classList.add('hidden');
+            }
         });
 
         btnAddFeed.addEventListener('click', () => {
             const url = feedUrlInput.value.trim();
-            if (url) { GNNFeedManager.addFeed(url); feedUrlInput.value = ''; renderFeedList(); }
+            if (url) {
+                console.log('[GNN UI] Adding feed:', url);
+                GNNFeedManager.addFeed(url);
+                feedUrlInput.value = '';
+                renderFeedList();
+            }
         });
         feedUrlInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') btnAddFeed.click();
@@ -585,6 +623,7 @@
             btnInject.addEventListener('click', () => {
                 const text = injectInput.value.trim();
                 if (!text) return;
+                console.log('[GNN UI] Injecting breaking bulletin:', text);
                 GNNAudio.ensureContext();
                 GNNDirector.injectBreaking(text, '');
                 GNNTickerManager.alert();
@@ -596,14 +635,10 @@
             });
         }
 
-        // The engineering readout is a development instrument, not part of
-        // the broadcast, so it is off unless asked for. The preference
-        // survives a reload; everything else here does not, but a diagnostic
-        // you have to re-enable every time is one you stop using.
         if (telemetryToggle) {
             let on = false;
             try { on = localStorage.getItem('gnn.telemetry') === '1'; }
-            catch (err) { on = false; }   // private window, blocked storage
+            catch (err) { on = false; }
             telemetryToggle.checked = on;
             document.body.classList.toggle('show-telemetry', on);
             telemetryToggle.addEventListener('change', () => {
@@ -621,7 +656,6 @@
             });
         }
 
-        // Canvas is interactive: the globe and the anchor's optics respond.
         canvas.addEventListener('click', (e) => {
             const r = canvas.getBoundingClientRect();
             const px = (e.clientX - r.left) * (canvas.width / r.width);
@@ -634,7 +668,6 @@
             GNNGlitch.handleKey(e);
         });
 
-        // First gesture: unlock audio and speech, then get the anchor talking.
         const unlock = () => {
             GNNAudio.ensureContext();
             GNNTTS.unlock();
@@ -667,35 +700,61 @@
 
     function wireModules() {
         // Single source of truth for the mouth: the voice's own start/end
-        // events, not a per-frame poll of the same flag.
-        //
-        // `onStart` asks the director *who* is about to speak, because not
-        // every voice on the wire belongs to somebody at the desk. A remote
-        // two-way plays the correspondent's answering line through the same
-        // voice bus, and until this check existed the animator moved the
-        // anchor's mouth while the correspondent was talking — the anchor's
-        // plate was animating on a voice that did not belong to them.
-        //
-        // `speakerIsSeated()` returns true for anything spoken by an anchor,
-        // false for a correspondent, and true by default outside a two-way,
-        // which is everything else the station plays. `onEnd` is
-        // unconditional: whatever was moving stops.
+        // events, not a per-frame poll of the same flag. `onStart` asks
+        // the director *who* is about to speak, because not every voice
+        // on the wire belongs to somebody at the desk — a remote two-way
+        // plays the correspondent's answering line through the same voice
+        // bus and must not move the anchor's mouth.
         GNNTTS.onStart = () => GNNAnimator.setSpeaking(
             typeof GNNDirector !== 'undefined' && GNNDirector.speakerIsSeated
                 ? GNNDirector.speakerIsSeated() : true);
         GNNTTS.onEnd = () => GNNAnimator.setSpeaking(false);
 
         GNNFeedManager.onNewItems = (items) => GNNDirector.enqueueAll(items);
+        GNNDirector.onStory = (item) => {
+            // The ledger is crossed off at the moment the director actually
+            // starts reading the story, not when an RSS item is merely fetched
+            // or queued. This guarantees a reported headline cannot return on
+            // another show or after a page reload.
+            const showId = GNNDirector.getShowInfo().id;
+            // eslint-disable-next-line no-console
+            console.log(`[GNN Ledger] onStory fired: "${item.title}" (show=${showId})`);
+            try {
+                GNNFeedManager.markAired(item, showId);
+            } catch (err) {
+                console.error('[GNN Ledger] Could not mark story aired:', err);
+            }
+        };
+        window.GNNNewsLedger = {
+            download: () => GNNFeedManager.downloadLedger(),
+            get: () => GNNFeedManager.getLedger(),
+            counts: () => {
+                const items = GNNFeedManager.getLedger().items || [];
+                return items.reduce((out, item) => {
+                    const k = item.status || 'unknown'; out[k] = (out[k] || 0) + 1; return out;
+                }, {});
+            },
+        };
         GNNFeedManager.onStatusChange = (text, isError) => {
             statusText.textContent = text;
             statusDot.className = isError ? 'error' : 'live';
         };
 
-        // Commercial beats are spoken by the same anchor unit.
         GNNCutsceneManager.onBeat = (text, shot) => {
             if (!text) return null;
-            // Hand the promise back so the shot holds until its line is out.
-            return GNNTTS.speak(text, GNNCutsceneManager.voiceOptsFor(shot.beat));
+            const opts = GNNCutsceneManager.voiceOptsFor(shot.beat);
+            if (typeof window !== 'undefined' && window.GNNTranscript && window.GNNTranscript.logSpeech) {
+                window.GNNTranscript.logSpeech({
+                    speakerId: 'commercial_announcer',
+                    speakerName: shot.beat.kind === 'legal' ? 'Legal Announcer' : 'Commercial Announcer',
+                    speakerRole: 'Sponsor Voice',
+                    speakerSeat: 'Ad Segment',
+                    text: text,
+                    voiceId: opts.voice,
+                    expectedVoiceId: opts.voice,
+                });
+            }
+            return GNNTTS.speak(text, opts);
         };
 
         GNNGlitch.onSecret = (id, line) => {
@@ -705,26 +764,9 @@
                 secretLog.prepend(li);
                 while (secretLog.children.length > 6) secretLog.lastChild.remove();
             }
-            // Through the director's speech queue, not straight to the TTS.
-            //
-            // This used to poll for the station to stop talking and then
-            // call `GNNTTS.speak()` itself. That poll has a race: if it
-            // expired in the same tick the pump was starting the next line,
-            // the interjection cut the anchor off mid-word. It is why the
-            // station ident was stepped on at first boot exactly once and
-            // then never again on the same build — the timer won the race
-            // that one time.
-            //
-            // Through `interject()` the line waits its turn like anything
-            // else. It plays when the anchor finishes rather than cutting
-            // them off, and the caption presents at the moment its own line
-            // starts, which is what the rest of the station does.
             if (typeof GNNDirector !== 'undefined' && GNNDirector.interject) {
                 GNNDirector.interject(line, { pitch: -26, rate: -12 });
             } else {
-                // Director not wired yet — the fallback keeps the secret
-                // audible rather than silently dropping it. Should never
-                // happen in the normal boot order.
                 GNNTextEngine.present(line, {
                     kind: 'wire', cue: '◆ UNLISTED TRANSMISSION',
                     durationMs: 3200,
@@ -738,11 +780,6 @@
     // Boot
     // =========================================================
 
-    /**
-     * Fade the controls out when the pointer stops. Watching a channel should
-     * not mean looking at a toolbar; it comes back the moment the mouse does.
-     */
-    /** Station configuration, on a key, since nothing is on screen. */
     function wireSettingsKey() {
         window.addEventListener('keydown', (e) => {
             if (e.key !== 's' && e.key !== 'S' && e.key !== 'Escape') return;
@@ -773,28 +810,42 @@
     // =========================================================
 
     /**
-     * Show the boot overlay and start the music bed that covers the load.
+     * The initial boot.
      *
-     * Returns when the track has finished and the fade is complete. Along
-     * the way it fires the fade-out three seconds before the track ends,
-     * so the studio is already visible behind the card when the station
-     * goes on air.
+     * Runs once, at page load, over the full boot track. Fades the
+     * overlay through the station slate and the first show's card, then
+     * crossfades to the live studio the game loop has been drawing
+     * underneath since `startLoop()` was called.
      *
-     * Called from `init()` after the renderer is wired and the game loop
-     * has started — the loop is what draws the studio behind the overlay,
-     * so by the time the fade begins the picture underneath is stable.
+     * Fires the booth ident so its last syllable lands one beat before
+     * the crossfade begins — the viewer hears the station identify
+     * itself and, as the sounder ends, watches the picture change. That
+     * is a sign-on.
+     *
+     * Releases the director at the end by setting `window.GNNBootReady`,
+     * which the director's S.BOOT case gates on.
      */
     async function runBootSequence() {
         const card = $('boot-card');
-        if (card) card.src = BOOT_CARD;
+        const overlay = $('boot-overlay');
 
-        // Warm the TTS pipeline while the track plays. The first synthesis
-        // on a cold server is the largest single source of the first-
-        // minute weirdness — the model takes seconds to load, and every
-        // line dispatched before it is ready lands late or fails. This
-        // call is a throwaway whose only job is to force that load. The
-        // result is discarded; by the time the ident speaks, the pipeline
-        // is warm.
+        // Build the sequence from block 0's card. Block 0 is the block
+        // the director will open on, so the card shown here is the card
+        // that matches the first show.
+        const blockInfo = (typeof GNNDirector !== 'undefined'
+            && GNNDirector.getShowInfo) ? GNNDirector.getShowInfo() : null;
+        const sequence = await resolveBootSequence(bootCardsForBlock(blockInfo));
+
+        if (card) {
+            if (sequence.length) card.src = sequence[0];
+            else card.style.display = 'none';
+        }
+        if (overlay) {
+            overlay.classList.remove('hidden', 'fading-out');
+            overlay.style.transition = '';
+        }
+
+        // Warm the TTS pipeline while the track plays.
         try { GNNTTS.prefetch('Loading.'); } catch (err) { /* not fatal */ }
 
         log('boot', 'boot sequence starting');
@@ -806,48 +857,46 @@
             log('boot', 'boot track failed', err && err.message ? err.message : err);
         }
 
-        // Fire the booth ident FROM HERE, not from the director's cold open.
-        //
-        // The ident and the anchor's sign-on used to be queued microseconds
-        // apart inside beginColdOpen(), which is a race: the pump plays them
-        // in order, but the robot's line is the first ever line synthesised
-        // through a cold TTS pipeline, so its speak() promise can settle
-        // early under load and the anchor's line — queued immediately after
-        // it — pre-empts it. That is the "Hale cut off the robot" fault, and
-        // it is non-deterministic because it depends on how long the first
-        // synthesis takes on that particular boot.
-        //
-        // Moving the ident here means it fires 8+ seconds before the anchor's
-        // line is even queued. There is no overlap window for the pump to
-        // mis-order, and the voice is warm by the time the anchor speaks.
+        // Fire the booth ident FROM HERE, not from the director's cold
+        // open. The ident and the anchor's sign-on used to be queued
+        // microseconds apart inside beginColdOpen(), which is a race: the
+        // pump plays them in order, but the robot's line is the first
+        // ever line synthesised through a cold TTS pipeline, so its
+        // speak() promise can settle early under load and the anchor's
+        // line — queued immediately after — pre-empts it.
         //
         // Timing: the ident is scheduled to finish one beat before the
-        // crossfade from the title card to the studio begins, so the viewer
-        // hears the station identify itself and then, as the sounder ends,
-        // watches the picture change. That is a sign-on.
+        // crossfade from the title card to the studio begins.
         function fireBoothIdent() {
             log('boot', 'booth ident firing');
             GNNDirector.boothIdent();
         }
 
+        // Schedule the card swaps. Each entry after the first replaces
+        // the one before it at a fixed fraction of the track's length, so
+        // the sequence is the same rhythm on a 22s track and a 30s track.
+        // The swap is a `src` reassignment, not a crossfade — the boot
+        // overlay is a single `<img>`, and the hard cut from slate to
+        // show card is what a channel does anyway.
+        if (result && result.duration && sequence.length > 1) {
+            const swapMs = result.duration * 1000 * BOOT_CARD_SWAP_AT;
+            for (let i = 1; i < sequence.length; i++) {
+                const delay = swapMs * i;
+                if (delay < 500) continue;
+                setTimeout(() => {
+                    if (card) card.src = sequence[i];
+                    log('boot', 'boot card -> ' + sequence[i]
+                        + ' at ' + (delay / 1000).toFixed(1) + 's');
+                }, delay);
+            }
+        }
+
         if (result && result.duration > BOOT_FADE_S + 1) {
             const fadeMs = (result.duration - BOOT_FADE_S) * 1000;
 
-            // Estimate the ident's length so the ident can be scheduled to
-            // end just as the fade begins. The line is a constant on the
-            // director's side — `BOOTH_IDENT_LINE` — so the estimate is
-            // measured against that same constant here. This is what keeps
-            // the estimate and the spoken line in sync: if the constant
-            // ever changes, both the estimate and the spoken line change
-            // together, and the timing self-corrects.
             let identLeadMs = 0;
             try {
                 const identMs = GNNTTS.estimateMs('This is the Galactic News Network.');
-                // 100 ms of margin so the ident is definitely done before
-                // the fade starts. If the estimate is short, the ident
-                // overlaps the fade slightly, which is fine — better than
-                // firing it too early and leaving silence before the
-                // transition.
                 identLeadMs = Math.max(0, fadeMs - identMs - 100);
                 setTimeout(() => {
                     log('boot', 'booth ident firing, ends '
@@ -858,29 +907,33 @@
             } catch (err) {
                 log('boot', 'booth ident scheduling failed',
                     err && err.message ? err.message : err);
-                // No estimate available. Fire the ident a fixed five seconds
-                // before the fade — enough runway for a short line to
-                // finish, short enough that it does not leave a gap.
                 setTimeout(fireBoothIdent, Math.max(0, fadeMs - 5000));
             }
 
             log('boot', 'boot track duration='
                 + result.duration.toFixed(2) + 's',
                 'fade in ' + (fadeMs / 1000).toFixed(2) + 's',
-                'ident at ' + (identLeadMs / 1000).toFixed(2) + 's');
+                'ident at ' + (identLeadMs / 1000).toFixed(2) + 's',
+                'release at ' + ((fadeMs + BOOT_RELEASE_INTO_FADE_MS) / 1000).toFixed(2) + 's');
             setTimeout(fadeBootOverlay, fadeMs);
+            // Release the director a beat into the fade, so the anchor's
+            // sign-on begins while the studio is still resolving. The
+            // track continues playing under his voice and ends naturally
+            // — the await below is what holds the boot function open
+            // until then, but the director is already running by the
+            // time we get there, so Hale is not waiting on the track.
+            setTimeout(() => {
+                if (typeof window !== 'undefined' && !window.GNNBootReady) {
+                    window.GNNBootReady = true;
+                    log('boot', 'director released into the fade');
+                }
+            }, fadeMs + BOOT_RELEASE_INTO_FADE_MS);
             await result.stopped;
         } else if (result) {
-            // Track too short for the fade. Fire the ident now and wait out
-            // the remaining time.
             fireBoothIdent();
             await result.stopped;
             fadeBootOverlay();
         } else {
-            // No track — autoplay blocked, manifest missing, or decode
-            // failed. Fire the ident mid-hold so there is still a station
-            // sound before the studio comes up, then fall back to a fixed
-            // hold so the warm-up still happens.
             log('boot', 'no boot track — falling back to '
                 + (BOOT_FALLBACK_MS / 1000) + 's hold');
             setTimeout(fireBoothIdent,
@@ -889,14 +942,9 @@
             await new Promise((r) => setTimeout(r, BOOT_FALLBACK_MS));
         }
 
-        // Track is over. The fade has been running for the last three
-        // seconds of it, so the overlay's alpha is already zero. Take
-        // it out of the DOM entirely so the next frame does not pay for
-        // an invisible element.
-        const overlay = $('boot-overlay');
-        if (overlay) overlay.classList.add('hidden');
+        const finishedOverlay = $('boot-overlay');
+        if (finishedOverlay) finishedOverlay.classList.add('hidden');
 
-        // Release the director. Its S.BOOT case gates on this flag.
         window.GNNBootReady = true;
         log('boot', 'boot sequence complete — releasing director');
     }
@@ -907,15 +955,195 @@
         log('boot', 'studio fade-in started');
     }
 
+    // =========================================================
+    // Between-show bumper
+    // =========================================================
+
+    // Only one bumper at a time. The director calls `play` once per
+    // block transition, but a stalled bumper (an image that never
+    // resolves, a track that never decodes) must not stack with a
+    // second call.
+    let bumperRunning = false;
+
+    /**
+     * The between-show bumper: slate, incoming show's card, short music
+     * interlude, then the fade to the live studio underneath.
+     *
+     * Structure is the same as the initial boot — same card sequence,
+     * same fade-to-studio — but the timing is nine seconds instead of
+     * the full boot track, and the music is a random bed from the
+     * manifest that is not `track_09`, which is reserved for the initial
+     * boot.
+     *
+     * The director is paused for the duration. That is what stops its
+     * state machine from advancing through the bumper: the HOLD that
+     * called us is waiting on an absolute timestamp, and pausing the
+     * director freezes the state machine at that HOLD. On resume the
+     * timestamp has already passed, so the HOLD resolves immediately
+     * and the cold open begins under a picture that has just faded in.
+     *
+     * Returns a promise that resolves when the bumper has finished and
+     * the director has been released. Await it, or fire and forget —
+     * either way the fade and the resume happen together.
+     */
+    let bumperPromise = null;
+
+    function playShowBumper() {
+        // All callers share one in-flight bumper. A second call must wait for
+        // the same handoff rather than returning an already-resolved Promise.
+        if (bumperPromise) return bumperPromise;
+        bumperRunning = true;
+        // Freeze the director synchronously, before any image/card await can
+        // yield a frame to the state machine.
+        try { if (GNNDirector.pause) GNNDirector.pause(); } catch (_) { /* recover below */ }
+
+        bumperPromise = (async () => {
+            let handoffDone = false;
+            const swapTimers = [];
+            try {
+                const card = $('boot-card');
+                const overlay = $('boot-overlay');
+                if (!card || !overlay) {
+                    log('bumper', 'required overlay/card missing; handing off directly');
+                    return;
+                }
+
+                // Capture the incoming show once. Every card and the eventual
+                // director handoff are now tied to this same block ID.
+                const blockInfo = (typeof GNNDirector !== 'undefined'
+                    && GNNDirector.getShowInfo) ? GNNDirector.getShowInfo() : null;
+                const sequence = await resolveBootSequence(bootCardsForBlock(blockInfo));
+                if (!sequence.length) {
+                    log('bumper', 'no cards for block, handing off directly');
+                    return;
+                }
+
+                log('bumper', 'starting for block ' + (blockInfo ? blockInfo.id : '?'));
+                overlay.classList.remove('hidden', 'fading-out');
+                overlay.style.transition = '';
+                card.style.display = '';
+                card.src = sequence[0];
+
+                // Swap the live studio to the incoming block NOW, while the
+                // bumper overlay is still fully opaque and covering the
+                // frame. Without this, the overlay fades out over the
+                // previous block's set (e.g. main_desk), the viewer sees a
+                // split second of the old studio, and only then does
+                // beginColdOpen() -> GNNRenderer.setShowBlock() swap to the
+                // correct one. Doing the swap here means the fade reveals
+                // the right set, anchors and backdrop in one frame.
+                //
+                // beginColdOpen() will call setShowBlock() again with the
+                // same index later; that is harmless and idempotent.
+                if (blockInfo && typeof GNNRenderer !== 'undefined'
+                    && GNNRenderer.setShowBlock) {
+                    GNNRenderer.setShowBlock(blockInfo.blockIndex);
+                }
+
+                try {
+                    const beds = GNNAssets.musicTracks().filter((t) => t.id !== BOOT_TRACK);
+                    if (beds.length) {
+                        const interludeTrack = beds[(Math.random() * beds.length) | 0];
+                        GNNAudio.playMusic(interludeTrack.id,
+                            { gain: 0.6, loop: true, fadeIn: 0.4 });
+                        log('bumper', 'interlude track ' + interludeTrack.id);
+                    }
+                } catch (err) {
+                    log('bumper', 'interlude track failed', err && err.message ? err.message : err);
+                }
+
+                // Track every scheduled swap so error recovery cannot let a
+                // stale previous show's timer replace the next show's card.
+                const swapMs = BUMPER_MS * BUMPER_CARD_SWAP_AT;
+                for (let i = 1; i < sequence.length; i++) {
+                    const delay = swapMs * i;
+                    if (delay < 200) continue;
+                    const timer = setTimeout(() => {
+                        if (card) card.src = sequence[i];
+                        log('bumper', 'card -> ' + sequence[i]
+                            + ' at ' + (delay / 1000).toFixed(1) + 's');
+                    }, delay);
+                    swapTimers.push(timer);
+                }
+
+                await new Promise((r) => setTimeout(r, BUMPER_MS - BUMPER_FADE_MS));
+                overlay.style.transition = `opacity ${BUMPER_FADE_MS}ms ease`;
+                overlay.classList.add('fading-out');
+                if (GNNAudio.stopMusic) GNNAudio.stopMusic(BUMPER_FADE_MS / 1000);
+                await new Promise((r) => setTimeout(r, BUMPER_FADE_MS));
+                overlay.classList.add('hidden');
+                overlay.classList.remove('fading-out');
+                overlay.style.transition = '';
+
+                // Exactly one cold-open handoff for this incoming block.
+                if (GNNDirector.handoffColdOpen) GNNDirector.handoffColdOpen();
+                if (GNNDirector.resume) GNNDirector.resume();
+                handoffDone = true;
+                log('bumper', 'complete, director resumed for block ' + (blockInfo ? blockInfo.id : '?'));
+            } catch (err) {
+                log('bumper', 'failed; releasing director', err && err.message ? err.message : err);
+            } finally {
+                swapTimers.forEach((timer) => clearTimeout(timer));
+                if (!handoffDone) {
+                    // No exception/card failure may leave the director paused
+                    // or leave a stale show card sitting over live video.
+                    const overlay = $('boot-overlay');
+                    if (overlay) {
+                        overlay.classList.add('hidden');
+                        overlay.classList.remove('fading-out');
+                        overlay.style.transition = '';
+                    }
+                    try { if (GNNDirector.handoffColdOpen) GNNDirector.handoffColdOpen(); } catch (_) { }
+                    try { if (GNNDirector.resume) GNNDirector.resume(); } catch (_) { }
+                }
+                bumperRunning = false;
+                bumperPromise = null;
+            }
+        })();
+        return bumperPromise;
+    }
+
+    /**
+     * The boot failed. Release whatever can be released and get out of
+     * the way of the operator.
+     *
+     * Two things the old version of this handler did not do:
+     *
+     *   1. It did not hide the boot overlay. A failure inside
+     *      `runBootSequence()` after the title card was shown but before
+     *      the fade left a static image up forever.
+     *
+     *   2. It did not release the director. `window.GNNBootReady` was only
+     *      set on the success path, so the director's S.BOOT case sat on
+     *      that flag and never advanced.
+     *
+     * `startLoop()` is idempotent, so calling it here is a no-op if the
+     * try block already started it.
+     */
+    function handleBootFailure(err) {
+        bootError = true;
+        console.error('[GNN] initialization failed:', err);
+        log('boot', 'FAILED', err && err.message ? err.message : String(err));
+        statusText.textContent = 'Error loading assets — see console';
+        statusDot.className = 'error';
+
+        const overlay = $('boot-overlay');
+        if (overlay) overlay.classList.add('hidden');
+
+        window.GNNBootReady = true;
+
+        if (iconPlay) iconPlay.classList.add('hidden');
+        if (iconPause) iconPause.classList.remove('hidden');
+
+        startLoop();
+        try { GNNFeedManager.start(); }
+        catch (feedErr) { console.error('[GNN] feed start failed:', feedErr); }
+    }
+
     async function init() {
         watchPointerIdle();
         wireSettingsKey();
 
-        // Start watching the AudioContext from the very beginning of boot.
-        // The AudioContext does not exist yet — `getContext()` returns null
-        // — so the first samples will read `state=none`. That is expected
-        // and useful: it tells us the moment the context is actually
-        // created, and whether it comes up running or suspended.
         watchAudioContext();
         log('boot', 'init start');
 
@@ -928,8 +1156,6 @@
                 console.warn('[GNN] font load warning:', fontErr);
             }
 
-            // Ask the server which engine and voices it has before the
-            // selector is built, so the two can never disagree.
             const catalogue = await GNNTTS.loadCatalogue();
             if (catalogue && catalogue.engine) {
                 log('boot', 'voice engine:',
@@ -942,11 +1168,6 @@
                 'robot=' + (assets.robot ? 'ok' : 'missing'));
             GNNRenderer.init(canvas, assets);
 
-            // The anchor in the first seat of the first block reads, so the
-            // station speaks with that character's voice rather than
-            // whatever the catalogue happened to list first. The per-block
-            // voice is set by the director inside `beginColdOpen` every
-            // time the block swaps.
             if (assets.deskVoice) GNNTTS.setVoice(assets.deskVoice);
 
             wireModules();
@@ -955,21 +1176,23 @@
             const ctx = GNNRenderer.getContext();
             if (ctx) GNNTickerManager.rebuild(ctx, []);
 
-            // Start the loop immediately, before the boot sequence — it is
-            // what draws the studio behind the title card, so by the time
-            // the fade begins the picture underneath is already there.
-            requestAnimationFrame(gameLoop);
+            startLoop();
 
-            // Start the feed manager too. Its poll runs in the background
-            // during boot so the queue has stories ready by the time the
-            // director is released. The director does not act on them
-            // until `GNNBootReady` is set, so nothing is spoken early.
             GNNFeedManager.start();
 
-            // Boot track, crossfade, warm-up window. Resolves when the
-            // station is on air. Everything the first minute used to
-            // fight over — TTS pipeline, icon plates, first feed poll —
-            // has the track's runtime to settle.
+            // The director's between-show bumper hook. This is what the
+            // director reads (if patched) — see the note at the bottom
+            // of this file. When the director doesn't read it, the
+            // bumper never fires and shows just cut straight to the next
+            // one, which is the previous behaviour.
+            if (typeof GNNDirector !== 'undefined') {
+                GNNDirector.onBeforeColdOpen = playShowBumper;
+            }
+            // Also expose it globally, so a console session can trigger
+            // it manually for testing:
+            //     window.GNNBumper.play()
+            window.GNNBumper = { play: playShowBumper, isRunning: () => bumperRunning };
+
             await runBootSequence();
 
             log('boot', 'on air',
@@ -979,15 +1202,7 @@
             iconPlay.classList.add('hidden');
             iconPause.classList.remove('hidden');
         } catch (err) {
-            bootError = true;
-            console.error('[GNN] initialization failed:', err);
-            log('boot', 'FAILED', err && err.message ? err.message : String(err));
-            statusText.textContent = 'Error loading assets — see console';
-            statusDot.className = 'error';
-            try {
-                GNNFeedManager.start();
-                requestAnimationFrame(gameLoop);
-            } catch (_) { /* nothing further to do */ }
+            handleBootFailure(err);
         }
     }
 

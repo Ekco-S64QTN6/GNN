@@ -21,15 +21,12 @@ const GNNTextEngine = (() => {
 
     // The story caption, as a fraction of the frame so it survives a change
     // of resolution.
-    //
     // Every caption is drawn in the same slot now — a slab along the bottom
-    // of the frame. The bubble that used to sit above the speaker's head,
-    // with a tail pointing at their mouth, is gone: it read as a comic-book
-    // speech balloon, and it kept colliding with the monitor in the corner.
-    //
-    // `PANEL.w` and `PANEL.minW` are kept for reference only; they are no
-    // longer read. Every box is `STATION_BOX` width.
-    const PANEL = { w: 0.46, minW: 0.20 };
+    // of the frame, `STATION_BOX` width. The bubble that used to sit above
+    // the speaker's head, with a tail pointing at their mouth, is gone: it
+    // read as a comic-book speech balloon, and it kept colliding with the
+    // monitor in the corner.
+
 
     // The box is born at the width it will always be and two lines tall, and
     // grows a whole line at a time. Sizing it to the characters typed so far

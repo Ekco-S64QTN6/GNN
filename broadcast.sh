@@ -14,6 +14,7 @@ cd "$(dirname "$0")"
 
 PORT="${GNN_PORT:-8080}"
 URL="http://localhost:$PORT"
+LOG="${GNN_LOG:-gnn-server.log}"
 PROFILE="${XDG_CACHE_HOME:-$HOME/.cache}/gnn-window"
 MODE=window
 case "${1:-}" in
@@ -35,6 +36,7 @@ fi
 
 window_pid=""
 cleanup() {
+    echo "[$(date +%H:%M:%S)] [Launcher] broadcast session ending" >> "$LOG" 2>/dev/null || true
     # Close the window too. Closing it normally is what ends this script, but
     # a Ctrl-C or a killed terminal gets here with the browser still up, and
     # an orphaned app window keeps playing a broadcast with no server.
@@ -57,6 +59,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if [ "$MODE" = tab ]; then
+    echo "[$(date +%H:%M:%S)] [Launcher] opened $URL in browser tab" >> "$LOG"
     xdg-open "$URL" >/dev/null 2>&1 &
     echo "opened $URL in your browser. Ctrl-C here to take the station off air."
     while curl -fsS --max-time 2 "$URL/api/status" >/dev/null 2>&1; do sleep 2; done
@@ -78,8 +81,9 @@ import app_window
 sys.stdout.write(app_window.why_unavailable())" 2>/dev/null || echo "")"
     if [ -z "$reason" ]; then
         echo "opening the broadcast in its own window…"
+        echo "[$(date +%H:%M:%S)] [Launcher] launching WebKitGTK app window" >> "$LOG"
         /usr/bin/python3 tools/app_window.py --url "$URL" --title "GNN // Galactic News Network" \
-            --class GNN --size 1280x900 --icon video-display &
+            --class GNN --size 1280x900 --icon video-display >>"$LOG" 2>&1 &
         window_pid=$!
         wait "$window_pid"
         exit 0
@@ -88,9 +92,25 @@ sys.stdout.write(app_window.why_unavailable())" 2>/dev/null || echo "")"
 fi
 
 BROWSER=""
+BROWSER_CMD=()
 for b in chromium chromium-browser google-chrome-stable google-chrome brave; do
-    command -v "$b" >/dev/null 2>&1 && { BROWSER="$b"; break; }
+    if command -v "$b" >/dev/null 2>&1; then
+        BROWSER="$b"
+        BROWSER_CMD=("$b")
+        break
+    fi
 done
+
+if [ -z "$BROWSER" ] && command -v flatpak >/dev/null 2>&1; then
+    if flatpak info org.chromium.Chromium >/dev/null 2>&1; then
+        BROWSER="org.chromium.Chromium (flatpak)"
+        BROWSER_CMD=(flatpak run --filesystem=/tmp --filesystem="$(pwd)" org.chromium.Chromium)
+    elif flatpak info com.google.Chrome >/dev/null 2>&1; then
+        BROWSER="com.google.Chrome (flatpak)"
+        BROWSER_CMD=(flatpak run --filesystem=/tmp --filesystem="$(pwd)" com.google.Chrome)
+    fi
+fi
+
 if [ -z "$BROWSER" ]; then
     echo "no browser found; the station is at $URL" >&2
     while curl -fsS --max-time 2 "$URL/api/status" >/dev/null 2>&1; do sleep 2; done
@@ -99,12 +119,14 @@ fi
 
 mkdir -p "$PROFILE"
 echo "opening the broadcast in a $BROWSER app window…"
-"$BROWSER" --app="$URL" \
+echo "[$(date +%H:%M:%S)] [Launcher] launching $BROWSER app window (url: $URL)" >> "$LOG"
+"${BROWSER_CMD[@]}" --app="$URL" \
     --user-data-dir="$PROFILE" \
     --class=GNN \
     --window-size=1280,900 \
     --no-first-run --no-default-browser-check \
     --autoplay-policy=no-user-gesture-required \
-    >/dev/null 2>&1 &
+    --enable-logging=stderr \
+    >>"$LOG" 2>&1 &
 window_pid=$!
 wait "$window_pid"

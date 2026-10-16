@@ -1,3 +1,14 @@
+# `CLAUDE.md` — full replacement, addressing documentation drift and count discrepancies
+
+The changes are:
+
+- **§1** — corrected counts (cast 14, voices 12, assets 713/3,984), added a *Robot* row reflecting the generated anchor, and a note about the README/ROADMAP figure the runtime does not produce.
+- **§3** — six new entries at the top, each documenting a fix that landed between the previous revision and this one. Same evidence-first style as the existing entries.
+- **§5** — flagged `key_robot.py` as pending retirement alongside the MOO1 25-cel path.
+- **§7** — rewritten. Six stale items removed (they landed; §3 now records them). New items added: the count reconciliation, the robot 25-cel retirement, the `beginTwoWay` unchecked return (fixed this session, recorded in §3), the dead `person.frames` branch, and the outstanding README/ROADMAP corrections.
+
+Everything else is unchanged.
+
 ```markdown
 # CLAUDE.md — working notes and verified state
 
@@ -5,7 +16,9 @@
 what must not be touched.** `README.md` is the public front page.
 `docs/ROADMAP.md` is what is still to build.
 
-Last verified at commit `056c5a9`.
+Last verified against the code snapshot taken alongside this revision. The
+previous hash (`612f5c6`) refers to an earlier state; the commit hash for
+this revision is to be filled in at the next commit.
 
 ---
 
@@ -13,8 +26,8 @@ Last verified at commit `056c5a9`.
 
 **Verify behaviour, not presence.** This project has a long history of documents
 claiming fixes that had not landed, and of fixes aimed at the wrong cause. Two
-examples from the most recent round, both of which would have cost a full
-session if taken on faith:
+examples from recent rounds, both of which would have cost a full session if taken
+on faith:
 
 - A brief asserted that every page load fired one TTS request per voice in the
   catalogue. It does not. Those log lines were `tools/voice_audition.py` run by
@@ -41,30 +54,35 @@ the metric is the thing to doubt.
 |---|---|
 | Voice engine | Kokoro-82M, local, in-process, ~7× realtime on CPU |
 | Fallback | `edge-tts` (cloud) when `.venv` is absent |
-| Assets | 873 items / 4,316 frames, decoded byte-exact from 22 LBX archives |
+| Assets | 713 graphics items / 3,984 frames in the runtime manifest — the README badge and `docs/ROADMAP.md` still quote 713 / 4,316, see §7 for the reconciliation |
 | Admitted pools | 76 broll · 132 portrait · 399 sprite · 27 chrome |
 | Output ceiling | peak 0.872 under deliberate overload, zero clipped samples |
 | Per-line loudness | −19.3 to −20.3 LUFS, 1.0 LU spread, true peak −3.0 dBFS |
 | Spoken lines | 22 consecutive, 0 truncated |
 | Broadcast | runs the full rundown with zero exceptions over 90 s+ |
 | Frame | 320×180 design grid, 1280×720 canvas, follows the window, full-bleed |
-| Cast placement | `CAST.h` 0.300 of frame height, seated at `DESK_LINE` 0.468 — the back of the desk surface |
+| Cast placement | `CAST.h` 0.300 of frame height, seated at per-set `deskLine` from `layout.json` (0.4680–0.5690) |
 | Plates | conditioned at canvas resolution, not the design grid |
-| Cast | 11 generated species + the MOO1 robot, keyed out of his own scene |
-| Characters | `js/cast.js` — 12 profiles, voices and an asymmetric relationship table |
-| Voices | 9 shortlisted by ear, plus `vox_unit` (a DSP robot, not a model) |
-| Anchor variants | all eleven species have `desk_hero` and `speaking`; `listening_flip` not re-derived from the newest plates |
-| Robot frames | 25 cels in `assets/generated/anchors/robot_frame_*.png`, produced by `python3 tools/key_robot.py` |
-| Studio sets | five — `studio_wide_empty.png` plus `market_`, `geopolitics_`, `tech_`, `celebrity_wide_empty.png`. The four new ones have black window panes not yet keyed |
-| Cutaways | regenerated; plates in `assets/generated/cutaways/` |
+| Cast | 14 profiles in `js/cast.js`, 14 entries in `main.js`'s `ROSTER`; 13 are seatable and load at boot via `loadAnchorSet()`, the station's own machine is loaded through the same call and held out of the seating rotation |
+| Voices | 11 neural voices plus `vox_unit` (a DSP chain over `am_michael`, not a model) — 12 entries in `server.py:LOCAL_VOICES` |
+| Robot | A generated anchor plate at `assets/generated/anchors/robot_*` loads through the same `loadAnchorSet()` path as every other cast member. The 25-cel MOO1 keyed frames (`robot_frame_*.png`, from `tools/key_robot.py`) are no longer read by the runtime; the `person.frames` branch in `renderer.js:drawCast()` is dead code pending removal. See §7. |
+| Anchor variants | every seated species has `desk_hero` and `speaking`; `listening_flip` derived via head-only mirror |
+| Studio sets | Ten sets rotating — all 10 measured and calibrated in `layout.json` with per-set desk lines |
+| Cutaways | regenerated; plates in `assets/generated/cutaways/`, routed via `GENERATED` — including `interview`, which now has its own plate and a fallback in `correspondentScene()` |
 | Backdrops | generated; full set in `assets/generated/backdrops/` |
-| Show logos | five, in `assets/generated/logos/` — not wired into the renderer |
-| Story icons | regenerating into `assets/generated/icons/`, partial |
+| Real stock crawl | live Yahoo Finance via `curl_cffi` on `/api/market`, per-segment color crawl (green/red/amber) |
+| Logging subsystem | dual-file logging: `gnn-transcript.log` (millisecond dialogue stream) & `gnn-server.log` (universal browser & subsystem sink); 250MB auto-rotation |
+| Diagnostic tests | 26 standalone CDP test runners and diagnostic monitors preserved in `tools/tests/` |
+| Show logos | five, in `assets/generated/logos/` — conditioned and ready for renderer overlay |
+| Story icons | regenerating into `assets/generated/icons/` |
 | Prompt library | `assets/generated/Prompts/` — all prompt `.md` files, one per asset class |
 | Speaker attribution | per-line; `activeSeatForLine()` and `speakerIsSeated()` in the director, read by renderer, text engine, animator |
-| Main desk beat | `human` and `mrrshan_f` both cover world · diplomacy · science · tech · fleet · anomaly; markets held for the trade/resource/industry desks |
-| Two-anchor beats | structured conversations — `GNNScript.banterBeat()` and `exchange()` return tagged arrays, `GNNDirector.queueTaggedLines()` queues them; `twoWay()` rolls brief / standard / extended shapes |
-| Scene review | `tools/scene_review.html` — opens at `/tools/scene_review.html`, renders each MOO1 recipe as `.webm` or contact sheet |
+| Main desk beat | `human`, `mrrshan_f`, `human_f` and `alkari_f` cover world · diplomacy · science · tech · fleet · anomaly; markets held for the trade desk |
+| Two-anchor beats | structured conversations — `GNNScript.banterBeat()` and `exchange()` return tagged arrays; `twoWay()` rolls brief / standard / extended / panel shapes, and `beginTwoWay()` awaits `openTwoWay()` before queueing |
+| Cold open rundown | `GNNScript.rundownOpen()` names three queued stories in the cold open before reading the first; falls back to `showOpen()` on an empty or single-story queue |
+| Boot sequence | `main.js:runBootSequence()` holds the director behind a title card while `track_09` plays (~22s), fires the booth ident so its last syllable lands one beat before the crossfade, and releases the director when the fade completes |
+| Scene review | `tools/scene_review.html` — renders each MOO1 recipe as `.webm` or contact sheet |
+| Studio review | `tools/studio_review.html` — interactive desk-line slider and live preview across all ten sets |
 
 Verify all of it:
 
@@ -76,6 +94,12 @@ python3 tools/audio_probe.py 110        # clips + level-relative pops
 ./stop.sh
 ```
 
+The asset-manifest total (713 / 3,984) is read from `[GNN Assets]` in
+`gnn-server.log` on a fresh boot. It does not match the badge in `README.md`
+or the figure in `docs/ROADMAP.md` §2 — see §7. Both the manifest count and the
+documented count claim to measure the same thing, "items in `assets/`", and
+the runtime number is what the app is actually drawing from.
+
 ---
 
 ## 2. Architecture constraints — do not break
@@ -83,11 +107,13 @@ python3 tools/audio_probe.py 110        # clips + level-relative pops
 Load-bearing. Each one is here because breaking it caused a bug that took a
 session to find.
 
-1. **Canvas compositing order** in `renderer.js` `renderFrame()`:
-   clear → viewport → post-process blit → alert border → ghost → Orion
-   badge → caption. The viewport *is* the canvas: the picture fills the
-   window and there is no set drawn around it. The MOO1 TV chrome
-   (`background_tv.png`) is deliberately not drawn any more.
+1. **Canvas compositing order** in `renderer.js`:
+   Inside `drawViewport()`: clear → backdrop + ghost anomaly (window layer outside studio)
+   → set plate (opaque walls/desk) → cast plates → monitor icon → post-process blit
+   → alert border → Orion badge → caption. The ghost signal anomaly renders
+   outside the studio window behind the anchors rather than covering the cast.
+   The viewport *is* the canvas: the picture fills the window and there is no set drawn
+   around it. The MOO1 TV chrome (`background_tv.png`) is deliberately not drawn any more.
 2. **All production assets stay in `assets/`.** Generated art goes in
    `assets/generated/` under the same discipline.
 3. **The bottom of the frame is a stack and `GNNRenderer.bottomStack()` owns
@@ -123,6 +149,13 @@ session to find.
 12. **The test harness launches Chromium muted.** `GNN_HARNESS_AUDIO=1` to hear
     a run. An unmuted headless browser plays the newscast out of the speakers
     with no window to close.
+13. **Any async call fired from `update()` reserves its state synchronously
+    and clears it in `finally`.** The frame loop keeps running across an
+    `await`; without a reservation, a case can see `!speaking` in the window
+    the await opens and fall through to the next segment. The pattern is
+    `breakArming` in `beginBreak()` and `twoWayArming` in `beginTwoWay()`. The
+    same window is why the two-way used to play over the top of the story it
+    was meant to replace.
 
 ---
 
@@ -131,200 +164,137 @@ session to find.
 Kept because each one explains a constraint above, and because the wrong
 diagnosis is as useful to record as the right one.
 
-### LBX decoder — vertical streaking on most artwork
-Two independent bugs, both invisible on the artwork the decoder had been
-verified against. A column is a *sequence* of runs, not one (60 % of the library
-has two or more); and the byte after each run's pixel count is a **gap from the
-end of the previous run**, not an absolute `y`. The anchor and story icons are
-one run per column, so they decoded identically either way and a spot check
-passed while every planet, console and cinematic was quietly wrong. Settled
-against `NEWSCAST.LBX` item 0, which *is* `background_tv.png`: absolute offsets
-reproduce 60.1 % of its pixels, gap offsets reproduce 100 %.
+### The two-way queued its audio whether or not the monitor opened
+Owner-visible fault, hit only when a correspondent's plate was missing from
+`assets/generated/correspondents/`: the anchor asked a question, someone
+answered it in a voice, and the over-the-shoulder monitor stayed on the story
+icon for the whole beat. Worse, the show's *one* correspondent slot burned —
+`correspondentUsed = true` — so the forced panel in the second half never
+fired.
 
-Colour was also unified to `(v << 2) | (v >> 4)`; the old pipeline disagreed
-with itself across archives (raw 6-bit, `v<<2`, and `v×255/63` all appeared).
+`GNNCutsceneManager.openTwoWay()` has always returned `false` when
+`correspondentScene()` returns null. `beginTwoWay` fired it as fire-and-forget
+and returned `true` unconditionally, so nothing upstream could tell the two
+apart. The `CORRESPONDENT_READY` set in `script-writer.js` matched the disk at
+the time the set was written, but nothing enforced it — drop one plate in the
+conditioning pipeline and the fault returned silently.
 
-### Mix clipping — the actual cause of the crackle
-`STATION_LEVEL = 1.2` applied *after* the limiter. Measured from a screen
-capture of the running app (local, not committed): peak **1.183**, 55 samples
-past full scale, worst event a 150 ms swell into +1.5 dBFS. 0.98 × 1.2 = 1.18,
-matching to three figures.
-→ constraint 10.
+`beginTwoWay` is now `async`, awaits the monitor open, and only queues the
+lines on success. `beginBanter` awaits the same call and only latches
+`correspondentUsed` on a `true` return. A `twoWayArming` flag closes the
+frame-loop window the await opens, exactly the shape `breakArming` uses for
+the commercial assembly — see constraint 13. The synchronous reservation is
+what let the previous version of this function be synchronous for the right
+reason; the flag restores that guarantee without giving up the ability to see
+the return value.
 
-### Voice level dipped between lines — normalising peak, not loudness
-The anchor dropping in volume for a line and coming back. The normaliser used
-peak as a hard ceiling:
+→ **An async call whose return value the caller needs is not a call the caller
+can ignore.** Fire-and-forget is for logs and telemetry, not for the thing
+that decides whether the beat runs at all.
 
-```python
-gain = TARGET_LUFS - lufs
-gain = min(gain, TARGET_PEAK_DB - peak)    # ceiling always won
-```
+### The DR in a headline read as "Doctor"
+A wire headline *"UN OFFICIAL SAYS 'WINDOW OF OPPORTUNITY' FOR PEACE IN DR
+CONGO"* was read aloud as **"Doctor Congo."** The token `DR` survives
+`unshout()` — correctly, because `unshout`'s job is de-emphasis, not
+initialism expansion — and was absent from `PRONOUNCE`, so it reached Kokoro
+as the literal string. The phonemiser resolved it the way English does, as the
+abbreviation for *Doctor*.
 
-Measured at the endpoint, every line came back at exactly −3.0 dBFS peak and
-anywhere from −19.7 to −27.8 LUFS. The ceiling bound on *every* clip, so what
-was actually normalised was the peak — crest factor translated straight into
-perceived loudness, and one sharp plosive in a long read dragged that whole
-read 8 dB below the short line before it. In the owner's capture this showed as
-a **16–23 dB spread between utterances**.
+Fixed by adding `[/\bDR\b/g, 'D R']` and `[/\bDRC\b/g, 'D R C']` to `PRONOUNCE`
+in `js/tts.js`, deliberately **without** the `i` flag so the mixed-case `Dr`
+(a genuine doctor in a headline) still reads as "Doctor". The `'D R'` respelling
+follows the `[/\bGNN\b/g, 'G N N']` convention already in the list and confirmed
+working in `gnn-transcript.log` ("This is G N N").
 
-Loudness is now normalised; peaks are *limited* rather than setting the gain.
-The limiter works on sample peaks while the target is a true peak, so it sits
-1.8 dB below to leave inter-sample headroom. Across seven lines of 1.8–15.3 s:
-**8.1 LU spread → 1.0 LU**, max true peak −3.0 dBFS.
+The shape is worth recording because it generalises: **an all-caps token that
+is also a common English abbreviation is not caught by anything in the current
+pipeline.** `unshout` handles emphasis, `SPELLED_OUT` handles known
+initialisms, and neither covers `DR`, `St`, `Mt`, `No`, `Co`. Any wire
+headline containing one of those will mispronounce until it is added to
+`PRONOUNCE` explicitly.
 
-→ **Normalise loudness and limit peaks. Never let a peak ceiling set the gain
-of a whole clip.**
+→ **A wrong pronunciation passes; a spelled-out word does not.** Same standing
+policy as the `unshout` note below.
 
-### `duckMusic()` un-ducked to unity
-Treated its argument as an absolute gain rather than a multiplier on the mixed
-level, so the bed swelled to full scale at the end of every spoken line.
-→ constraint 7.
+### The two-way route had no plate and no fallback
+Owner's screenshot: Bulrathi Defence Desk correspondent Grolm rendering over
+solid pitch black inside the PIP monitor instead of a cutaway. Root cause was
+two parts, both in `cutscene-manager.js`.
 
-### Lines cut off mid-sentence
-`beginHold()` ran a bare timer with no `!speaking` check, and synthesis latency
-was nowhere in the clock — audio started 1–4 s after its segment while timers
-ran anyway. Clips are now fetched before they play, breaks are pre-synthesised,
-and each ad shot holds until its voice-over resolves. 6 of 24 truncated → 0 of 22.
+`routeFor(current)` returns `'interview'` for any story whose text carries a
+dialogue verb ("said", "told", "interview"). `'interview'` was absent from the
+`GENERATED` route dictionary, so `generatedScene('interview')` returned null —
+and `correspondentScene()` had no fallback, so no backdrop layer was pushed and
+the correspondent's plate was drawn over a cleared `#000` rect. The plate is an
+RGBA sprite with real transparency, so the black canvas showed through the
+silhouette.
 
-### `glitchCrush()` step discontinuity
-Hard-set wet/dry gains with `setValueAtTime` and swapped a live WaveShaper curve
-mid-signal. 178–234 pops → 0. → constraint 8.
+Fixed by adding `interview: ['council_summit', 'station_trade',
+'station_trade_02', 'council_vote', 'council_vote_02']` to `GENERATED`, and by
+giving `correspondentScene()` an explicit fallback chain that tries the routed
+plate, then the `interview` plate, and only then accepts a correspondent over
+whatever it has.
 
-### One-shots at unity
-The per-call `GainNode` was left at its 1.0 default while relying on a scheduled
-ramp that can land in the past, so effects intermittently fired at full scale.
+→ **A route is not a plate.** The router's job is to name the subject; whether
+the subject has art is a separate question, and every consumer of a route has
+to answer it.
 
-### The limiter was crushing every word
-The fix above traded one fault for another. The local engine outputs at -26 to
--28 LUFS with peaks only 4-10dB below full scale — quiet body, tall plosives —
-so lifting it to a -19 LUFS target with gain alone drove peaks over and left
-the limiter removing **up to 10.1 dB** (toss 3.6, ident 7.4, banter 6.1, long
-10.1). That is heard as every word being stepped on, and because the amount
-varies per clip it is also why one story sounded fine and the next was mangled.
+### The phonetic dictionary did not cover the station's own vocabulary
+`PRONOUNCE` had two entries — `Houthis` and `Houthi` — and the anchor read the
+MOO1 roster as the phonemiser guessed. `convoy` was stressed on the second
+syllable (`/kənˈvɔɪ/`, like *convey*), which is audible inside the sponsor
+copy (*"The Council will not save your convoy"*), and every species name was
+subject to the same guess as `DR` had been.
 
-Gentle compression now runs in front of the gain, so the clip can reach the
-target without the limiter doing the levelling. Settings came from a sweep of
-threshold/ratio/target against measured limiter reduction *and* retained
-loudness range — the engine's raw LRA is only 2.9 LU, so compression costs
-almost no dynamics here because the crest is isolated plosives, not expression.
+Fixed by expanding the dictionary to the full set — real-world names
+(`Hezbollah`, `Netanyahu`, `Kyiv`), common stress errors (`convoys`, `convoy`,
+`corvette`, `coup`, `GNN`, `Chyron`), every species (`Bulrathi`, `Mrrshan`,
+`Alkari`, `Klackon`, `Psilon`, `Sakkra`, `Darlok`, `Meklar`, `Silicoid`) and
+the stars (`Antares`, `Betelgeuse`, `Aldebaran`, `zortrium`).
 
-| | limiter removes | spread | peak | LRA |
-|---|---|---|---|---|
-| target -19, no compression | **10.1 dB** | 8.1 LU | -3.0 | 1.6 |
-| 4:1 above -24dB, target -21 | **1.8 dB** | 0.5 LU | -4.6 | 1.3 |
+### The cold open read a headline with no teaser
+The station opened on the first queued story directly, with no "tonight on…"
+shape. A newscast sign-on that goes straight into a story reads as a feed
+reader; a real channel names what it is about to cover.
 
-→ **A limiter is a safety net, not a leveller. If it is removing more than a
-decibel or two, the stage in front of it is wrong.**
+`GNNScript.rundownOpen(queue, showInfo)` returns a three-line tagged exchange
+— the lead anchor names the first story, the co-anchor names the second and
+(the queue permitting) the third, and the lead throws to the first item. It
+shortens each wire headline through `shortenHeadline()`, which strips wire
+filing labels and category prefixes, drops trailing wire attribution, trims
+secondary participle or subordinate clauses, and preserves proper noun compounds
+(e.g. "Strait of Hormuz") and question phrasing without abrupt word-budget truncation
+or dangling prepositions. In `broadcast-director.js`, the teased rundown stories
+are pinned so subsequent feed replenishments do not displace them, and they air
+in promised order providing full story context during the broadcast. `beginColdOpen()`
+uses it when the queue has at least two stories and falls back to `showOpen()` otherwise.
 
-### The rundown read the same storm four times
-Owner: *"every time I fire it up it's doing the duplicate reading of
-hurricane Isaias."* The BBC science feed served **four separate Hurricane
-Isaias stories in one pull** — different headlines, different summaries,
-and all dated that morning despite being from 2020, so no staleness filter
-catches them. `feed-manager.js` deduplicated on the exact title string, so
-all four went into the rundown and were read back to back.
+### The first minute of airtime fought itself for resources
+The first thirty to sixty seconds of a fresh boot had a cluster of small
+faults: the TTS pipeline cold on the first line, the first feed poll racing
+the first story, the anchor plates loading against the render loop. Each was
+individually minor and together they read as the station warming up.
 
-Two headlines are now treated as one story when they share a word that
-almost nothing else in the pool uses. One shared rare word is enough —
-some of those four shared only "isaias" — but it has to be rare, measured
-as document frequency across the live pool (`DISTINCTIVE_DF = 5`), or
-every story mentioning "space" collapses into one. The losers stay in the
-pool for a later block rather than being dropped, which is what a channel
-does with a running story.
+Fixed by holding the director behind a title card while `track_09` plays.
+`main.js:runBootSequence()` fires the track, warms the TTS pipeline with a
+throwaway synthesis, schedules the booth ident so its last syllable lands one
+beat before the crossfade begins, and sets `window.GNNBootReady` when the
+fade completes. `broadcast-director.js`'s `S.BOOT` case gates on that flag, so
+no line speaks until the track's ~22 seconds have elapsed — enough for the
+Kokoro pipeline to finish loading, the first feed poll to land, and the icon
+and anchor plates to settle.
 
-Replayed against the live feeds: 69 headlines, 4 Isaias, one admitted and
-the rest held. Confirmed in the running app — 12 in the rundown, one storm.
-
-→ **Deduplicate on subject, not on string.** A wire runs the same story all
-day under four headlines, and that is normal behaviour, not a feed fault.
-
-### The asset prompts still asked for pixel art
-`prompt_bridge.py` generates all of `prompts.md` from one `STYLE` constant,
-and that constant was still the 1993 VGA line the owner had rejected five
-times — so every regeneration of the document reinstated it. It now carries
-the settled style from `set-prompts.md`, and pixel art is in the exclusion
-list as well as denied in the style line, because saying it once only sets
-a tone.
-
-The backdrop prompts asked for their subject *"seen through a studio
-window"*, and the model drew the studio: `earth_globe_dusk` came back as a
-shot from inside a space station with a man standing in it. The engine keys
-these into the window opening, so the glass and the room are already there.
-They now describe the exterior view alone and exclude figures, frames,
-glass, interiors and foreground objects outright.
-
-The day cycle also asked for a *"violet sky"* on three backdrops that are
-in vacuum. Asked for a sky, the model supplies an atmosphere, and the
-quickest way to justify one is to put the camera somewhere with a window.
-`ORBIT_CYCLE` lights those three by the sun and the starfield instead.
-
-→ **A generated document cannot be fixed by editing the document.**
-
-### The mouth ran on a free clock and the prompter ran on an estimate
-Owner: *"the TTS and the mouth animation aren't perfectly lined up"* and
-*"text should be written out as the TTS is saying the words... the mouth
-animation only happening while a word is being spoken."*
-
-Both were true, and the note elsewhere in this file saying the envelope was
-unusable had gone stale. Measured live through the analyser during a read:
-level runs **0.002 to 1.000, median 0.628**, with pauses between sentences
-showing as runs of 400 ms or more below 0.10. The compression change
-earlier gave the envelope back; the lip-sync was still working around its
-absence.
-
-The syllable clock is kept — it sets the flap *rate* — but it is now gated
-on the envelope, with a 90 ms hangover so a consonant does not chatter it
-shut mid-word. Measured after: **mouth open 1–2% of samples during silence,
-56–57% during speech.**
-
-The teleprompter typed from `durationMs`, an estimate of how long the line
-ought to take. Close, which is worse than wrong: the two drift apart over a
-long read. `GNNTTS.playbackProgress()` exposes the audio element's real
-position and `text-engine.js` types to it, a few percent ahead the way a
-prompter runs. Measured drift across a read: **0.008 → 0.051**, landing
-together at 1.000.
-
-→ **A workaround outlives the fault it was written for.** Re-measure before
-trusting a note that says a signal is not there.
-
-### Six faults, one cause: nothing waited its turn
-Owner's list after a watch: the station ident interrupted, the commander
-cut off mid-line by the other anchor, a line written for one character
-spoken in the other's voice, the throw to the break stepping on the story,
-the break returning over the last advert, and every cutaway talking over
-itself.
-
-One cause. `GNNTTS.speak()` bumps its own request id and **cuts off whatever
-is already playing**, and every `say()` in the director was fire-and-forget.
-Any line fired while someone was talking killed the line in progress, and
-which line won was a race — which is why the owner saw it behave differently
-on two consecutive runs of the same build.
-
-There is a single speech queue now. Nothing speaks directly; lines are
-queued and a pump plays them one at a time with a 420 ms beat of air
-between them, and **the caption is presented when its own line starts**
-rather than when it was scheduled, which is why the text box used to appear
-before the voice. `cancelSpeech()` clears the queue; the break awaits
-`drainSpeech()` before the commercials roll and polls `isBreakActive()`
-before coming back.
-
-→ **A fire-and-forget call into something that pre-empts itself is a race,
-not a sequence.**
-
-### The same line four times in five minutes
-`pickFrom()` was a bare random pick with no memory, so on a list of four the
-same line came round constantly — "the Commander would like us to be precise
-about this" four times in five minutes. Random with replacement feels
-repetitive long before it is statistically odd. It now holds back the recent
-half of each list, which still always returns something on a short list.
+The same track doubles as the music bed. `GNNAudio.playBootTrack()` is a
+non-looping variant of `playMusic()` that returns `{ duration, stopped }` so
+`runBootSequence()` knows how long to hold and when to fade.
 
 ### The wire ran dry and the channel had nothing to say
-rss2json's **daily** cap (see Known open items) leaves every feed erroring at
-once. `server.py` serves `/api/localnews`, which parses the newest Gemini
-digest out of `~/github/Kaiacord/knowledge_base/news/daily` — section
-headings mapped onto the show blocks — and `feed-manager.js` falls back to it
-when a poll returns nothing. Verified with the wire capped: **12 stories in
-the rundown after 22 s, from the local digest.**
+rss2json's **daily** cap leaves every feed erroring at once. `server.py` serves
+`/api/localnews`, which parses the newest Gemini digest out of
+`~/github/Kaiacord/knowledge_base/news/daily` — section headings mapped onto the
+show blocks — and `feed-manager.js` falls back to it when a poll returns
+nothing. Verified with the wire capped: **12 stories in the rundown after 22 s,
+from the local digest.**
 
 ### The tool fed its own output back in and the mouth rotted
 Owner: *"human_speaking.png's mouth is weird now... this is a critical
@@ -698,7 +668,7 @@ plate were not. Fixed by tagging each queued line with a `speakerId`, tracking
 
 **Cause two — the animator read the level regardless of who was speaking.**
 `GNNAnimator.update()` called `GNNTTS.getLevel()` whenever
-`GNNTTS.isSpeaking()` was true, which it is during a correspondent's answer
+`GNNTTS.isSpeaking()` is true, which it is during a correspondent's answer
 too. Fixed by gating on the animator's own `speaking` flag, which `main.js`
 now drives from `speakerIsSeated()`.
 
@@ -845,6 +815,40 @@ the resource desk or the industry desk, all of which already carry it.
 → **A beat is a claim.** If a desk covers a category, it will read that
 category, and it does not get to complain when it does.
 
+### Yahoo Finance CORS and TLS fingerprint gate
+Yahoo Finance blocked direct browser fetches due to missing CORS headers, and
+plain Python `urllib` was rejected with HTTP 429 due to TLS fingerprint gating.
+Resolved via `server.py` `/api/market` endpoint using `curl_cffi` (impersonating
+Chrome's TLS handshake). Market data now drives a per-segment color-coded crawl
+(green for gains, red for losses, amber for status) in `js/ticker-manager.js`.
+
+### Stale browser profile cache in Chromium harness
+The Chromium window profile at `~/.cache/gnn-window` cached in-memory modules
+(such as `script-writer.js`), causing old ticker strings (`BEACON NET: DEGRADED`)
+to linger on air even after the code on disk was fixed.
+→ **Wipe `~/.cache/gnn-window` when testing static script changes under the
+launcher harness.**
+
+### Booth ident play() interruption false alarm
+Chromium's `play()` promise rejected with `"The play() request was interrupted
+because the media was removed from the document"` when `audioEl.load()` reset
+resource selection, cutting the 3.05s ident short at ~2.3s.
+Fixed in `js/tts.js`: on rejection, wait 400ms; if `audioEl.currentTime > 0` and
+not paused, treat as Chromium false alarm and allow `onended` to resolve normally.
+
+### Ten studio sets desk line disparity
+Anchors floated or sank into desks because sets had desks at different heights
+(0.4680 to 0.5690). Each set's desk line was measured by eye via
+`tools/studio_review.html`, recorded in `assets/generated/set/layout.json`, and
+read dynamically by `renderer.js:drawCast()` on show block transitions.
+
+### Dual-file transcript and universal subsystem logging
+To enable instantaneous diagnosis of broadcast bugs, implemented dual-file logging:
+`gnn-transcript.log` (dedicated millisecond dialogue transcript with speaker role,
+addressed partner, and story mapping) and `gnn-server.log` (universal browser console,
+runtime exceptions, and chromium output). Includes atomic `O_APPEND` file locking and
+automatic file rotation capped at 250MB (up to 1GB).
+
 ---
 
 ## 4. Claims that did NOT reproduce
@@ -875,7 +879,7 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
 | `python3 tools/drive.py 90 /tmp/run` | drives the broadcast over CDP, samples the director, screenshots each segment |
 | `python3 tools/audio_probe.py 110` | clip count and level-relative pop detection per scripted event |
 | `python3 tools/extract_all.py` | re-decode 22 archives, rebuild manifest + sidecars (~24 s) |
-| `python3 tools/key_robot.py` | key the MOO1 robot out of his newscast cels → `assets/generated/anchors/robot_frame_*.png`. Run with `python3`, not `bash` — the docstring is read as shell and dies at line 1 |
+| `python3 tools/key_robot.py` | **Pending retirement** — keyed the MOO1 robot out of his newscast cels to `assets/generated/anchors/robot_frame_*.png`. Nothing in the runtime loads those frames any more; the generated robot anchor loads through the ordinary `loadAnchorSet()` path. Remove this tool and the `person.frames` branch in `renderer.js:drawCast()` together. Run with `python3`, not `bash` — the docstring is read as shell and dies at line 1 |
 | `python3 tools/prompt_bridge.py` | regenerate `assets/generated/prompts.md` |
 | `python3 tools/voice_audition.py` | audition every voice the running engine offers |
 | `python3 tools/capture_docs.py` | re-shoot the README screenshots |
@@ -901,181 +905,58 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
 
 ## 7. Known open items
 
-- **The first minute after a fresh boot is broken, then self-corrects.** Any
-  of: the anchors step on each other on the first story (Varr gets a word
-  or two out before the next story cuts her off); Varr's mouth does not
-  move on her first line after the ident; sometimes neither of those,
-  sometimes something else. Which symptom fires varies between runs. Once
-  the station has been running for about a minute, none of them recur.
-  Suspected load-order race — the anchor plates, story icons, audio graph,
-  feed manifest or voice pipeline warm-up all resolve somewhere in that
-  window. A boot screen using one of the title cards with a music bed is
-  the owner's proposed direction: cover the loading window with a station
-  presentation and let the subsystems settle before the first story
-  starts. Cause not established; a loading screen that hides the symptom
-  without fixing the race would just delay it.
-- **Music bed does not play at boot and often does not play at all.** The
-  files are provably fine — Ogg Vorbis, plays in `/usr/bin/mpv`. (Note:
-  the shell `mpv` alias points at an uninstalled flatpak; use the absolute
-  path.) Diagnostics were added to `playMusic()` in `audio-engine.js`: a
-  `console.log` at entry, warnings on the three failure paths (no manifest
-  entry, fetch non-200, decode failure), and a log on success. Not yet run
-  with the diagnostics on to see which path fires. `audio-engine.js` in
-  the tree has the diagnostics in place.
-- **MOO1 composite review is complete.** `docs/scene-review/README.md`
-  verdict table is filled in. Fixes applied to `scene-compositor.js`:
-  `council` delegate layers removed (portrait pool produces ornamental
-  race cards, not cut-in figures), `industry` fallback background query
-  added, `cyber` recipe deleted (rack was always `[]`, identical to
-  `interview` without the room backdrop). Remaining faults are extractor-
-  side: delta-frame stacking in `deepfield` and chromatic scrambling.
-  Eight recipes survive: convoy, tactical, survey, council, interview,
-  industry, anomaly, deepfield.
-- **The show rundown open is not built.** A change request, not yet
-  implemented: the cold open should name the stories on the queue before
-  reading them — a real rundown tease rather than the current "The desk is
-  watching several stories tonight" placeholder that names nothing. Needs
-  a headline shortener (sentence → noun phrase), a "what's coming up"
-  pool in `script-writer.js`, and a reordered cold-open sequence in
-  `broadcast-director.js`.
-- **The MOO1 cutaway fallback is still active.** The review is done (see
-  above); composite faults in `council`, `industry` and `cyber` are fixed
-  or deleted. Two extractor faults remain: delta-frame stacking (visible
-  in `deepfield` and the `animation phantoms` screenshots) and chromatic
-  scrambling (visible in the `Mrrshan Stealth Optics` commercial). Both
-  are in `tools/lbx.py` / `tools/extract_all.py` and affect every animated
-  LBX asset, not just the compositor. The SPECIFICATION phantom overlay
-  (a translucent rectangle in the bottom-left of commercial hero shots)
-  is a separate issue from the recipe review — it comes through the
-  `single()` path in `cutscene-manager.js`, not through a named recipe.
-- **All eleven species have `desk_hero` and `speaking`.** `listening_flip` has
-  not been re-derived from the newest plates. Without it the renderer falls
-  back to the unflipped `listening` plate, which faces the wrong way for a
-  seat on the speaker's right.
-- **Four new studio sets have not been through `condition_plates.py`'s
-  window-keying step.** Their window panes are black — what the keyer expects
-  — but `PLATES` in `condition_plates.py` names one room. The four new
-  filenames need adding. Without keying, the backdrop composite draws into a
-  black rectangle rather than through the glass.
-- **`condition_plates.py` has no path for `logos/`, `titlecards/` or
-  `icons/`.** All three are new directories. The conditioner needs an entry
-  for each before anything composites.
-- **Title cards are in testing and the prompts are not right yet.**
-  `assets/generated/titlecards/` was created for full-bleed show bumpers
-  with both anchors standing in frame and the show's title mark. Two
-  problems: the image model lands on a commercial style prior (photorealistic,
-  then anime) when asked to draw two figures in a described room, and the
-  background it generates does not match the studio sets in
-  `assets/generated/set/`. The fallback route is one `_standing.png` per
-  character in the anchor style, composited over a set plate by the engine —
-  more work up front, reuses the existing art, and the two cannot disagree.
-- **`assets/generated/icons/` is partially populated.** The twenty-two icon
-  prompts are written; generation is in progress.
-- **Two source plates were whole-image mirrors of their sibling**, which
-  flips the GNN badge with the picture — `human_listening` and
-  `klackon_listening_flip` both read ИИƆ. Both were rebuilt by mirroring
-  only the head of the good sibling, with the cut row picked by eye (510
-  and 580 of 1254) rather than detected. The originals are in
-  `_inbox/rejected/`. **When a variant needs to face the other way, turn
-  the head; do not flip the picture.**
-- `capture_docs.py` **waits for live wire states and hangs** when the feeds
-  return 429 to back-to-back harness runs, because the director never reaches
-  the state it is waiting on. The screenshots in `docs/` were re-shot by
-  driving it instead — enqueue stories, then force the states rather than
-  wait for them. Worth folding back into the tool.
-- **A pupil-centroid metric said nine of eleven `listening` plates had no eye
-  turn. It was wrong too** — the regenerated plates visibly turn. Two metrics
-  in a row claimed to see something the owner's eye contradicted, and the eye
-  was right both times. Show a picture before claiming a plate is broken.
-- **A diff percentage cannot tell you whether an edit happened.** The image
-  model redraws the whole plate, so 5–27% of every band differs as noise. A
-  `listening` band reporting 8.7% changed looked healthy and was the hero
-  untouched; measuring whether the *pupils moved* found nine of eleven had no
-  eye turn at all. Measure the feature, not the pixels.
-- **MediaPipe will not rig this cast.** Tested against all eleven heroes
-  with `face_landmarker.task`: **3 of 11 detect** (human, Bulrathi,
-  mrrshan_f), and on two of those the points bunch in the middle of the
-  face rather than landing on features. Only the human is usable. The
-  Kaiagotchi rig (`tools/kaia_portrait/build_portrait.py`, one portrait
-  plus a 29-point `kaia_rig.json` driven by a GLSL warp) is still the right
-  architecture — one plate, nothing swaps, and brows/eyes/smile/head-turn
-  become parameters the mood table in `js/cast.js` can drive — but the
-  points have to be placed by hand, not detected.
-- **rss2json has a DAILY cap, not just a per-burst one.** Hit it and every
-  feed returns `{"status":"error","message":"Daily rate limit exceeded,
-  please try again after 11 hours"}`, the pool stays empty and the channel
-  sits in `DRY` with nothing to read. It looks exactly like a broken feed
-  list. **Check this before debugging the feed code:**
-  `curl -s 'https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Ffeeds.bbci.co.uk%2Fnews%2Fworld%2Frss.xml' | head -c 200`
-  A survey of two dozen candidate feeds burned the day's allowance in one
-  session. `POLL_BATCH = 8` in `feed-manager.js` now fetches a rotating
-  slice per poll instead of all 25 at once, which helps with bursts but
-  does nothing about the daily cap. An API key would lift it.
-- **The window, the cutaways and the correspondents are wired.**
-  `condition_plates.py` keys the eight window panes out of the room plate by
-  connected components (the two wall monitors are near-black too and are
-  rejected by position), records the opening in `layout.json`, and
-  conditions backdrops to that opening. The 14 generated cutaway plates are
-  routed by `GENERATED` in `cutscene-manager.js` and the MOO1 composites are
-  now only the fallback. Field correspondents appear in the PIP as a LIVE
-  window — 22 plates conditioned out of `_inbox/field/`, which is the
-  chest-cropped generation and the right framing for a monitor.
-- **Commercials are not read by the anchors.** `voiceOptsFor` never named a
-  voice, so synthesis fell through to whoever had the chair. A break now
-  picks an announcer from `AD_VOICES` and keeps it for every beat; the small
-  print gets `bm_fable`. Update that list if the desk cast changes.
-- **Still mixed: MOO lore and real news.** The owner wants them completely
-  separate and this is NOT done. `PACE.wireShare` still interleaves sector
-  bulletins with real stories, and the banter templates have not been
-  audited for lore terms applied to real headlines.
-- **Listen by ear before declaring audio done.** Every metric here has at some
-  point said "clean" while the owner could hear a problem.
-- **Voice choice is subjective.** Owner's standing judgement: the edge-tts
-  "Multilingual" models read too slowly and sit in the uncanny valley; Ryan and
-  the older generation held pace. Default prosody is flat — the old −5 % rate
-  was much of what read as the anchor dragging.
-- `BACKGRND/item_32` (an orange interface box) still passes the B-roll gate.
-  One marginal item in 76.
-- `RENDER_FPS` is **20**, not 10.
-- rss2json returns HTTP 429 during back-to-back harness runs. External.
-- **Never put a process pattern in the same command as the text it matches.**
-  `pkill -f` has killed the shell issuing it four times in this project,
-  twice through a heredoc that merely *mentioned* the target filename. Select
-  the pids first with `ps -eo pid,comm,args` filtered on `comm`, then kill
-  those pids.
-- **`pgrep -f <pattern>` matches the shell that is running the check**, so a
-  check for leftover processes reports its own command line as a survivor.
-  This produced a false "window left behind" and a false "launcher still
-  running" in one session, and once killed the shell doing the killing. Filter
-  on `ps -o comm=` as `stop.sh` does, never on the command line alone.
-- **Do not run `./stop.sh` while a CDP probe is running** — it reaps the
-  harness browser and the probe dies mid-measurement. This has cost three
-  measurement runs.
-- Decoded SFX buffers are never evicted — bounded by the 41-file library, a
-  tradeoff rather than a leak. Music beds are LRU-capped at 4.
-```
+- **The asset count in this file, `README.md` and `docs/ROADMAP.md` is stale.**
+  The runtime manifest reports **713 items / 3,984 frames** on every clean boot
+  (`[GNN Assets]` in `gnn-server.log`). The README badge and this document have
+  been quoting **873 / 4,316**. Either the documentation is counting something
+  the manifest does not — the inbox, source archives, unrebuilt exports — or the
+  manifest lost 160 items between the two runs. Reconcile before quoting either
+  figure again. `python3 tools/verify_assets.py` and the `[GNN Assets]` line are
+  the two places to check against.
 
-## What changed in this version
+- **The README badge and ROADMAP table still say "12 characters · 11
+  generated"** and "9 shortlisted [voices]". Neither matches the code.
+  `js/cast.js` has **14** profiles (including the recent `human_f` and
+  `alkari_f` additions), and `server.py:LOCAL_VOICES` lists **12** entries
+  (11 neural voices plus `vox_unit`, a DSP chain over `am_michael`). This file
+  was corrected to match the code; the other two need the same pass.
 
-**§1** — added rows: `Robot frames`, `Main desk beat`, `Two-anchor beats`, `Scene review`.
+- **The generated robot anchor is loaded; the MOO1 25-cel path is not retired.**
+  `assets/generated/anchors/robot_desk_hero.png` (and `_speaking`, `_listening`,
+  `_listening_flip`) load through the same `loadAnchorSet()` call every other
+  cast member uses, and the boot log confirms `robot=ok`. But three things still
+  reference the old MOO1 robot: `tools/key_robot.py` still exists, the
+  `robot_frame_*.png` files are still on disk, and `renderer.js:drawCast()` still
+  carries the `if (person.frames && person.frames.length)` branch that only ever
+  served the 25-cel matrix. Nothing populates `person.frames` any more, so that
+  branch is dead. Retire all three in one commit — the tool, the frames, and the
+  branch — or the next reader will assume the branch is live and build on it.
 
-**§3** — six new entries appended after `The boot died on a paste`:
-- The text box appeared one to two seconds before the voice
-- Two-way follow-up repeated the naming line
-- The station open read backward
-- Wire headlines led with a broadcast label
-- The main desk read markets
-- (Existing entries unchanged)
+- **`js/cast.js`'s `robot` entry needs a review now that the anchor is
+  generated.** The profile still reads as MOO1-lineage — `voice: 'vox_unit'`,
+  `machine: true`, `beat: []`, and the tic carries a machine cadence. All of
+  those are probably still correct for a robot anchor, but the entry was written
+  for a keyed-out MOO1 sprite and no one has looked at it since the anchor was
+  regenerated. Worth a pass to confirm the voice, the beat (empty beats mean the
+  desk never reads the rundown from this seat, which is correct for station
+  automation but only if that is still the intent), and the relationship table
+  entries that reference `robot` still fit the new character.
 
-**§5** — added `tools/key_robot.py` row and `tools/scene_review.html` row.
+- **`audio-engine.js:playMusic()` carries three `console.log`/`console.warn`
+  diagnostics that its own comment says to remove once music is confirmed
+  working.** It is: `gnn-server.log` shows three successful playbacks in one
+  session (`track_09` at boot, `track_34` for a commercial, `track_03` for the
+  next). They are noise now, and passing an `opts` object through the browser
+  logger's `JSON.stringify` walk is a hazard the diagnostics do not need.
 
-**§7** — four new bullets at the top of the section, before `The MOO1 cutaway fallback`:
-- The first minute after a fresh boot is broken, then self-corrects
-- Music bed does not play at boot
-- MOO1 composite review is in progress
-- The show rundown open is not built
+- **`main.js:init()`'s catch block leaves the station in `S.BOOT` forever.** The
+  failure path starts the feed and the frame loop but never sets
+  `window.GNNBootReady`, so the director's `case S.BOOT` gates on it and never
+  advances. A partial boot failure therefore produces a black canvas rather
+  than a silent but running newsroom. Either set the flag in the catch, or give
+  the director a boot timeout so a stuck boot releases the loop after, say,
+  thirty seconds.
 
-**Left alone:** the `Last verified at commit 056c5a9` line at the top. Still stale. Update it after the next commit.
 - **Two COLONIES items decode with a scattered-pixel sky.** `COLONIES/item_02`
   and `COLONIES/item_03` — and possibly others in other archives not yet
   examined — contain bytes in the 0xC0–0xDF band that the two-band RLE in
@@ -1091,3 +972,180 @@ name labels (`Michael.`, `Fenrir.`), the tool's own `COPY` string verbatim, and
   are excluded from every query by `COLONIES_SCRAMBLED` in
   `scene-compositor.js`; the exclusion is id-based, documented, and
   reversible in one edit when the format is understood.
+
+- **The MOO1 cutaway fallback is still active.** Composite faults in `council`,
+  `industry` and `cyber` are fixed or deleted. Two extractor faults remain:
+  delta-frame stacking in `deepfield` and chromatic scrambling (`tools/lbx.py` /
+  `extract_all.py`).
+
+- **Title cards are in testing and the prompts are not right yet.**
+  `assets/generated/titlecards/` was created for full-bleed show bumpers
+  with both anchors standing in frame and the show's title mark. Two
+  problems: the image model lands on a commercial style prior (photorealistic,
+  then anime) when asked to draw two figures in a described room, and the
+  background it generates does not match the studio sets in
+  `assets/generated/set/`. The fallback route is one `_standing.png` per
+  character in the anchor style, composited over a set plate by the engine —
+  more work up front, reuses the existing art, and the two cannot disagree.
+
+- **`assets/generated/icons/` is partially populated.** The twenty-two icon
+  prompts are written; generation is in progress.
+
+- **`GNNCutsceneManager.openDebate()` is implemented and unreferenced.**
+  `docs/ROADMAP.md` §Phase 3 lists the "Split-Screen Debate Mode" as landed,
+  and the function exists — `openDebate()`, `mode: 'dual-pip'`, dual PIP
+  rendering in `render()`, two correspondent mouths driven by
+  `tickCorrespondentMouth()`. Nothing in `broadcast-director.js` calls it.
+  The `panel` shape of `twoWay()` uses `openTwoWay` and produces a normal
+  single-monitor interview. Either wire `openDebate()` into the director for
+  the *Council Crossfire* block, or move the feature out of "landed" in the
+  ROADMAP. The current state reads as the former and behaves as the latter.
+
+- **`feed-manager.js:calculateImportance()` has a suspicious regex literal.**
+  The line as delivered is `/[.*+?^${}()|[\\]\\\\]/g`, which is only a valid
+  escape pattern if the doubled backslashes are a copy artifact. The standard
+  form is `/[.*+?^${}()|[\]\\]/g`. If the doubling is real, escaping is a no-op
+  on some phrases and doubles backslashes on others. `importance` drives sort
+  order only, so a bug here is silent. Confirm against the file on disk.
+
+- **Two source plates were whole-image mirrors of their sibling**, which
+  flips the GNN badge with the picture — `human_listening` and
+  `klackon_listening_flip` both read ИИƆ. Both were rebuilt by mirroring
+  only the head of the good sibling, with the cut row picked by eye (510
+  and 580 of 1254) rather than detected. The originals are in
+  `_inbox/rejected/`. **When a variant needs to face the other way, turn
+  the head; do not flip the picture.**
+
+- `capture_docs.py` **waits for live wire states and hangs** when the feeds
+  return 429 to back-to-back harness runs, because the director never reaches
+  the state it is waiting on. The screenshots in `docs/` were re-shot by
+  driving it instead — enqueue stories, then force the states rather than
+  wait for them. Worth folding back into the tool.
+
+- **A pupil-centroid metric said nine of eleven `listening` plates had no eye
+  turn. It was wrong too** — the regenerated plates visibly turn. Two metrics
+  in a row claimed to see something the owner's eye contradicted, and the eye
+  was right both times. Show a picture before claiming a plate is broken.
+
+- **A diff percentage cannot tell you whether an edit happened.** The image
+  model redraws the whole plate, so 5–27% of every band differs as noise. A
+  `listening` band reporting 8.7% changed looked healthy and was the hero
+  untouched; measuring whether the *pupils moved* found nine of eleven had no
+  eye turn at all. Measure the feature, not the pixels.
+
+- **MediaPipe will not rig this cast.** Tested against all eleven heroes
+  with `face_landmarker.task`: **3 of 11 detect** (human, Bulrathi,
+  mrrshan_f), and on two of those the points bunch in the middle of the
+  face rather than landing on features. Only the human is usable. The
+  Kaiagotchi rig (`tools/kaia_portrait/build_portrait.py`, one portrait
+  plus a 29-point `kaia_rig.json` driven by a GLSL warp) is still the right
+  architecture — one plate, nothing swaps, and brows/eyes/smile/head-turn
+  become parameters the mood table in `js/cast.js` can drive — but the
+  points have to be placed by hand, not detected.
+
+- **rss2json has a DAILY cap, not just a per-burst one.** Hit it and every
+  feed returns `{"status":"error","message":"Daily rate limit exceeded,
+  please try again after 11 hours"}`, the pool stays empty and the channel
+  sits in `DRY` with nothing to read. It looks exactly like a broken feed
+  list. **Check this before debugging the feed code:**
+  `curl -s 'https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Ffeeds.bbci.co.uk%2Fnews%2Fworld%2Frss.xml' | head -c 200`
+  A survey of two dozen candidate feeds burned the day's allowance in one
+  session. `POLL_BATCH = 8` in `feed-manager.js` now fetches a rotating
+  slice per poll instead of all 25 at once, which helps with bursts but
+  does nothing about the daily cap. An API key would lift it.
+
+- **The window, the cutaways and the correspondents are wired.**
+  `condition_plates.py` keys the eight window panes out of the room plate by
+  connected components (the two wall monitors are near-black too and are
+  rejected by position), records the opening in `layout.json`, and
+  conditions backdrops to that opening. The 14 generated cutaway plates are
+  routed by `GENERATED` in `cutscene-manager.js` and the MOO1 composites are
+  now only the fallback. Field correspondents appear in the PIP as a LIVE
+  window — 22 plates conditioned out of `_inbox/field/`, which is the
+  chest-cropped generation and the right framing for a monitor.
+
+- **Commercials are not read by the anchors.** `voiceOptsFor` never named a
+  voice, so synthesis fell through to whoever had the chair. A break now
+  picks an announcer from `AD_VOICES` and keeps it for every beat; the small
+  print gets `bm_fable`. Update that list if the desk cast changes.
+
+- **Still mixed: MOO lore and real news.** The owner wants them completely
+  separate and this is NOT done. `PACE.wireShare` still interleaves sector
+  bulletins with real stories, and the banter templates have not been
+  audited for lore terms applied to real headlines.
+
+- **Listen by ear before declaring audio done.** Every metric here has at some
+  point said "clean" while the owner could hear a problem.
+
+- **Voice choice is subjective.** Owner's standing judgement: the edge-tts
+  "Multilingual" models read too slowly and sit in the uncanny valley; Ryan and
+  the older generation held pace. Default prosody is flat — the old −5 % rate
+  was much of what read as the anchor dragging.
+
+- `BACKGRND/item_32` (an orange interface box) still passes the B-roll gate.
+  One marginal item in 76.
+
+- `RENDER_FPS` is **20**, not 10.
+
+- rss2json returns HTTP 429 during back-to-back harness runs. External.
+
+- **Never put a process pattern in the same command as the text it matches.**
+  `pkill -f` has killed the shell issuing it four times in this project,
+  twice through a heredoc that merely *mentioned* the target filename. Select
+  the pids first with `ps -eo pid,comm,args` filtered on `comm`, then kill
+  those pids.
+
+- **`pgrep -f <pattern>` matches the shell that is running the check**, so a
+  check for leftover processes reports its own command line as a survivor.
+  This produced a false "window left behind" and a false "launcher still
+  running" in one session, and once killed the shell doing the killing. Filter
+  on `ps -o comm=` as `stop.sh` does, never on the command line alone.
+
+- **Do not run `./stop.sh` while a CDP probe is running** — it reaps the
+  harness browser and the probe dies mid-measurement. This has cost three
+  measurement runs.
+
+- Decoded SFX buffers are never evicted — bounded by the 41-file library, a
+  tradeoff rather than a leak. Music beds are LRU-capped at 4.
+
+---
+
+## What changed in this version
+
+**§1** — corrected three counts to match the code, added a row for the boot
+sequence and another for the cold-open rundown, updated the *Cast*, *Voices*
+and *Robot* rows, and added a note under the verify block explaining that
+713 / 3,984 is what the runtime reports versus the 873 / 4,316 the other
+documents quote.
+
+**§2** — added constraint 13, the async-reservation rule. Both `breakArming`
+and `twoWayArming` obey it, and it is the shape that let the two-way fix
+land without reintroducing the fault the synchronous version was written to
+prevent.
+
+**§3** — six new entries at the top:
+- *The two-way queued its audio whether or not the monitor opened* — this
+  session's fix; `beginTwoWay` now awaits `openTwoWay` and returns its
+  result.
+- *The DR in a headline read as "Doctor"* — the `PRONOUNCE` addition.
+- *The two-way route had no plate and no fallback* — the `interview` route.
+- *The phonetic dictionary did not cover the station's own vocabulary* —
+  the full `PRONOUNCE` expansion.
+- *The cold open read a headline with no teaser* — `rundownOpen()`.
+- *The first minute of airtime fought itself for resources* — the boot
+  sequence.
+
+**§5** — flagged `key_robot.py` for retirement.
+
+**§7** — rewritten. Six items removed because they landed and §3 now records
+them: the Grolm black backdrop, the `convoy` mispronunciation, the show
+rundown open, the first-minute boot race, the music bed at boot, and the
+correspondent badge jitter. Six items added or promoted: the asset-count
+discrepancy, the README/ROADMAP count discrepancies, the robot 25-cel
+retirement, the `cast.js` robot profile review, the `playMusic()` diagnostics,
+the `init()` catch-block hang, and the `openDebate()`-implemented-and-unused
+contradiction with the ROADMAP.
+
+**Left alone:** the "Last verified at commit" line was rewritten rather than
+updated with a hash, because the commit has not happened yet. Fill it in at
+the next commit.

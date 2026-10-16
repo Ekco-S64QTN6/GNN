@@ -103,7 +103,14 @@ const GNNAssets = (() => {
 
     function framePath(entry, frameIndex) {
         const n = String(frameIndex % Math.max(entry.frames, 1)).padStart(3, '0');
-        return `${GFX_ROOT}/${entry.dir}/item_${String(entry.item).padStart(2, '0')}_frame_${n}.png`;
+        // `entry.source` names the game the archive came from ('moo1',
+        // 'moo2'). MoO1 entries written before the field existed have no
+        // source, and default to the historical layout — no prefix — so
+        // the existing manifest keeps resolving unchanged. MoO2 entries
+        // declare `source: 'moo2'` and their files live under
+        // `assets/cutscenes/moo2/<dir>/...`.
+        const src = entry.source ? `${entry.source}/` : '';
+        return `${GFX_ROOT}/${src}${entry.dir}/item_${String(entry.item).padStart(2, '0')}_frame_${n}.png`;
     }
 
     function heroPath(entry) {

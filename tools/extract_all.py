@@ -37,6 +37,39 @@ ARCHIVES = [
 
 MAX_GIF_FRAMES = 120
 
+# 320x200 items decode index 0 as opaque black by default. That is correct
+# for a fullscreen picture — the game paints the sky, the starfield, the
+# space behind the window black and the picture is meant to be
+# self-contained. It is wrong for anything that lives on top of a scene
+# the game composites at runtime.
+#
+# Two classes of item in the archive look identical to a fullscreen by
+# size but are actually overlays, and each of them was broken by the
+# default before being named here:
+#
+#   SPIES        every item is a 320x200 portrait of a spy doing something
+#                (firing a laser, typing at a console, holding a package).
+#                The game composites the spy over whatever the spy screen
+#                was showing at the time. Decoded opaque, every spy has a
+#                solid black card behind it and the studio stops showing
+#                through.
+#
+#   EMBASSY      items 12 through 17 are the player-representative sprites
+#                — one per species — that the game composites into the
+#                embassy room over the room plate (item 01). Same shape,
+#                same fault.
+#
+# An item in this set gets index 0 written as transparent regardless of
+# its size. Anything not listed keeps the default.
+FORCE_TRANSPARENT_ITEMS = set()
+# Entire archives that must have index 0 transparent.
+FORCE_TRANSPARENT_ARCHIVES = {'SPIES'}
+# Individual items in archives that are otherwise fine.
+FORCE_TRANSPARENT_ITEMS.update({
+    ('EMBASSY', 12), ('EMBASSY', 13), ('EMBASSY', 14),
+    ('EMBASSY', 15), ('EMBASSY', 16), ('EMBASSY', 17),
+})
+
 
 def require_source():
     """The extractors are the only thing that needs the original game data."""
@@ -53,6 +86,42 @@ def base_palette():
     """WINLOSE item 0 carries the game's full 256-colour VGA table."""
     arc = LbxArchive(os.path.join(DATA, 'WINLOSE.LBX'))
     return GfxItem(arc.item(0)).palette()
+
+
+def archive_palette(arc, fallback):
+    """The palette this archive's art was authored against.
+
+    Most archives carry no palette of their own and were drawn against the
+    game-wide WINLOSE[0] table, which is why that is the fallback. A few
+    archives — VORTEX is the example that surfaced this — ship their own
+    palette block on one of their items. Every other item in that archive
+    decodes against the wrong colours if the archive palette is ignored,
+    which is what made VORTEX items 1 through 34 read as inverted while
+    item 0 looked correct: item 0 carries the palette and overrides the
+    fallback, and the rest inherited the fallback alone.
+
+    The result is WINLOSE merged under the archive's own palette, so an
+    archive that only patches part of the table still gets the game-wide
+    colours for the entries it does not touch.
+    """
+    best = {}
+    for i in range(len(arc)):
+        try:
+            item = GfxItem(arc.item(i))
+        except Exception:
+            continue
+        if not item.plausible():
+            continue
+        pal = item.palette()
+        if len(pal) > len(best):
+            best = pal
+        if len(best) >= 256:
+            break
+    if not best:
+        return dict(fallback)
+    merged = dict(fallback)
+    merged.update(best)
+    return merged
 
 
 def ui_score(img):
@@ -134,9 +203,11 @@ DENY = {
     ('BACKGRND', 52): '*',
     # The ship design screen, buttons and all.
     ('DESIGN', 0): '*',
-    # Council chamber interface frames. One of them decodes with its palette
-    # inverted, which is how it was noticed.
-    ('COUNCIL', 0): '*', ('COUNCIL', 23): '*',
+    # Council chamber interface frames. Every item in the archive decodes
+    # against a palette the archive does not carry — the frames invert, the
+    # portraits turn to chromatic confetti. Nothing in the folder is usable
+    # as footage.
+    **{('COUNCIL', i): '*' for i in range(24)},
     ('SCREENS', 6): '*',
 }
 
@@ -219,15 +290,28 @@ def classify(w, h, nframes, coverage, mean_lum, distinct, noise):
     return 'panel'
 
 
-def render(item, palette):
-    """Yield RGBA PIL images for every frame of a gfx item."""
+def render(item, palette, opaque_zero=False):
+    """Yield RGBA PIL images for every frame of a gfx item.
+
+    `opaque_zero` is for fullscreen art. MoO1 composes its intro scenes,
+    landing sequences and starfield backdrops against palette index 0 —
+    the sky, the starfield, the space behind the window — and the game
+    paints black there. Decoded as transparent, the PNG only looks right
+    when composited over black; decoded as opaque, it is a self-contained
+    picture that reads the same on any background.
+
+    Overlay art — SPIES portraits, EMBASSY representative sprites — wants
+    index 0 transparent so the picture underneath shows through. The
+    caller decides which by setting `opaque_zero` per item.
+    """
     w, h = item.w, item.h
     local = dict(palette)
     local.update(item.palette())
     lut = bytearray(256 * 4)
     for i in range(256):
         r, g, b = local.get(i, (0, 0, 0))
-        lut[i * 4:i * 4 + 4] = bytes((r, g, b, 0 if i == 0 else 255))
+        a = 255 if (i != 0 or opaque_zero) else 0
+        lut[i * 4:i * 4 + 4] = bytes((r, g, b, a))
     for buf, _clean in item.frames():
         raw = bytearray(w * h * 4)
         for p, idx in enumerate(buf):
@@ -317,6 +401,11 @@ def main():
         if not os.path.exists(path):
             continue
         arc = LbxArchive(path)
+        # The palette the archive's own art was authored against, layered
+        # over the game-wide WINLOSE[0] table. Most archives have no palette
+        # block of their own and this resolves to the WINLOSE table exactly
+        # as before; a few carry one and every item benefits.
+        archive_base = archive_palette(arc, palette)
         folder = os.path.join(OUT, name)
         os.makedirs(folder, exist_ok=True)
         # Clear the archive's own output first. Writing over it leaves the
@@ -334,7 +423,18 @@ def main():
             item = GfxItem(arc.item(i))
             if not item.plausible():
                 continue
-            frames = list(render(item, palette))
+            # Fullscreen art is composed against an opaque index-0
+            # background and MoO1 paints black there. Overlay art — the
+            # SPIES portraits and the EMBASSY representative sprites —
+            # wants index 0 transparent so the scene underneath shows
+            # through. See the FORCE_TRANSPARENT_* sets at the top of
+            # this file for the list of items that are overlays rather
+            # than fullscreens.
+            is_overlay = (name in FORCE_TRANSPARENT_ARCHIVES
+                          or (name, i) in FORCE_TRANSPARENT_ITEMS)
+            opaque_zero = (not is_overlay
+                           and item.w >= 300 and item.h >= 180)
+            frames = list(render(item, archive_base, opaque_zero=opaque_zero))
             if not frames:
                 continue
             keep = KEEP_FRAMES.get((name, i))
@@ -401,6 +501,7 @@ def main():
                     'ui': ui,
                     'noise': noise,
                     'coverage': round(cov, 3),
+                    'opaque_bg': opaque_zero,
                 }, fh, separators=(',', ':'))
             totals['items'] += 1
             totals['frames'] += len(frames)

@@ -16,6 +16,11 @@
    down reads red without the arrow glyph carrying the meaning on
    its own. Status and wire lines sit in amber, so the price stream
    is visually distinct from the meta commentary around it.
+
+   A quote that is held over from an earlier cycle — the provider
+   returned seven of eight this time, or the fetch failed entirely
+   — is drawn in that same amber. It is not a live market number,
+   and the colour says so without a word of copy.
    ============================================================ */
 
 const GNNTickerManager = (() => {
@@ -41,14 +46,15 @@ const GNNTickerManager = (() => {
         { symbol: 'ETH-USD', label: 'ETH' },
     ];
 
-    // Segment colours. The price stream is green/red per direction; the
-    // status line and wire headlines sit in amber so they read as
-    // station furniture rather than as quotes.
+    // Segment colours. The price stream is green/red per direction when
+    // it is live; a held-over quote and the status line both sit in the
+    // same amber, so anything on this bar that is not a live market
+    // number reads the same way.
     const COLOUR = {
         up: '#5ef88a',       // bright green — clear on the dark bar
         down: '#ff7a7a',     // soft red, matches the flash tone
         flat: '#7dfcb0',     // station green, unchanged
-        meta: '#e8c46a',     // amber, matches the wire palette
+        meta: '#e8c46a',     // amber — status text, wire, and stale quotes
         flash: '#ffd0d0',    // breaking-alert override
     };
 
@@ -95,18 +101,50 @@ const GNNTickerManager = (() => {
      * change is read at a glance rather than by following the arrow
      * glyph. Flat sits at the station's own green so the price stream
      * does not read as all-red on a quiet day.
+     *
+     * A held-over quote is drawn in amber. The arrow is kept — the
+     * direction was true of the moment the quote was fetched — but the
+     * green/red is dropped, because those colours mean "this number is
+     * moving now" and a cached number is not. Amber is the same colour
+     * the status line and the wire headlines use, so the grammar on the
+     * bar stays: green/red is live market data, amber is everything
+     * else.
      */
-    function quoteSegment(item, quote) {
+    function quoteSegment(item, quote, fresh = true) {
         const price = formatPrice(quote.price, quote.currency);
         const change = Number.isFinite(quote.changePct) ? quote.changePct : 0;
         const arrow = change > 0 ? '▲' : change < 0 ? '▼' : '■';
-        const colour = change > 0 ? COLOUR.up
-            : change < 0 ? COLOUR.down
-                : COLOUR.flat;
+        const colour = !fresh ? COLOUR.meta
+            : change > 0 ? COLOUR.up
+                : change < 0 ? COLOUR.down
+                    : COLOUR.flat;
         return {
             text: `${item.label} ${price} ${arrow}${Math.abs(change).toFixed(2)}%`,
             colour,
         };
+    }
+
+    /**
+     * Build the price-stream segments from the quote cache.
+     *
+     * `fresh` is the set of symbols that came back on the current fetch
+     * cycle. A symbol in the cache but not in `fresh` is held over from
+     * an earlier cycle, and `quoteSegment` is told so it can colour the
+     * row as cached rather than live.
+     *
+     * Extracted so the two paths that reach here — the successful fetch
+     * and the outer catch that fires when the fetch chain throws — build
+     * the segments the same way. When only the try body built them, a
+     * throw anywhere in that body left the previous cycle's segments on
+     * the bar at full green/red, and a viewer had no way to tell.
+     */
+    function rebuildMarketSegments(fresh) {
+        marketSegments = SYMBOLS
+            .filter(item => quoteCache[item.symbol])
+            .map(item => quoteSegment(
+                item,
+                quoteCache[item.symbol],
+                fresh.has(item.symbol)));
     }
 
     /**
@@ -159,7 +197,8 @@ const GNNTickerManager = (() => {
         if (!ctx) return;
         const segs = [];
 
-        // Market quotes — each carries its own colour.
+        // Market quotes — each carries its own colour, and a held-over
+        // quote carries amber.
         for (const m of marketSegments) {
             if (!m || !m.text) continue;
             segs.push({
@@ -209,6 +248,15 @@ const GNNTickerManager = (() => {
         blockWidth = total;
     }
 
+    /**
+     * Fetch every symbol and re-mark the price stream.
+     *
+     * `fresh` is the set of symbols the current cycle returned. Every
+     * symbol in `quoteCache` is drawn, but only the ones in `fresh` are
+     * coloured as live. A held-over row is a normal thing — the server
+     * can return seven of eight when one upstream lags — and the bar
+     * says so without the crawl going blank for the missing one.
+     */
     async function refreshMarketData() {
         const now = Date.now();
         if (refreshPromise || (now - lastAttemptAt < REFRESH_MS)) {
@@ -224,22 +272,22 @@ const GNNTickerManager = (() => {
                 quotes = [];
             }
 
-            let freshCount = 0;
+            const fresh = new Set();
             for (const q of quotes) {
                 if (q && q.symbol) {
                     quoteCache[q.symbol] = q;
-                    freshCount++;
+                    fresh.add(q.symbol);
                 }
             }
-            marketSegments = SYMBOLS
-                .filter(item => quoteCache[item.symbol])
-                .map(item => quoteSegment(item, quoteCache[item.symbol]));
+            rebuildMarketSegments(fresh);
 
-            if (freshCount) {
+            const freshCount = fresh.size;
+            if (freshCount === SYMBOLS.length) {
                 lastSuccessfulAt = Date.now();
-                dataStatus = freshCount === SYMBOLS.length
-                    ? 'MARKET QUOTES — MAY BE DELAYED'
-                    : `MARKET FEED PARTIAL ${freshCount}/${SYMBOLS.length}`;
+                dataStatus = 'MARKET QUOTES — MAY BE DELAYED';
+            } else if (freshCount) {
+                lastSuccessfulAt = Date.now();
+                dataStatus = `MARKET FEED PARTIAL ${freshCount}/${SYMBOLS.length}`;
             } else if (marketSegments.length) {
                 dataStatus = 'MARKET DATA DELAYED — LAST SUCCESSFUL QUOTES';
             } else {
@@ -248,6 +296,14 @@ const GNNTickerManager = (() => {
 
             if (latestCtx) rebuildBlock(latestCtx);
         })().catch(() => {
+            // The chain above threw somewhere unexpected — a bad quote
+            // object, a rebuild that could not measure, anything. Hold
+            // what is on the crawl but re-mark every symbol stale, so the
+            // amber says the numbers are cached rather than live. If the
+            // try body had partially updated `marketSegments` before it
+            // threw, this rebuilds them from the cache and clears the
+            // partial state.
+            rebuildMarketSegments(new Set());
             dataStatus = marketSegments.length
                 ? 'MARKET DATA DELAYED — LAST SUCCESSFUL QUOTES'
                 : 'MARKET DATA UNAVAILABLE — CHECK SERVER';

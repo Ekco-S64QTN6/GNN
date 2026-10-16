@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GNN — Station Console</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font: 14px/1.45 -apple-system, "Segoe UI", system-ui, sans-serif;
+    background: #0d0d14; color: #e0e0ec; margin: 0; padding: 20px 24px 80px;
+    max-width: 1280px; margin: 0 auto;
+  }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .sub { color: #7a7a9e; margin-bottom: 18px; font-size: 13px; }
+  code { background: #1a1a26; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid #222; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab {
+    padding: 9px 18px; cursor: pointer; border: none; background: transparent;
+    color: #7a7a9e; font: inherit; font-size: 13px; font-weight: 600;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab:hover { color: #b0b0c8; }
+  .tab.active { color: #00e5ff; border-bottom-color: #00e5ff; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .empty {
+    padding: 40px 20px; text-align: center; color: #7a7a9e;
+    border: 1px dashed #2a2a3a; border-radius: 8px; font-size: 13px;
+  }
+  .empty code { color: #00e5ff; }
+
+  /* --- shows --- */
+  .show {
+    background: #15151f; border: 1px solid #222; border-radius: 8px;
+    padding: 14px; margin-bottom: 10px;
+    display: grid; grid-template-columns: 30px 1fr 1fr; gap: 10px 16px;
+  }
+  .show.dragging { opacity: 0.4; }
+  .show.drop-target { border-color: #00e5ff; }
+  .handle {
+    cursor: grab; user-select: none; font-size: 20px;
+    color: #555; align-self: center; text-align: center;
+  }
+  .handle:active { cursor: grabbing; }
+
+  .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .field label {
+    font-size: 10px; text-transform: uppercase; color: #7a7a9e;
+    letter-spacing: 0.06em;
+  }
+  .field input, .field select, .field textarea {
+    background: #0a0a12; color: #e0e0ec; border: 1px solid #2a2a3a;
+    border-radius: 4px; padding: 6px 8px; font: inherit; font-size: 13px;
+    min-width: 0; width: 100%;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none; border-color: #00e5ff;
+  }
+
+  .row { grid-column: 1 / -1; display: grid; gap: 12px; }
+  .row-2 { grid-template-columns: 1fr 1fr; }
+  .row-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .row-4 { grid-template-columns: repeat(4, 1fr); }
+
+  .pair { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; }
+
+  .check { display: flex; align-items: center; gap: 8px; padding-top: 16px; }
+  .check input { width: 16px; height: 16px; accent-color: #00e5ff; }
+  .check label { font-size: 12px; text-transform: none; letter-spacing: 0; color: #e0e0ec; }
+
+  .section {
+    background: #15151f; border: 1px solid #222; border-radius: 8px;
+    padding: 16px 18px; margin-bottom: 14px;
+  }
+  .section h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #7a7a9e; margin: 0 0 14px;
+  }
+  .section .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 18px; }
+  .section .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .range-pair { display: flex; gap: 6px; align-items: center; }
+  .range-pair span { color: #555; font-size: 11px; }
+  .range-pair input { text-align: center; }
+
+  .cast-row {
+    display: grid; grid-template-columns: 170px 1fr 70px 50px;
+    gap: 12px; align-items: center; padding: 8px 12px;
+    background: #15151f; border: 1px solid #222; border-radius: 6px;
+    margin-bottom: 6px;
+  }
+  .cast-row .id { font-family: ui-monospace, monospace; color: #8fe0ff; font-size: 13px; }
+  .cast-row input[type=checkbox] { width: 16px; height: 16px; accent-color: #00e5ff; }
+
+  #raw {
+    width: 100%; min-height: 70vh; background: #0a0a12; color: #e0e0ec;
+    border: 1px solid #2a2a3a; border-radius: 8px; padding: 14px;
+    font: 12px/1.5 ui-monospace, monospace; resize: vertical;
+  }
+  #raw:focus { outline: none; border-color: #00e5ff; }
+
+  .actions {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 14px 24px; display: flex; align-items: center;
+    background: rgba(13,13,20,0.96); border-top: 1px solid #1a1a26;
+    backdrop-filter: blur(6px); z-index: 10;
+  }
+  .actions .inner {
+    max-width: 1280px; margin: 0 auto; width: 100%;
+    display: flex; gap: 12px; align-items: center;
+  }
+  button {
+    font: inherit; font-weight: 600; padding: 9px 18px;
+    border-radius: 6px; cursor: pointer; border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .primary { background: #00e5ff; color: #061018; }
+  .secondary { background: transparent; color: #e0e0ec; border-color: #2a2a3a; }
+  .danger { background: transparent; color: #f44336; border-color: #4a1a1a; }
+  .ghost { background: transparent; color: #7a7a9e; }
+  button:hover { opacity: 0.9; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .status { margin-left: auto; color: #7a7a9e; font-size: 13px; }
+  .status.ok { color: #5ef88a; }
+  .status.err { color: #ff7a7a; }
+
+  .add-show {
+    display: block; width: 100%; padding: 14px; margin-bottom: 10px;
+    background: transparent; border: 1px dashed #2a2a3a;
+    color: #7a7a9e; border-radius: 8px;
+  }
+  .add-show:hover { border-color: #00e5ff; color: #00e5ff; opacity: 1; }
+
+  .hint { color: #555; font-size: 12px; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<h1>GNN — Station Console</h1>
+<p class="sub">
+  Edits <code>assets/generated/show-config.json</code>.
+  The station reads this file at boot. Reload the broadcast window to apply.
+</p>
+
+<div class="tabs">
+  <button class="tab active" data-tab="shows">Shows</button>
+  <button class="tab" data-tab="pacing">Pacing</button>
+  <button class="tab" data-tab="cast">Cast</button>
+  <button class="tab" data-tab="broadcast">Broadcast</button>
+  <button class="tab" data-tab="anomalies">Anomalies</button>
+  <button class="tab" data-tab="raw">Raw JSON</button>
+</div>
+
+<div class="panel active" id="panel-shows">
+  <div id="shows-list"></div>
+  <button class="add-show" id="add-show">+ Add show</button>
+  <p class="hint">Drag <b>≡</b> to reorder. The station walks the list top to bottom.</p>
+</div>
+
+<div class="panel" id="panel-pacing">
+  <div class="section">
+    <h2>Segment length</h2>
+    <div class="grid">
+      <div class="field">
+        <label>Stories per break (min–max)</label>
+        <div class="range-pair">
+          <input type="number" min="1" data-pacing="storiesPerBreak" data-i="0">
+          <span>–</span>
+          <input type="number" min="1" data-pacing="storiesPerBreak" data-i="1">
+        </div>
+      </div>
+      <div class="field">
+        <label>Stories per station ident (min–max)</label>
+        <div class="range-pair">
+          <input type="number" min="1" data-pacing="storiesPerIdent" data-i="0">
+          <span>–</span>
+          <input type="number" min="1" data-pacing="storiesPerIdent" data-i="1">
+        </div>
+      </div>
+      <div class="field">
+        <label>DRY loop hold (ms, min–max)</label>
+        <div class="range-pair">
+          <input type="number" min="500" step="100" data-pacing="dryLoop" data-i="0">
+          <span>–</span>
+          <input type="number" min="500" step="100" data-pacing="dryLoop" data-i="1">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Dead air between beats (ms)</h2>
+    <div class="grid">
+      <div class="field">
+        <label>After a story (min–max)</label>
+        <div class="range-pair">
+          <input type="number" min="0" step="50" data-pacing="holdAfterRead" data-i="0">
+          <span>–</span>
+          <input type="number" min="0" step="50" data-pacing="holdAfterRead" data-i="1">
+        </div>
+      </div>
+      <div class="field">
+        <label>After banter (min–max)</label>
+        <div class="range-pair">
+          <input type="number" min="0" step="50" data-pacing="holdAfterBanter" data-i="0">
+          <span>–</span>
+          <input type="number" min="0" step="50" data-pacing="holdAfterBanter" data-i="1">
+        </div>
+      </div>
+      <div class="field">
+        <label>Before break (min–max)</label>
+        <div class="range-pair">
+          <input type="number" min="0" step="50" data-pacing="holdBeforeBreak" data-i="0">
+          <span>–</span>
+          <input type="number" min="0" step="50" data-pacing="holdBeforeBreak" data-i="1">
+        </div>
+      </div>
+      <div class="field">
+        <label>After a toss (min–max)</label>
+        <div class="range-pair">
+          <input type="number" min="0" step="50" data-pacing="breathAfterToss" data-i="0">
+          <span>–</span>
+          <input type="number" min="0" step="50" data-pacing="breathAfterToss" data-i="1">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Editorial mix (0 – 1)</h2>
+    <div class="grid">
+      <div class="field">
+        <label>Banter chance</label>
+        <input type="number" min="0" max="1" step="0.01" data-pacing="banterChance">
+      </div>
+      <div class="field">
+        <label>Two-way chance</label>
+        <input type="number" min="0" max="1" step="0.01" data-pacing="twoWayShare">
+      </div>
+      <div class="field">
+        <label>Anchor-to-anchor exchange chance</label>
+        <input type="number" min="0" max="1" step="0.01" data-pacing="exchangeShare">
+      </div>
+      <div class="field">
+        <label>Sector-wire chance</label>
+        <input type="number" min="0" max="1" step="0.01" data-pacing="wireShare">
+      </div>
+      <div class="field">
+        <label>Toss chance</label>
+        <input type="number" min="0" max="1" step="0.01" data-pacing="tossChance">
+      </div>
+      <div class="field">
+        <label>Double-banter chance</label>
+        <input type="number" min="0" max="1" step="0.01" data-pacing="doubleBanterChance">
+      </div>
+      <div class="field">
+        <label>Cutaway chance</label>
+        <input type="number" min="0" max="1" step="0.01" data-pacing="cutawayChance">
+      </div>
+      <div class="field">
+        <label>Cutaway fires at (0 – 1 of story)</label>
+        <input type="number" min="0" max="1" step="0.01" data-pacing="cutawayAt">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="panel-cast">
+  <div id="cast-list"></div>
+  <button class="add-show" id="add-cast">+ Add voice override</button>
+  <p class="hint">Voices are Kokoro ids. An override here replaces the value in <code>cast.js</code>; everything else about the character stays.</p>
+</div>
+
+<div class="panel" id="panel-broadcast">
+  <div class="section">
+    <h2>Show length</h2>
+    <div class="grid">
+      <div class="field">
+        <label>Show length (minutes)</label>
+        <input type="number" min="1" max="120" step="1" data-broadcast="showMinutes">
+      </div>
+      <div class="field">
+        <label>Minimum stories per show</label>
+        <input type="number" min="1" max="30" step="1" data-broadcast="minStoriesPerShow">
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Boot</h2>
+    <div class="grid">
+      <div class="field">
+        <label>Boot track</label>
+        <select data-broadcast="bootTrack" id="boot-track"></select>
+      </div>
+      <div class="field">
+        <label>Boot crossfade (seconds)</label>
+        <input type="number" min="0.2" max="10" step="0.1" data-broadcast="bootFadeSeconds">
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Between-show bumper</h2>
+    <div class="grid">
+      <div class="field">
+        <label>Bumper length (ms)</label>
+        <input type="number" min="2000" max="30000" step="500" data-broadcast="bumperMilliseconds">
+      </div>
+      <div class="field">
+        <label>Bumper fade (ms)</label>
+        <input type="number" min="200" max="5000" step="50" data-broadcast="bumperFadeMilliseconds">
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Market ticker</h2>
+    <div class="grid">
+      <div class="check" style="padding-top:0;">
+        <input type="checkbox" id="ticker-enabled" data-ticker="enabled">
+        <label for="ticker-enabled">Show the commodity crawl</label>
+      </div>
+      <div class="field">
+        <label>Crawl speed</label>
+        <input type="number" min="0" max="5" step="0.05" data-ticker="speed">
+      </div>
+    </div>
+    <div style="margin-top:14px;">
+      <label style="font-size:10px; text-transform:uppercase; color:#7a7a9e; letter-spacing:0.06em;">Symbols on the crawl</label>
+      <div id="ticker-symbols" style="margin-top:6px;"></div>
+      <button class="add-show" id="add-symbol" style="margin-top:8px;">+ Add symbol</button>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="panel-anomalies">
+  <div class="section">
+    <h2>Transmission faults</h2>
+    <div class="grid grid-2">
+      <div class="check" style="padding-top:0;">
+        <input type="checkbox" id="anom-enabled" data-anom="enabled">
+        <label for="anom-enabled">Enable scheduled anomalies</label>
+      </div>
+      <div class="check" style="padding-top:0;">
+        <input type="checkbox" id="anom-eggs" data-anom="easterEggsEnabled">
+        <label for="anom-eggs">Enable easter eggs</label>
+      </div>
+    </div>
+    <div class="grid" style="margin-top:14px;">
+      <div class="field">
+        <label>Quiet window between faults (ms, min–max)</label>
+        <div class="range-pair">
+          <input type="number" min="1000" step="1000" data-anom="quietMs" data-i="0">
+          <span>–</span>
+          <input type="number" min="1000" step="1000" data-anom="quietMs" data-i="1">
+        </div>
+      </div>
+      <div class="field">
+        <label>Ghost signals per second of airtime</label>
+        <input type="number" min="0" max="0.1" step="0.0001" data-anom="ghostPerSecond">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="panel-raw">
+  <p class="sub">Direct edit. Save PUTs whatever is in the textarea after validating it parses.</p>
+  <textarea id="raw" spellcheck="false"></textarea>
+</div>
+
+<div class="actions">
+  <div class="inner">
+    <button class="primary" id="save">Save</button>
+    <button class="secondary" id="revert">Revert changes</button>
+    <button class="ghost" id="reload">Reload from disk</button>
+    <button class="danger" id="reset">Clear all</button>
+    <span class="status" id="status"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const status = (msg, cls) => {
+    $('status').textContent = msg;
+    $('status').className = 'status ' + (cls || '');
+  };
+
+  let config = null;
+  let original = null;
+  let options = null;
+  let dragIndex = null;
+
+  const DEFAULTS = {
+    broadcast: {
+      showMinutes: 15, minStoriesPerShow: 4,
+      bootTrack: 'track_09', bootFadeSeconds: 1.2,
+      bumperMilliseconds: 9000, bumperFadeMilliseconds: 800,
+    },
+    pacing: {
+      storiesPerBreak: [4, 7], storiesPerIdent: [9, 14],
+      holdAfterRead: [1500, 3600], holdAfterBanter: [900, 2100],
+      holdBeforeBreak: [700, 1400], breathAfterToss: [500, 1100],
+      dryLoop: [6000, 11000],
+      banterChance: 0.55, wireShare: 0.35, exchangeShare: 0.33,
+      twoWayShare: 0.22, tossChance: 0.42, cutawayChance: 0.62,
+      cutawayAt: 0.34, doubleBanterChance: 0.16,
+    },
+    ticker: {
+      enabled: true, speed: 0.62,
+      symbols: [
+        { symbol: 'AAPL', label: 'AAPL' }, { symbol: 'MSFT', label: 'MSFT' },
+        { symbol: 'NVDA', label: 'NVDA' }, { symbol: 'AMZN', label: 'AMZN' },
+        { symbol: 'TSLA', label: 'TSLA' }, { symbol: 'SPY',  label: 'SPY'  },
+        { symbol: 'BTC-USD', label: 'BTC' }, { symbol: 'ETH-USD', label: 'ETH' },
+      ],
+    },
+    anomalies: {
+      enabled: true, easterEggsEnabled: true,
+      quietMs: [95000, 220000], ghostPerSecond: 0.0072,
+    },
+  };
+
+  function ensureShape() {
+    if (!config.shows) config.shows = [];
+    if (!config.cast) config.cast = {};
+    for (const key of Object.keys(DEFAULTS)) {
+      if (!config[key] || typeof config[key] !== 'object') {
+        config[key] = JSON.parse(JSON.stringify(DEFAULTS[key]));
+      } else {
+        for (const sub of Object.keys(DEFAULTS[key])) {
+          if (config[key][sub] === undefined) {
+            config[key][sub] = JSON.parse(JSON.stringify(DEFAULTS[key][sub]));
+          }
+        }
+      }
+    }
+  }
+
+  async function load() {
+    status('loading…');
+    try {
+      const [cfgRes, optRes] = await Promise.all([
+        fetch('/api/config').then((r) => r.json()),
+        fetch('/api/config/editor-options').then((r) => r.json()),
+      ]);
+      options = optRes;
+      config = cfgRes;
+      ensureShape();
+      original = JSON.parse(JSON.stringify(config));
+      renderAll();
+      if (config.shows.length) {
+        status('loaded — ' + config.shows.length + ' shows', 'ok');
+      } else {
+        status('loaded — but the config has no shows', 'err');
+      }
+    } catch (err) {
+      status('load failed: ' + err.message, 'err');
+    }
+  }
+
+  async function save() {
+    status('saving…');
+    $('save').disabled = true;
+    try {
+      if (document.querySelector('#panel-raw.active')) {
+        config = JSON.parse($('raw').value);
+        ensureShape();
+      }
+      const r = await fetch('/api/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || 'HTTP ' + r.status);
+      original = JSON.parse(JSON.stringify(config));
+      status('saved — ' + body.shows + ' shows. Reload the broadcast window.', 'ok');
+    } catch (err) {
+      status('save failed: ' + err.message, 'err');
+    } finally {
+      $('save').disabled = false;
+    }
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function selectFor(value, list, placeholder) {
+    return ['<option value="">' + (placeholder || '—') + '</option>']
+      .concat((list || []).map((v) =>
+        '<option value="' + esc(v) + '"' + (v === value ? ' selected' : '') + '>' + esc(v) + '</option>'))
+      .join('');
+  }
+
+  // --- shows --------------------------------------------------
+
+  function renderShows() {
+    const list = $('shows-list');
+    list.innerHTML = '';
+
+    if (!config.shows.length) {
+      list.innerHTML = '<div class="empty">No shows in the config.<br>'
+        + 'The server returns an empty document when it cannot find '
+        + '<code>assets/generated/show-config.json</code>.<br>'
+        + 'Check the file exists, then click <b>Reload from disk</b>.</div>';
+      return;
+    }
+
+    config.shows.forEach((s, i) => {
+      const el = document.createElement('div');
+      el.className = 'show';
+      el.draggable = true;
+      el.dataset.index = i;
+      el.innerHTML = `
+        <div class="handle" title="Drag to reorder">≡</div>
+        <div class="field">
+          <label>id</label>
+          <input type="text" data-field="id" value="${esc(s.id || '')}">
+        </div>
+        <div class="field">
+          <label>title</label>
+          <input type="text" data-field="title" value="${esc(s.title || '')}">
+        </div>
+        <div class="field">
+          <label>desk</label>
+          <input type="text" data-field="desk" value="${esc(s.desk || '')}">
+        </div>
+        <div class="field">
+          <label>genre</label>
+          <input type="text" data-field="genre" value="${esc(s.genre || '')}">
+        </div>
+        <div class="row row-3">
+          <div class="field">
+            <label>studio set</label>
+            <select data-field="set">${selectFor(s.set, options.sets, 'default')}</select>
+          </div>
+          <div class="field">
+            <label>window backdrop</label>
+            <select data-field="backdrop">${selectFor(s.backdrop, options.backdrops, 'rotate')}</select>
+          </div>
+          <div class="field">
+            <label>titlecard</label>
+            <select data-field="titlecard">${selectFor(s.titlecard, options.titlecards, 'none')}</select>
+          </div>
+        </div>
+        <div class="pair">
+          <div class="field">
+            <label>left anchor</label>
+            <select data-field="pair0">${selectFor((s.pair || [])[0], options.anchors, '—')}</select>
+          </div>
+          <div class="field">
+            <label>right anchor</label>
+            <select data-field="pair1">${selectFor((s.pair || [])[1], options.anchors, '—')}</select>
+          </div>
+          <div style="display:flex; gap:6px; align-items:flex-end;">
+            <div class="check" style="padding-top:0; flex:1;">
+              <input type="checkbox" data-field="debate" ${s.debate ? 'checked' : ''}>
+              <label>debate</label>
+            </div>
+            <button class="ghost" data-remove style="padding:6px 10px;">✕</button>
+          </div>
+        </div>
+      `;
+
+      el.querySelectorAll('[data-field]').forEach((input) => {
+        const field = input.dataset.field;
+        const evt = input.type === 'checkbox' ? 'change' : 'input';
+        input.addEventListener(evt, () => {
+          if (field === 'pair0') { s.pair = s.pair || ['', '']; s.pair[0] = input.value; }
+          else if (field === 'pair1') { s.pair = s.pair || ['', '']; s.pair[1] = input.value; }
+          else if (input.type === 'checkbox') s[field] = input.checked;
+          else s[field] = input.value;
+        });
+      });
+      el.querySelector('[data-remove]').addEventListener('click', () => {
+        config.shows.splice(i, 1);
+        renderShows();
+      });
+
+      el.addEventListener('dragstart', (e) => {
+        dragIndex = i;
+        el.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      el.addEventListener('dragend', () => {
+        dragIndex = null;
+        el.classList.remove('dragging');
+        document.querySelectorAll('.show').forEach((d) => d.classList.remove('drop-target'));
+      });
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (dragIndex === null || dragIndex === i) return;
+        document.querySelectorAll('.show').forEach((d) => d.classList.remove('drop-target'));
+        el.classList.add('drop-target');
+      });
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (dragIndex === null || dragIndex === i) return;
+        const moved = config.shows.splice(dragIndex, 1)[0];
+        config.shows.splice(i, 0, moved);
+        dragIndex = null;
+        renderShows();
+      });
+
+      list.appendChild(el);
+    });
+  }
+
+  // --- pacing -------------------------------------------------
+
+  function renderPacing() {
+    document.querySelectorAll('[data-pacing]').forEach((input) => {
+      const key = input.dataset.pacing;
+      const i = input.dataset.i;
+      const v = config.pacing[key];
+      if (Array.isArray(v)) {
+        input.value = v[parseInt(i, 10)];
+        input.addEventListener('input', () => {
+          const n = parseFloat(input.value);
+          if (!Number.isNaN(n)) v[parseInt(i, 10)] = n;
+        });
+      } else {
+        input.value = v;
+        input.addEventListener('input', () => {
+          const n = parseFloat(input.value);
+          if (!Number.isNaN(n)) config.pacing[key] = n;
+        });
+      }
+    });
+  }
+
+  // --- cast ---------------------------------------------------
+
+  function renderCast() {
+    const list = $('cast-list');
+    list.innerHTML = '';
+    const ids = Object.keys(config.cast).sort();
+    if (!ids.length) {
+      list.innerHTML = '<p class="hint">No overrides. Every character uses the voice from <code>cast.js</code>.</p>';
+    }
+    ids.forEach((id) => {
+      const entry = config.cast[id];
+      if (entry.enabled === undefined) entry.enabled = true;
+      const row = document.createElement('div');
+      row.className = 'cast-row';
+      row.innerHTML = `
+        <div class="id">${esc(id)}</div>
+        <select data-voice>${selectFor(entry.voice, options.voices.map((v) => v.id), '—')}</select>
+        <label style="display:flex; gap:6px; align-items:center; font-size:12px;">
+          <input type="checkbox" data-enabled ${entry.enabled ? 'checked' : ''}> on
+        </label>
+        <button class="ghost" data-remove style="padding:6px 10px;">✕</button>
+      `;
+      row.querySelector('[data-voice]').addEventListener('change', (e) => {
+        entry.voice = e.target.value;
+      });
+      row.querySelector('[data-enabled]').addEventListener('change', (e) => {
+        entry.enabled = e.target.checked;
+      });
+      row.querySelector('[data-remove]').addEventListener('click', () => {
+        delete config.cast[id];
+        renderCast();
+      });
+      list.appendChild(row);
+    });
+  }
+
+  // --- broadcast ----------------------------------------------
+
+  function renderBroadcast() {
+    document.querySelectorAll('[data-broadcast]').forEach((input) => {
+      const key = input.dataset.broadcast;
+      input.value = config.broadcast[key];
+      input.addEventListener('input', () => {
+        const n = input.type === 'number' ? parseFloat(input.value) : input.value;
+        if (input.type !== 'number' || !Number.isNaN(n)) config.broadcast[key] = n;
+      });
+    });
+
+    const track = $('boot-track');
+    track.innerHTML = selectFor(config.broadcast.bootTrack, options.music, '—');
+    track.addEventListener('change', () => { config.broadcast.bootTrack = track.value; });
+
+    $('ticker-enabled').checked = !!config.ticker.enabled;
+    $('ticker-enabled').addEventListener('change', (e) => { config.ticker.enabled = e.target.checked; });
+    const spd = document.querySelector('[data-ticker="speed"]');
+    spd.value = config.ticker.speed;
+    spd.addEventListener('input', () => {
+      const n = parseFloat(spd.value);
+      if (!Number.isNaN(n)) config.ticker.speed = n;
+    });
+    renderSymbols();
+  }
+
+  function renderSymbols() {
+    const box = $('ticker-symbols');
+    box.innerHTML = '';
+    config.ticker.symbols.forEach((s, i) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:grid; grid-template-columns: 1fr 1fr 40px; gap:8px; margin-bottom:6px;';
+      row.innerHTML = `
+        <input type="text" value="${esc(s.symbol)}" data-sym placeholder="SYMBOL" style="background:#0a0a12; color:#e0e0ec; border:1px solid #2a2a3a; border-radius:4px; padding:6px 8px; font:inherit; font-size:13px;">
+        <input type="text" value="${esc(s.label || s.symbol)}" data-lbl placeholder="LABEL" style="background:#0a0a12; color:#e0e0ec; border:1px solid #2a2a3a; border-radius:4px; padding:6px 8px; font:inherit; font-size:13px;">
+        <button class="ghost" data-del style="padding:6px;">✕</button>
+      `;
+      row.querySelector('[data-sym]').addEventListener('input', (e) => { s.symbol = e.target.value; });
+      row.querySelector('[data-lbl]').addEventListener('input', (e) => { s.label = e.target.value; });
+      row.querySelector('[data-del]').addEventListener('click', () => {
+        config.ticker.symbols.splice(i, 1);
+        renderSymbols();
+      });
+      box.appendChild(row);
+    });
+  }
+
+  // --- anomalies ----------------------------------------------
+
+  function renderAnomalies() {
+    $('anom-enabled').checked = !!config.anomalies.enabled;
+    $('anom-enabled').addEventListener('change', (e) => { config.anomalies.enabled = e.target.checked; });
+    $('anom-eggs').checked = !!config.anomalies.easterEggsEnabled;
+    $('anom-eggs').addEventListener('change', (e) => { config.anomalies.easterEggsEnabled = e.target.checked; });
+
+    document.querySelectorAll('[data-anom]').forEach((input) => {
+      const key = input.dataset.anom;
+      const i = input.dataset.i;
+      const v = config.anomalies[key];
+      if (Array.isArray(v)) {
+        input.value = v[parseInt(i, 10)];
+        input.addEventListener('input', () => {
+          const n = parseFloat(input.value);
+          if (!Number.isNaN(n)) v[parseInt(i, 10)] = n;
+        });
+      } else {
+        input.value = v;
+        input.addEventListener('input', () => {
+          const n = parseFloat(input.value);
+          if (!Number.isNaN(n)) config.anomalies[key] = n;
+        });
+      }
+    });
+  }
+
+  function renderRaw() {
+    $('raw').value = JSON.stringify(config, null, 2);
+  }
+
+  function renderAll() {
+    renderShows();
+    renderPacing();
+    renderCast();
+    renderBroadcast();
+    renderAnomalies();
+    renderRaw();
+  }
+
+  // --- events ------------------------------------------------
+
+  $('add-show').addEventListener('click', () => {
+    config.shows.push({
+      id: 'new_show', title: 'New Show', desk: 'DESK', genre: 'general',
+      set: options.sets[0] || null, backdrop: null, titlecard: null,
+      pair: [options.anchors[0] || '', options.anchors[1] || ''],
+      debate: false,
+    });
+    renderShows();
+  });
+
+  $('add-cast').addEventListener('click', () => {
+    const id = prompt('Cast id (must match an entry in cast.js):');
+    if (!id || config.cast[id]) return;
+    config.cast[id] = { voice: options.voices[0] ? options.voices[0].id : '', enabled: true };
+    renderCast();
+  });
+
+  $('add-symbol').addEventListener('click', () => {
+    config.ticker.symbols.push({ symbol: 'NEW', label: 'NEW' });
+    renderSymbols();
+  });
+
+  $('save').addEventListener('click', save);
+
+  $('revert').addEventListener('click', () => {
+    config = JSON.parse(JSON.stringify(original));
+    ensureShape();
+    renderAll();
+    status('reverted', 'ok');
+  });
+
+  $('reload').addEventListener('click', load);
+
+  $('reset').addEventListener('click', () => {
+    if (!confirm('Clear every field? Save will write an empty config, and the station will fall back to its code defaults at the next boot.')) return;
+    config = { version: 2 };
+    ensureShape();
+    renderAll();
+    status('cleared — Save to write the empty config', 'ok');
+  });
+
+  document.querySelectorAll('.tab').forEach((t) => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach((x) => x.classList.remove('active'));
+      t.classList.add('active');
+      $('panel-' + t.dataset.tab).classList.add('active');
+      if (t.dataset.tab === 'raw') renderRaw();
+    });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      save();
+    }
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

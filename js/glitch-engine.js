@@ -69,6 +69,8 @@ const GNNGlitch = (() => {
                 //
                 // `glitch` holds the chromatically scrambled items, which
                 // are useless as footage and perfect as interference.
+                // The ghost is drawn outside the studio window on the
+                // backdrop layer behind the hosts.
                 ghost = GNNAssets.pick({ pool: 'glitch' })
                     || GNNAssets.pick({ pool: 'broll', minW: 120 });
                 if (ghost) GNNAssets.loadImage(GNNAssets.heroPath(ghost));

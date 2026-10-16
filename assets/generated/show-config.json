@@ -1,0 +1,296 @@
+{
+  "version": 2,
+  "shows": [
+    {
+      "id": "morning_watch",
+      "title": "Galactic Morning Watch",
+      "desk": "MAIN DESK",
+      "genre": "morning",
+      "set": "studio_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "main_desk.png",
+      "pair": [
+        "human",
+        "mrrshan_f"
+      ],
+      "debate": false
+    },
+    {
+      "id": "economy",
+      "title": "Deep Space Economy",
+      "desk": "TRADE DESK",
+      "genre": "business",
+      "set": "market_wide_empty.png",
+      "backdrop": "orion_shipyard_night.png",
+      "titlecard": "market_desk.png",
+      "pair": [
+        "mrrshan",
+        "meklar"
+      ],
+      "debate": false
+    },
+    {
+      "id": "crossfire",
+      "title": "Council Crossfire",
+      "desk": "SECTOR DEBATE",
+      "genre": "debate",
+      "set": "geopolitics_wide_empty.png",
+      "backdrop": "orion_shipyard_night.png",
+      "titlecard": "the_spotlight.png",
+      "pair": [
+        "mrrshan_f",
+        "alkari"
+      ],
+      "debate": true
+    },
+    {
+      "id": "cybernetics",
+      "title": "Deep Survey & Cybernetics",
+      "desk": "TECH DESK",
+      "genre": "science",
+      "set": "tech_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "tech_desk.png",
+      "pair": [
+        "psilon",
+        "klackon"
+      ],
+      "debate": false
+    },
+    {
+      "id": "machine_intel",
+      "title": "Machine Intelligence Log",
+      "desk": "AUTOMATON DESK",
+      "genre": "ai",
+      "set": "tech_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": null,
+      "pair": [
+        "sakkra",
+        "robot"
+      ],
+      "debate": false
+    },
+    {
+      "id": "trade_minerals",
+      "title": "Colonial Mining & Trade",
+      "desk": "COMMERCE DESK",
+      "genre": "industry",
+      "set": "market_wide_empty.png",
+      "backdrop": "orion_shipyard_night.png",
+      "titlecard": "fleet_briefing.png",
+      "pair": [
+        "bulrathi",
+        "meklar"
+      ],
+      "debate": false
+    },
+    {
+      "id": "diplomacy",
+      "title": "Council Summit Floor",
+      "desk": "DIPLOMATIC DESK",
+      "genre": "politics",
+      "set": "diplomatic_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": null,
+      "pair": [
+        "alkari_f",
+        "silicoid"
+      ],
+      "debate": false
+    },
+    {
+      "id": "evening_rim",
+      "title": "The Evening Rim Report",
+      "desk": "PRIME DESK",
+      "genre": "prime",
+      "set": "celebrity_wide_empty.png",
+      "backdrop": "orion_shipyard_night.png",
+      "titlecard": null,
+      "pair": [
+        "mrrshan_f",
+        "human_f"
+      ],
+      "debate": false
+    },
+    {
+      "id": "anomaly",
+      "title": "Anomaly: Deep Dark",
+      "desk": "INVESTIGATION DESK",
+      "genre": "latenight",
+      "set": "anomaly_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": null,
+      "pair": [
+        "robot",
+        "psilon"
+      ],
+      "debate": false
+    },
+    {
+      "id": "archives",
+      "title": "Imperial Historical Wire",
+      "desk": "ARCHIVE DESK",
+      "genre": "archive",
+      "set": "archive_wide_empty.png",
+      "backdrop": "orion_shipyard_night.png",
+      "titlecard": null,
+      "pair": [
+        "psilon",
+        "robot"
+      ],
+      "debate": false
+    }
+  ],
+  "broadcast": {
+    "showMinutes": 15,
+    "minStoriesPerShow": 4,
+    "bootTrack": "track_09",
+    "bootFadeSeconds": 1.2,
+    "bumperMilliseconds": 9000,
+    "bumperFadeMilliseconds": 800
+  },
+  "pacing": {
+    "storiesPerBreak": [
+      4,
+      7
+    ],
+    "storiesPerIdent": [
+      9,
+      14
+    ],
+    "holdAfterRead": [
+      1500,
+      3600
+    ],
+    "holdAfterBanter": [
+      900,
+      2100
+    ],
+    "holdBeforeBreak": [
+      700,
+      1400
+    ],
+    "breathAfterToss": [
+      500,
+      1100
+    ],
+    "dryLoop": [
+      6000,
+      11000
+    ],
+    "banterChance": 0.55,
+    "wireShare": 0.35,
+    "exchangeShare": 0.33,
+    "twoWayShare": 0.22,
+    "tossChance": 0.42,
+    "cutawayChance": 0.62,
+    "cutawayAt": 0.34,
+    "doubleBanterChance": 0.16
+  },
+  "ticker": {
+    "enabled": true,
+    "speed": 0.62,
+    "symbols": [
+      {
+        "symbol": "AAPL",
+        "label": "AAPL"
+      },
+      {
+        "symbol": "MSFT",
+        "label": "MSFT"
+      },
+      {
+        "symbol": "NVDA",
+        "label": "NVDA"
+      },
+      {
+        "symbol": "AMZN",
+        "label": "AMZN"
+      },
+      {
+        "symbol": "TSLA",
+        "label": "TSLA"
+      },
+      {
+        "symbol": "SPY",
+        "label": "SPY"
+      },
+      {
+        "symbol": "BTC-USD",
+        "label": "BTC"
+      },
+      {
+        "symbol": "ETH-USD",
+        "label": "ETH"
+      }
+    ]
+  },
+  "anomalies": {
+    "enabled": true,
+    "easterEggsEnabled": true,
+    "quietMs": [
+      95000,
+      220000
+    ],
+    "ghostPerSecond": 0.0072
+  },
+  "cast": {
+    "human": {
+      "voice": "am_michael",
+      "enabled": true
+    },
+    "mrrshan_f": {
+      "voice": "af_bella",
+      "enabled": true
+    },
+    "bulrathi": {
+      "voice": "bm_lewis",
+      "enabled": true
+    },
+    "psilon": {
+      "voice": "bm_fable",
+      "enabled": true
+    },
+    "sakkra": {
+      "voice": "bm_daniel",
+      "enabled": true
+    },
+    "mrrshan": {
+      "voice": "bm_george",
+      "enabled": true
+    },
+    "alkari": {
+      "voice": "bf_emma",
+      "enabled": true
+    },
+    "darlok": {
+      "voice": "vox_unit",
+      "enabled": true
+    },
+    "meklar": {
+      "voice": "vox_unit",
+      "enabled": true
+    },
+    "silicoid": {
+      "voice": "bf_isabella",
+      "enabled": true
+    },
+    "klackon": {
+      "voice": "am_fenrir",
+      "enabled": true
+    },
+    "robot": {
+      "voice": "vox_unit",
+      "enabled": true
+    },
+    "human_f": {
+      "voice": "af_heart",
+      "enabled": true
+    },
+    "alkari_f": {
+      "voice": "bf_lily",
+      "enabled": true
+    }
+  }
+}

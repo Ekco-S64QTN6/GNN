@@ -440,29 +440,17 @@ const GNNAudio = (() => {
     /**
      * Start a music bed.
      *
-     * The fetch and decode used to fail silently — a 404 on the .ogg, or a
-     * decode error, both landed in a bare `catch { return; }` and the bed
-     * simply never played with no indication why. Three warnings now cover
-     * the three ways this can fail: no manifest entry, a fetch that is not
-     * 200, a decode that throws. A log at entry tells you the function was
-     * even called, which was not knowable from the outside when the whole
-     * thing was silent.
-     *
-     * Remove the diagnostics once music is confirmed playing; they are loud
-     * and per-call, not per-startup.
+     * The three warnings below fire only on failure: no manifest entry, a
+     * fetch that is not 200, a decode that throws. They are the only
+     * diagnostics this function carries — the per-call entry, skip and
+     * success logs from an earlier debugging pass were removed once music
+     * was confirmed playing on air, and a silent bed is the one fault a
+     * viewer cannot describe and a developer cannot see.
      */
     async function playMusic(trackId, opts = {}) {
-        console.log('[GNN Audio] playMusic called', trackId, opts);
         ensureContext();
-        if (!ctx || muted) {
-            console.warn('[GNN Audio] playMusic aborted:',
-                !ctx ? 'no context' : 'muted');
-            return;
-        }
-        if (currentTrack === trackId && musicSource) {
-            console.log('[GNN Audio] playMusic skipped: already playing', trackId);
-            return;
-        }
+        if (!ctx || muted) return;
+        if (currentTrack === trackId && musicSource) return;
         const meta = (typeof GNNAssets !== 'undefined')
             ? GNNAssets.musicTracks().find((m) => m.id === trackId)
             : null;
@@ -502,8 +490,6 @@ const GNNAudio = (() => {
             Math.max(0.0001, musicBaseGain * musicDuck),
             ctx.currentTime + (opts.fadeIn || 1.4));
         musicSource = src; musicGain = g; currentTrack = trackId;
-        console.log('[GNN Audio] music started', trackId,
-            'base', musicBaseGain, 'duck', musicDuck);
     }
     /**
      * Play a track once, from the start, and hand back both its duration
