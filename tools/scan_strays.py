@@ -44,14 +44,6 @@ from lbx import LBX_MAGIC, MOO1_HEADER, MOO2_HEADER  # noqa: E402
 # The MoO2 probe allows 1024 on both axes, since MoO2 shipped at 640x480
 # and a few scenes at higher internal resolutions.
 
-def _fits(off, header_len, nframes, blob_len):
-    table_end = off + header_len + (nframes + 1) * 4
-    if table_end > blob_len:
-        return False
-    first_off = struct.unpack_from('<I', b'\x00\x00\x00\x00' + b'\x00' * 4, 0)  # placeholder
-    return True  # unused; see below
-
-
 def looks_like_moo1_item(blob, off):
     if off + MOO1_HEADER > len(blob):
         return None
