@@ -235,9 +235,11 @@ matches those on the harness's own debugging port **and** on the process really
 being a browser, so your own Chromium is never a target. `Ctrl-C` on a
 foreground `start.sh` does the same thing.
 
-**Requirements:** Python 3.8+ and a modern browser. No build step, no bundler,
-no `node_modules`. The core broadcast runs offline, though the RSS layer and
-the market ticker reach out to external endpoints.
+**Requirements:** Python 3.8+ and a modern browser for the base server. For the
+optional local voice engine and market proxy dependencies, use Python 3.10–3.12
+(the quickstart creates a Python 3.12 virtual environment). No build step, no
+bundler, no `node_modules`. The core broadcast runs offline, though the RSS
+layer and the market ticker reach out to external endpoints.
 
 ---
 
