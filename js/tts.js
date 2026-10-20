@@ -29,10 +29,14 @@ const GNNTTS = (() => {
     // last one and the server refuses every one of them.
     const SESSION = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
 
-    // Boot-race diagnostics. Every line is prefixed [TTS] so it can be
-    // grepped out once the load-order fault is understood. Flip to false
-    // to silence without editing every site; leave it true for now.
-    const DEBUG = true;
+    // Boot-race diagnostics are opt-in so normal broadcasts do not flood
+    // the browser console. Enable them in DevTools with
+    // localStorage.setItem('gnnTtsDebug', '1') and reload; remove the key
+    // (or set it to anything else) to silence them again.
+    const DEBUG = (() => {
+        try { return localStorage.getItem('gnnTtsDebug') === '1'; }
+        catch (_) { return false; }
+    })();
     function log(...args) {
         if (!DEBUG) return;
         // eslint-disable-next-line no-console
@@ -53,7 +57,7 @@ const GNNTTS = (() => {
         { id: 'en-US-BrianNeural', label: 'BRIAN — Deep Baritone' },
         { id: 'en-US-GuyNeural', label: 'GUY — Anchor Prime' },
         { id: 'en-US-AriaNeural', label: 'ARIA — Anchor (F)' },
-                { id: 'en-US-AvaNeural', label: 'AVA — Smooth Sci-Fi (F)' },
+        { id: 'en-US-AvaNeural', label: 'AVA — Smooth Sci-Fi (F)' },
     ];
 
     let voice = VOICES[0].id;
@@ -183,7 +187,7 @@ const GNNTTS = (() => {
         const longEnough = words.filter((w) => w.replace(/[^A-Za-z]/g, '').length > 2);
         const shouted = longEnough.filter((w) => w === w.toUpperCase());
         const headline = longEnough.length > 0
-        && shouted.length / longEnough.length > 0.5;
+            && shouted.length / longEnough.length > 0.5;
 
         return str.replace(/\b[A-Z][A-Z'’.-]+\b/g, (word) => {
             const letters = word.replace(/[^A-Z]/g, '');
@@ -237,322 +241,322 @@ const GNNTTS = (() => {
         [/\b([Tt]he\s+)?W\.H\.O\.(?:\b|\s|$)/gi, (m, the) => (the ? the : '') + 'W H O '],
         [/\b([Tt]he\s+)who\b/gi, '$1W H O'],
         [/\bwho(?=\s+(?:director|chief|head|officials?|spokes(?:man|woman|person)|panel|team|report|reports|reported|reporting|guidance|guidelines?|warning|warns?|warned|says?|said|declared|declares|confirms?|confirmed|health|covid|mpox|ebola|flu|polio|pandemic|epidemic|emergency|committee)\b)/gi, 'W H O'],
-                [/\bUNESCO\b/gi, 'you-NESS-koh'],
-                [/\bUNICEF\b/gi, 'you-nih-sef'],
-                [/\bUNHCR\b/gi, 'U N H C R'],
-                [/\bNATO\b/gi, 'NAY-toh'],
-                [/\bOAS\b/g, 'O A S'],
-                [/\bASEAN\b/gi, 'AH-see-ahn'],
-                [/\bAUKUS\b/gi, 'AW-kus'],
-                [/\bBRICS\b/gi, 'bricks'],
-                [/\bG7\b/g, 'G seven'],
-                [/\bG20\b/g, 'G twenty'],
-                [/\bEU\b/g, 'E U'],
-                [/\bUN\b/g, 'U N'],
-                [/\bIMF\b/g, 'I M F'],
-                [/\bWTO\b/g, 'W T O'],
-                [/\bICC\b/g, 'I C C'],
-                [/\bICJ\b/g, 'I C J'],
-                [/\bIAEA\b/gi, 'I A E A'],
-                [/\bOPEC\b/g, 'O P E C'],
-                [/\bOECD\b/gi, 'O E C D'],
-                [/\bNGO\b/gi, 'N G O'],
-                [/\bINGO\b/gi, 'I N G O'],
-                [/\bIDF\b/g, 'I D F'],
-                [/\bIRGC\b/gi, 'I R G C'],
-                [/\bISIS\b/g, 'eye-sis'],
-                [/\bISIL\b/g, 'eye-sil'],
-                [/\bHamas\b/gi, 'hah-MOSS'],
-                [/\bHezbollah\b/gi, 'Hezb-ullah'],
-                [/\bHizbollah\b/gi, 'Hezb-ullah'],
-                [/\bHouthis\b/gi, 'Hoothees'],
-                [/\bHouthi\b/gi, 'Hoothee'],
-                [/\bTaliban\b/gi, 'TAL-ih-bahn'],
-                [/\bAl Qaeda\b/gi, 'al KYE-duh'],
-                [/\bAl-Qaeda\b/gi, 'al KYE-duh'],
-                [/\bAl-Shabaab\b/gi, 'al-shah-BAHB'],
-                [/\bBoko Haram\b/gi, 'BOH-koh hah-RAHM'],
+        [/\bUNESCO\b/gi, 'you-NESS-koh'],
+        [/\bUNICEF\b/gi, 'you-nih-sef'],
+        [/\bUNHCR\b/gi, 'U N H C R'],
+        [/\bNATO\b/gi, 'NAY-toh'],
+        [/\bOAS\b/g, 'O A S'],
+        [/\bASEAN\b/gi, 'AH-see-ahn'],
+        [/\bAUKUS\b/gi, 'AW-kus'],
+        [/\bBRICS\b/gi, 'bricks'],
+        [/\bG7\b/g, 'G seven'],
+        [/\bG20\b/g, 'G twenty'],
+        [/\bEU\b/g, 'E U'],
+        [/\bUN\b/g, 'U N'],
+        [/\bIMF\b/g, 'I M F'],
+        [/\bWTO\b/g, 'W T O'],
+        [/\bICC\b/g, 'I C C'],
+        [/\bICJ\b/g, 'I C J'],
+        [/\bIAEA\b/gi, 'I A E A'],
+        [/\bOPEC\b/g, 'O P E C'],
+        [/\bOECD\b/gi, 'O E C D'],
+        [/\bNGO\b/gi, 'N G O'],
+        [/\bINGO\b/gi, 'I N G O'],
+        [/\bIDF\b/g, 'I D F'],
+        [/\bIRGC\b/gi, 'I R G C'],
+        [/\bISIS\b/g, 'eye-sis'],
+        [/\bISIL\b/g, 'eye-sil'],
+        [/\bHamas\b/gi, 'hah-MOSS'],
+        [/\bHezbollah\b/gi, 'Hezb-ullah'],
+        [/\bHizbollah\b/gi, 'Hezb-ullah'],
+        [/\bHouthis\b/gi, 'Hoothees'],
+        [/\bHouthi\b/gi, 'Hoothee'],
+        [/\bTaliban\b/gi, 'TAL-ih-bahn'],
+        [/\bAl Qaeda\b/gi, 'al KYE-duh'],
+        [/\bAl-Qaeda\b/gi, 'al KYE-duh'],
+        [/\bAl-Shabaab\b/gi, 'al-shah-BAHB'],
+        [/\bBoko Haram\b/gi, 'BOH-koh hah-RAHM'],
 
-                // Countries, regions, and frequently misread place names
-                [/\bDR\.?\s+Congo\b/gi, 'Democratic Republic of Congo'],
-                [/\bDemocratic Republic of the Congo\b/gi, 'Democratic Republic of the Congo'],
-                [/\bDRC\b/g, 'D R C'],
-                [/\bD\.R\.C\.\b/gi, 'D R C'],
-                [/\bCongo-Brazzaville\b/gi, 'Congo Brazzaville'],
-                [/\bCongo-Kinshasa\b/gi, 'Congo Kinshasa'],
-                [/\bCôte d’Ivoire\b/gi, 'coat dee-VWAHR'],
-                [/\bCôte d'Ivoire\b/gi, 'coat dee-VWAHR'],
-                [/\bIvory Coast\b/gi, 'Eye-vuh-ree Coast'],
-                [/\bEswatini\b/gi, 'ess-wah-TEE-nee'],
-                [/\bLesotho\b/gi, 'leh-SOO-too'],
-                [/\bDjibouti\b/gi, 'jih-BOO-tee'],
-                [/\bSeychelles\b/gi, 'say-SHELLZ'],
-                [/\bMauritius\b/gi, 'muh-RISH-us'],
-                [/\bMaldives\b/gi, 'MAWL-deevz'],
-                [/\bKyrgyzstan\b/gi, 'keer-gih-STAHN'],
-                [/\bTajikistan\b/gi, 'tah-JEE-kih-stahn'],
-                [/\bTurkmenistan\b/gi, 'turk-MEN-ih-stahn'],
-                [/\bUzbekistan\b/gi, 'ooz-BEK-ih-stahn'],
-                [/\bKazakhstan\b/gi, 'kah-zahk-STAHN'],
-                [/\bAzerbaijan\b/gi, 'az-er-by-JAHN'],
-                [/\bArmenia\b/gi, 'ar-MEE-nee-uh'],
-                [/\bGeorgia\b/gi, 'JOR-juh'], // Country pronunciation; context may also mean the US state.
-                [/\bMoldova\b/gi, 'mol-DOH-vuh'],
-                [/\bBelarus\b/gi, 'bell-uh-ROOSS'],
-                [/\bUkraine\b/gi, 'you-KRAYN'],
-                [/\bKyiv\b/gi, 'Keev'],
-                [/\bOdesa\b/gi, 'oh-DESS-uh'],
-                [/\bKharkiv\b/gi, 'KAR-kiv'],
-                [/\bZaporizhzhia\b/gi, 'zap-oh-RIZH-uh'],
-                [/\bDonbas\b/gi, 'DON-bahs'],
-                [/\bCrimea\b/gi, 'kry-MEE-uh'],
-                [/\bTransnistria\b/gi, 'trans-NISS-tree-uh'],
-                [/\bNagorno-Karabakh\b/gi, 'nuh-GOR-noh kar-uh-BAHK'],
-                [/\bChechnya\b/gi, 'CHECH-nee-uh'],
-                [/\bDagestan\b/gi, 'dah-guh-STAHN'],
-                [/\bXinjiang\b/gi, 'shin-jyahng'],
-                [/\bTaiwan\b/gi, 'tie-WAHN'],
-                [/\bTaipei\b/gi, 'tie-PAY'],
-                [/\bBeijing\b/gi, 'bay-JING'],
-                [/\bShanghai\b/gi, 'shang-HIGH'],
-                [/\bQatar\b/gi, 'KUH-tar'],
-                [/\bDoha\b/gi, 'DOH-hah'],
-                [/\bBahrain\b/gi, 'bah-RAYN'],
-                [/\bKuwait\b/gi, 'koo-WAIT'],
-                [/\bOman\b/gi, 'oh-MAHN'],
-                [/\bYemen\b/gi, 'YEM-en'],
-                [/\bSanaa\b/gi, 'sah-NAH'],
-                [/\bSana'a\b/gi, 'sah-NAH'],
-                [/\bRiyadh\b/gi, 'ree-YAHD'],
-                [/\bTehran\b/gi, 'teh-RAHN'],
-                [/\bBaghdad\b/gi, 'bag-DAD'],
-                [/\bMosul\b/gi, 'MOH-sul'],
-                [/\bKurdistan\b/gi, 'kur-dih-STAN'],
-                [/\bGaza\b/gi, 'GAH-zuh'],
-                [/\bGaza Strip\b/gi, 'GAH-zuh Strip'],
-                [/\bWest Bank\b/gi, 'West Bank'],
-                [/\bJerusalem\b/gi, 'juh-ROO-suh-lem'],
-                [/\bTel Aviv\b/gi, 'tel uh-VEV'],
-                [/\bNetanyahu\b/gi, 'Netan-yah-hoo'],
-                [/\bBibi\b/g, 'Bee-bee'],
-                [/\bCairo\b/gi, 'KYE-roh'],
-                [/\bKhartoum\b/gi, 'kar-TOOM'],
-                [/\bDarfur\b/gi, 'dar-FOOR'],
-                [/\bSahel\b/gi, 'sah-HELL'],
-                [/\bNiger\b/gi, 'nee-ZHAIR'],
-                [/\bNigeria\b/gi, 'nye-JEER-ee-uh'],
-                [/\bNigerien\b/gi, 'nee-ZHAIR-ee-en'],
-                [/\bNigerian\b/gi, 'nye-JEER-ee-an'],
-                [/\bBurkina Faso\b/gi, 'bur-KEE-nah FAH-soh'],
-                [/\bOuagadougou\b/gi, 'wah-guh-DOO-goo'],
-                [/\bMali\b/gi, 'MAH-lee'],
-                [/\bBamako\b/gi, 'BAH-muh-koh'],
-                [/\bSenegal\b/gi, 'SEN-ih-gawl'],
-                [/\bDakar\b/gi, 'dah-KAR'],
-                [/\bGambia\b/gi, 'GAM-bee-uh'],
-                [/\bGuinea-Bissau\b/gi, 'GIN-ee bih-SOW'],
-                [/\bCabo Verde\b/gi, 'KAH-boh VER-day'],
-                [/\bEritrea\b/gi, 'air-ih-TREE-uh'],
-                [/\bAsmara\b/gi, 'ahs-MAH-rah'],
-                [/\bTigray\b/gi, 'tee-GRYE'],
-                [/\bAddis Ababa\b/gi, 'AH-dis AH-buh-buh'],
-                [/\bEthiopia\b/gi, 'ee-thee-OH-pee-uh'],
-                [/\bSomalia\b/gi, 'soh-MAH-lee-uh'],
-                [/\bMogadishu\b/gi, 'moh-guh-DEE-shoo'],
-                [/\bRwanda\b/gi, 'roo-AHN-duh'],
-                [/\bBurundi\b/gi, 'buh-ROON-dee'],
-                [/\bUganda\b/gi, 'yoo-GAN-duh'],
-                [/\bKampala\b/gi, 'kam-PAH-luh'],
-                [/\bKinshasa\b/gi, 'kin-SHAH-suh'],
-                [/\bBrazzaville\b/gi, 'BRAH-zuh-veel'],
-                [/\bLubumbashi\b/gi, 'loo-boom-BAH-shee'],
-                [/\bM23\b/g, 'M twenty-three'],
-                [/\bFARC\b/g, 'F A R C'],
-                [/\bELN\b/g, 'E L N'],
-                [/\bPKK\b/g, 'P K K'],
-                [/\bYPG\b/g, 'Y P G'],
-                [/\bSDF\b/g, 'S D F'],
-                [/\bDPRK\b/g, 'D P R K'],
-                [/\bROK\b/g, 'R O K'],
-                [/\bPLA\b/g, 'P L A'],
-                [/\bCCP\b/g, 'C C P'],
-                [/\bKremlin\b/gi, 'KREM-lin'],
-                [/\bMoscow\b/gi, 'MOS-kow'],
-                [/\bVladimir Putin\b/gi, 'Vlah-dee-meer POO-tin'],
-                [/\bVolodymyr Zelenskyy?\b/gi, 'voh-loh-DIM-eer zuh-LEN-skee'],
-                [/\bZelenskyy?\b/gi, 'zuh-LEN-skee'],
-                [/\bXi Jinping\b/gi, 'shee jin-PING'],
-                [/\bKim Jong Un\b/gi, 'kim jong OON'],
-                [/\bPyongyang\b/gi, 'pyong-YAHNG'],
-                [/\bSeoul\b/gi, 'sohl'],
-                [/\bMyanmar\b/gi, 'mee-an-MAR'],
-                [/\bNaypyidaw\b/gi, 'nay-pee-DAW'],
-                [/\bRohingya\b/gi, 'roh-HIN-juh'],
-                [/\bBangladesh\b/gi, 'bang-gluh-DESH'],
-                [/\bDhaka\b/gi, 'DAH-kuh'],
-                [/\bPakistan\b/gi, 'PAK-ih-stan'],
-                [/\bIslamabad\b/gi, 'iz-LAH-muh-bad'],
-                [/\bAfghanistan\b/gi, 'af-GAN-ih-stan'],
-                [/\bKabul\b/gi, 'KAH-bul'],
-                [/\bTaliban\b/gi, 'TAL-ih-bahn'],
-                [/\bIslamic State\b/gi, 'Islamic State'],
-                [/\bBiden\b/gi, 'BYE-den'],
-                [/\bTrump\b/gi, 'Trump'],
-                [/\bMacron\b/gi, 'mah-KRON'],
-                [/\bScholz\b/gi, 'sholts'],
-                [/\bMeloni\b/gi, 'meh-LOH-nee'],
-                [/\bErdogan\b/gi, 'AIR-doh-wahn'],
-                [/\bRecep Tayyip Erdogan\b/gi, 'REH-jep TYE-yip AIR-doh-wahn'],
-                [/\bMohammed bin Salman\b/gi, 'moh-HAH-med bin sal-MAHN'],
-                [/\bMbS\b/g, 'M B S'],
+        // Countries, regions, and frequently misread place names
+        [/\bDR\.?\s+Congo\b/gi, 'Democratic Republic of Congo'],
+        [/\bDemocratic Republic of the Congo\b/gi, 'Democratic Republic of the Congo'],
+        [/\bDRC\b/g, 'D R C'],
+        [/\bD\.R\.C\.\b/gi, 'D R C'],
+        [/\bCongo-Brazzaville\b/gi, 'Congo Brazzaville'],
+        [/\bCongo-Kinshasa\b/gi, 'Congo Kinshasa'],
+        [/\bCôte d’Ivoire\b/gi, 'coat dee-VWAHR'],
+        [/\bCôte d'Ivoire\b/gi, 'coat dee-VWAHR'],
+        [/\bIvory Coast\b/gi, 'Eye-vuh-ree Coast'],
+        [/\bEswatini\b/gi, 'ess-wah-TEE-nee'],
+        [/\bLesotho\b/gi, 'leh-SOO-too'],
+        [/\bDjibouti\b/gi, 'jih-BOO-tee'],
+        [/\bSeychelles\b/gi, 'say-SHELLZ'],
+        [/\bMauritius\b/gi, 'muh-RISH-us'],
+        [/\bMaldives\b/gi, 'MAWL-deevz'],
+        [/\bKyrgyzstan\b/gi, 'keer-gih-STAHN'],
+        [/\bTajikistan\b/gi, 'tah-JEE-kih-stahn'],
+        [/\bTurkmenistan\b/gi, 'turk-MEN-ih-stahn'],
+        [/\bUzbekistan\b/gi, 'ooz-BEK-ih-stahn'],
+        [/\bKazakhstan\b/gi, 'kah-zahk-STAHN'],
+        [/\bAzerbaijan\b/gi, 'az-er-by-JAHN'],
+        [/\bArmenia\b/gi, 'ar-MEE-nee-uh'],
+        [/\bGeorgia\b/gi, 'JOR-juh'], // Country pronunciation; context may also mean the US state.
+        [/\bMoldova\b/gi, 'mol-DOH-vuh'],
+        [/\bBelarus\b/gi, 'bell-uh-ROOSS'],
+        [/\bUkraine\b/gi, 'you-KRAYN'],
+        [/\bKyiv\b/gi, 'Keev'],
+        [/\bOdesa\b/gi, 'oh-DESS-uh'],
+        [/\bKharkiv\b/gi, 'KAR-kiv'],
+        [/\bZaporizhzhia\b/gi, 'zap-oh-RIZH-uh'],
+        [/\bDonbas\b/gi, 'DON-bahs'],
+        [/\bCrimea\b/gi, 'kry-MEE-uh'],
+        [/\bTransnistria\b/gi, 'trans-NISS-tree-uh'],
+        [/\bNagorno-Karabakh\b/gi, 'nuh-GOR-noh kar-uh-BAHK'],
+        [/\bChechnya\b/gi, 'CHECH-nee-uh'],
+        [/\bDagestan\b/gi, 'dah-guh-STAHN'],
+        [/\bXinjiang\b/gi, 'shin-jyahng'],
+        [/\bTaiwan\b/gi, 'tie-WAHN'],
+        [/\bTaipei\b/gi, 'tie-PAY'],
+        [/\bBeijing\b/gi, 'bay-JING'],
+        [/\bShanghai\b/gi, 'shang-HIGH'],
+        [/\bQatar\b/gi, 'KUH-tar'],
+        [/\bDoha\b/gi, 'DOH-hah'],
+        [/\bBahrain\b/gi, 'bah-RAYN'],
+        [/\bKuwait\b/gi, 'koo-WAIT'],
+        [/\bOman\b/gi, 'oh-MAHN'],
+        [/\bYemen\b/gi, 'YEM-en'],
+        [/\bSanaa\b/gi, 'sah-NAH'],
+        [/\bSana'a\b/gi, 'sah-NAH'],
+        [/\bRiyadh\b/gi, 'ree-YAHD'],
+        [/\bTehran\b/gi, 'teh-RAHN'],
+        [/\bBaghdad\b/gi, 'bag-DAD'],
+        [/\bMosul\b/gi, 'MOH-sul'],
+        [/\bKurdistan\b/gi, 'kur-dih-STAN'],
+        [/\bGaza\b/gi, 'GAH-zuh'],
+        [/\bGaza Strip\b/gi, 'GAH-zuh Strip'],
+        [/\bWest Bank\b/gi, 'West Bank'],
+        [/\bJerusalem\b/gi, 'juh-ROO-suh-lem'],
+        [/\bTel Aviv\b/gi, 'tel uh-VEV'],
+        [/\bNetanyahu\b/gi, 'Netan-yah-hoo'],
+        [/\bBibi\b/g, 'Bee-bee'],
+        [/\bCairo\b/gi, 'KYE-roh'],
+        [/\bKhartoum\b/gi, 'kar-TOOM'],
+        [/\bDarfur\b/gi, 'dar-FOOR'],
+        [/\bSahel\b/gi, 'sah-HELL'],
+        [/\bNiger\b/gi, 'nee-ZHAIR'],
+        [/\bNigeria\b/gi, 'nye-JEER-ee-uh'],
+        [/\bNigerien\b/gi, 'nee-ZHAIR-ee-en'],
+        [/\bNigerian\b/gi, 'nye-JEER-ee-an'],
+        [/\bBurkina Faso\b/gi, 'bur-KEE-nah FAH-soh'],
+        [/\bOuagadougou\b/gi, 'wah-guh-DOO-goo'],
+        [/\bMali\b/gi, 'MAH-lee'],
+        [/\bBamako\b/gi, 'BAH-muh-koh'],
+        [/\bSenegal\b/gi, 'SEN-ih-gawl'],
+        [/\bDakar\b/gi, 'dah-KAR'],
+        [/\bGambia\b/gi, 'GAM-bee-uh'],
+        [/\bGuinea-Bissau\b/gi, 'GIN-ee bih-SOW'],
+        [/\bCabo Verde\b/gi, 'KAH-boh VER-day'],
+        [/\bEritrea\b/gi, 'air-ih-TREE-uh'],
+        [/\bAsmara\b/gi, 'ahs-MAH-rah'],
+        [/\bTigray\b/gi, 'tee-GRYE'],
+        [/\bAddis Ababa\b/gi, 'AH-dis AH-buh-buh'],
+        [/\bEthiopia\b/gi, 'ee-thee-OH-pee-uh'],
+        [/\bSomalia\b/gi, 'soh-MAH-lee-uh'],
+        [/\bMogadishu\b/gi, 'moh-guh-DEE-shoo'],
+        [/\bRwanda\b/gi, 'roo-AHN-duh'],
+        [/\bBurundi\b/gi, 'buh-ROON-dee'],
+        [/\bUganda\b/gi, 'yoo-GAN-duh'],
+        [/\bKampala\b/gi, 'kam-PAH-luh'],
+        [/\bKinshasa\b/gi, 'kin-SHAH-suh'],
+        [/\bBrazzaville\b/gi, 'BRAH-zuh-veel'],
+        [/\bLubumbashi\b/gi, 'loo-boom-BAH-shee'],
+        [/\bM23\b/g, 'M twenty-three'],
+        [/\bFARC\b/g, 'F A R C'],
+        [/\bELN\b/g, 'E L N'],
+        [/\bPKK\b/g, 'P K K'],
+        [/\bYPG\b/g, 'Y P G'],
+        [/\bSDF\b/g, 'S D F'],
+        [/\bDPRK\b/g, 'D P R K'],
+        [/\bROK\b/g, 'R O K'],
+        [/\bPLA\b/g, 'P L A'],
+        [/\bCCP\b/g, 'C C P'],
+        [/\bKremlin\b/gi, 'KREM-lin'],
+        [/\bMoscow\b/gi, 'MOS-kow'],
+        [/\bVladimir Putin\b/gi, 'Vlah-dee-meer POO-tin'],
+        [/\bVolodymyr Zelenskyy?\b/gi, 'voh-loh-DIM-eer zuh-LEN-skee'],
+        [/\bZelenskyy?\b/gi, 'zuh-LEN-skee'],
+        [/\bXi Jinping\b/gi, 'shee jin-PING'],
+        [/\bKim Jong Un\b/gi, 'kim jong OON'],
+        [/\bPyongyang\b/gi, 'pyong-YAHNG'],
+        [/\bSeoul\b/gi, 'sohl'],
+        [/\bMyanmar\b/gi, 'mee-an-MAR'],
+        [/\bNaypyidaw\b/gi, 'nay-pee-DAW'],
+        [/\bRohingya\b/gi, 'roh-HIN-juh'],
+        [/\bBangladesh\b/gi, 'bang-gluh-DESH'],
+        [/\bDhaka\b/gi, 'DAH-kuh'],
+        [/\bPakistan\b/gi, 'PAK-ih-stan'],
+        [/\bIslamabad\b/gi, 'iz-LAH-muh-bad'],
+        [/\bAfghanistan\b/gi, 'af-GAN-ih-stan'],
+        [/\bKabul\b/gi, 'KAH-bul'],
+        [/\bTaliban\b/gi, 'TAL-ih-bahn'],
+        [/\bIslamic State\b/gi, 'Islamic State'],
+        [/\bBiden\b/gi, 'BYE-den'],
+        [/\bTrump\b/gi, 'Trump'],
+        [/\bMacron\b/gi, 'mah-KRON'],
+        [/\bScholz\b/gi, 'sholts'],
+        [/\bMeloni\b/gi, 'meh-LOH-nee'],
+        [/\bErdogan\b/gi, 'AIR-doh-wahn'],
+        [/\bRecep Tayyip Erdogan\b/gi, 'REH-jep TYE-yip AIR-doh-wahn'],
+        [/\bMohammed bin Salman\b/gi, 'moh-HAH-med bin sal-MAHN'],
+        [/\bMbS\b/g, 'M B S'],
 
-                // Common news, law, medicine, science, and finance abbreviations
-                [/\bAI\b/g, 'A I'],
-                [/\bA\.I\.\b/g, 'A I'],
-                [/\bGDP\b/g, 'G D P'],
-                [/\bCPI\b/g, 'C P I'],
-                [/\bPCE\b/g, 'P C E'],
-                [/\bFOMC\b/gi, 'F O M C'],
-                [/\bFed\b/g, 'Fed'],
-                [/\bSEC\b/g, 'S E C'],
-                [/\bFTC\b/g, 'F T C'],
-                [/\bDOJ\b/g, 'D O J'],
-                [/\bFBI\b/g, 'F B I'],
-                [/\bCIA\b/g, 'C I A'],
-                [/\bNSA\b/g, 'N S A'],
-                [/\bDHS\b/g, 'D H S'],
-                [/\bICE\b/g, 'I C E'],
-                [/\bCBP\b/g, 'C B P'],
-                [/\bATF\b/g, 'A T F'],
-                [/\bCDC\b/g, 'C D C'],
-                [/\bFDA\b/g, 'F D A'],
-                [/\bEPA\b/g, 'E P A'],
-                [/\bIRS\b/g, 'I R S'],
-                [/\bNHS\b/g, 'N H S'],
-                [/\bMPs?\b/g, 'M P'],
-                [/\bMAGA\b/gi, 'MAG-uh'],
-                [/\bSCOTUS\b/gi, 'SKOH-tus'],
-                [/\bOTAN\b/gi, 'oh-TAHN'],
-                [/\bCOVID-?19\b/gi, 'COVID nineteen'],
-                [/\bCOVID\b/gi, 'CO-vid'],
-                [/\bSARS-CoV-2\b/gi, 'sars cov two'],
-                [/\bH5N1\b/g, 'H five N one'],
-                [/\bH1N1\b/g, 'H one N one'],
-                [/\bRSV\b/g, 'R S V'],
-                [/\bHIV\b/g, 'H I V'],
-                [/\bAIDS\b/g, 'AIDS'],
-                [/\bNvidia\b/gi, 'en-VID-ee-uh'],
-                [/\bHuawei\b/gi, 'wah-WAY'],
-                [/\bXiaomi\b/gi, 'shy-OW-mee'],
-                [/\bBYD\b/g, 'B Y D'],
-                [/\bTSMC\b/gi, 'T S M C'],
-                [/\bASML\b/gi, 'A S M L'],
-                [/\bNASDAQ\b/gi, 'NAZ-dak'],
-                [/\bNYSE\b/g, 'N Y S E'],
-                [/\bSEC\b/g, 'S E C'],
-                [/\bIPO\b/g, 'I P O'],
-                [/\bCEO\b/g, 'C E O'],
-                [/\bCFO\b/g, 'C F O'],
-                [/\bCOO\b/g, 'C O O'],
-                [/\bCTO\b/g, 'C T O'],
-                [/\bEVs?\b/g, 'E V'],
-                [/\bUFOs?\b/g, 'U F O'],
-                [/\bGPS\b/g, 'G P S'],
-                [/\bUSB\b/g, 'U S B'],
-                [/\bURL\b/g, 'U R L'],
-                [/\bPDF\b/g, 'P D F'],
-                [/\bAPI\b/g, 'A P I'],
-                [/\bSQL\b/g, 'sequel'],
-                [/\bHTTP\b/g, 'H T T P'],
-                [/\bHTTPS\b/g, 'H T T P S'],
-                [/\bAI\b/g, 'A I'],
+        // Common news, law, medicine, science, and finance abbreviations
+        [/\bAI\b/g, 'A I'],
+        [/\bA\.I\.\b/g, 'A I'],
+        [/\bGDP\b/g, 'G D P'],
+        [/\bCPI\b/g, 'C P I'],
+        [/\bPCE\b/g, 'P C E'],
+        [/\bFOMC\b/gi, 'F O M C'],
+        [/\bFed\b/g, 'Fed'],
+        [/\bSEC\b/g, 'S E C'],
+        [/\bFTC\b/g, 'F T C'],
+        [/\bDOJ\b/g, 'D O J'],
+        [/\bFBI\b/g, 'F B I'],
+        [/\bCIA\b/g, 'C I A'],
+        [/\bNSA\b/g, 'N S A'],
+        [/\bDHS\b/g, 'D H S'],
+        [/\bICE\b/g, 'I C E'],
+        [/\bCBP\b/g, 'C B P'],
+        [/\bATF\b/g, 'A T F'],
+        [/\bCDC\b/g, 'C D C'],
+        [/\bFDA\b/g, 'F D A'],
+        [/\bEPA\b/g, 'E P A'],
+        [/\bIRS\b/g, 'I R S'],
+        [/\bNHS\b/g, 'N H S'],
+        [/\bMPs?\b/g, 'M P'],
+        [/\bMAGA\b/gi, 'MAG-uh'],
+        [/\bSCOTUS\b/gi, 'SKOH-tus'],
+        [/\bOTAN\b/gi, 'oh-TAHN'],
+        [/\bCOVID-?19\b/gi, 'COVID nineteen'],
+        [/\bCOVID\b/gi, 'CO-vid'],
+        [/\bSARS-CoV-2\b/gi, 'sars cov two'],
+        [/\bH5N1\b/g, 'H five N one'],
+        [/\bH1N1\b/g, 'H one N one'],
+        [/\bRSV\b/g, 'R S V'],
+        [/\bHIV\b/g, 'H I V'],
+        [/\bAIDS\b/g, 'AIDS'],
+        [/\bNvidia\b/gi, 'en-VID-ee-uh'],
+        [/\bHuawei\b/gi, 'wah-WAY'],
+        [/\bXiaomi\b/gi, 'shy-OW-mee'],
+        [/\bBYD\b/g, 'B Y D'],
+        [/\bTSMC\b/gi, 'T S M C'],
+        [/\bASML\b/gi, 'A S M L'],
+        [/\bNASDAQ\b/gi, 'NAZ-dak'],
+        [/\bNYSE\b/g, 'N Y S E'],
+        [/\bSEC\b/g, 'S E C'],
+        [/\bIPO\b/g, 'I P O'],
+        [/\bCEO\b/g, 'C E O'],
+        [/\bCFO\b/g, 'C F O'],
+        [/\bCOO\b/g, 'C O O'],
+        [/\bCTO\b/g, 'C T O'],
+        [/\bEVs?\b/g, 'E V'],
+        [/\bUFOs?\b/g, 'U F O'],
+        [/\bGPS\b/g, 'G P S'],
+        [/\bUSB\b/g, 'U S B'],
+        [/\bURL\b/g, 'U R L'],
+        [/\bPDF\b/g, 'P D F'],
+        [/\bAPI\b/g, 'A P I'],
+        [/\bSQL\b/g, 'sequel'],
+        [/\bHTTP\b/g, 'H T T P'],
+        [/\bHTTPS\b/g, 'H T T P S'],
+        [/\bAI\b/g, 'A I'],
 
-                // Dates, symbols, and units commonly present in RSS copy
-                [/\bkm\/h\b/gi, 'kilometres per hour'],
-                [/\bkph\b/gi, 'kilometres per hour'],
-                [/\bmph\b/gi, 'miles per hour'],
-                [/\bkm²\b/gi, 'square kilometres'],
-                [/\bkm2\b/gi, 'square kilometres'],
-                [/\bkg\b/gi, 'kilograms'],
-                [/\bmg\b/gi, 'milligrams'],
-                [/\bGHz\b/g, 'gigahertz'],
-                [/\bMHz\b/g, 'megahertz'],
-                // Units only after a number: "Team GB's Morris" is Great Britain.
-                [/(\d)\s?GB\b/g, '$1 gigabytes'],
-                [/(\d)\s?TB\b/g, '$1 terabytes'],
-                [/\bUSD\b/g, 'U S dollars'],
-                [/\bEUR\b/g, 'euros'],
-                [/\bGBP\b/g, 'pounds sterling'],
-                [/\bJPY\b/g, 'yen'],
-                [/\bpercent\b/gi, 'percent'],
-                [/\bper cent\b/gi, 'percent'],
-                [/\bQ[1-4]\b/g, (m) => `quarter ${m[1]}`],
-                [/\bFY(\d{2,4})\b/gi, 'financial year $1'],
-                [/\bNo\.\s*(\d+)\b/g, 'number $1'],
+        // Dates, symbols, and units commonly present in RSS copy
+        [/\bkm\/h\b/gi, 'kilometres per hour'],
+        [/\bkph\b/gi, 'kilometres per hour'],
+        [/\bmph\b/gi, 'miles per hour'],
+        [/\bkm²\b/gi, 'square kilometres'],
+        [/\bkm2\b/gi, 'square kilometres'],
+        [/\bkg\b/gi, 'kilograms'],
+        [/\bmg\b/gi, 'milligrams'],
+        [/\bGHz\b/g, 'gigahertz'],
+        [/\bMHz\b/g, 'megahertz'],
+        // Units only after a number: "Team GB's Morris" is Great Britain.
+        [/(\d)\s?GB\b/g, '$1 gigabytes'],
+        [/(\d)\s?TB\b/g, '$1 terabytes'],
+        [/\bUSD\b/g, 'U S dollars'],
+        [/\bEUR\b/g, 'euros'],
+        [/\bGBP\b/g, 'pounds sterling'],
+        [/\bJPY\b/g, 'yen'],
+        [/\bpercent\b/gi, 'percent'],
+        [/\bper cent\b/gi, 'percent'],
+        [/\bQ[1-4]\b/g, (m) => `quarter ${m[1]}`],
+        [/\bFY(\d{2,4})\b/gi, 'financial year $1'],
+        [/\bNo\.\s*(\d+)\b/g, 'number $1'],
 
-                // Matchups and legal/sports abbreviations: "Arsenal vs Chelsea", "Team A vs. Team B", "Roe v. Wade"
-                [/\bvs(?:\.|\b)/gi, 'versus'],
-                [/\bv\.\s+(?=[A-Z])/gi, 'versus '],
+        // Matchups and legal/sports abbreviations: "Arsenal vs Chelsea", "Team A vs. Team B", "Roe v. Wade"
+        [/\bvs(?:\.|\b)/gi, 'versus'],
+        [/\bv\.\s+(?=[A-Z])/gi, 'versus '],
 
-                // Abbreviated months in dates: "17 Oct", "Oct 17", "Oct 2026", "since Oct"
-                [/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+(\d{1,2}(?:st|nd|rd|th)?)\b/gi,
-                    (_, m, d) => ({jan:'January',feb:'February',mar:'March',apr:'April',may:'May',jun:'June',jul:'July',aug:'August',sep:'September',sept:'September',oct:'October',nov:'November',dec:'December'}[m.toLowerCase()] || m) + ' ' + d],
-                [/\b(\d{1,2}(?:st|nd|rd|th)?)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b\.?/gi,
-                    (_, d, m) => d + ' ' + ({jan:'January',feb:'February',mar:'March',apr:'April',may:'May',jun:'June',jul:'July',aug:'August',sep:'September',sept:'September',oct:'October',nov:'November',dec:'December'}[m.toLowerCase()] || m)],
-                [/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+(\d{4})\b/gi,
-                    (_, m, y) => ({jan:'January',feb:'February',mar:'March',apr:'April',may:'May',jun:'June',jul:'July',aug:'August',sep:'September',sept:'September',oct:'October',nov:'November',dec:'December'}[m.toLowerCase()] || m) + ' ' + y],
-                [/\b(in|since|until|from|by|during|before|after|early|mid|late)\s+(Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b\.?/gi,
-                    (_, p, m) => p + ' ' + ({jan:'January',feb:'February',mar:'March',apr:'April',may:'May',jun:'June',jul:'July',aug:'August',sep:'September',sept:'September',oct:'October',nov:'November',dec:'December'}[m.toLowerCase()] || m)],
-                [/\b(Jan|Feb|Apr|Aug|Sep|Sept|Oct|Nov|Dec)\./gi,
-                    (_, m) => ({jan:'January',feb:'February',apr:'April',aug:'August',sep:'September',sept:'September',oct:'October',nov:'November',dec:'December'}[m.toLowerCase()] || m)],
+        // Abbreviated months in dates: "17 Oct", "Oct 17", "Oct 2026", "since Oct"
+        [/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+(\d{1,2}(?:st|nd|rd|th)?)\b/gi,
+            (_, m, d) => ({ jan: 'January', feb: 'February', mar: 'March', apr: 'April', may: 'May', jun: 'June', jul: 'July', aug: 'August', sep: 'September', sept: 'September', oct: 'October', nov: 'November', dec: 'December' }[m.toLowerCase()] || m) + ' ' + d],
+        [/\b(\d{1,2}(?:st|nd|rd|th)?)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b\.?/gi,
+            (_, d, m) => d + ' ' + ({ jan: 'January', feb: 'February', mar: 'March', apr: 'April', may: 'May', jun: 'June', jul: 'July', aug: 'August', sep: 'September', sept: 'September', oct: 'October', nov: 'November', dec: 'December' }[m.toLowerCase()] || m)],
+        [/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+(\d{4})\b/gi,
+            (_, m, y) => ({ jan: 'January', feb: 'February', mar: 'March', apr: 'April', may: 'May', jun: 'June', jul: 'July', aug: 'August', sep: 'September', sept: 'September', oct: 'October', nov: 'November', dec: 'December' }[m.toLowerCase()] || m) + ' ' + y],
+        [/\b(in|since|until|from|by|during|before|after|early|mid|late)\s+(Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b\.?/gi,
+            (_, p, m) => p + ' ' + ({ jan: 'January', feb: 'February', mar: 'March', apr: 'April', may: 'May', jun: 'June', jul: 'July', aug: 'August', sep: 'September', sept: 'September', oct: 'October', nov: 'November', dec: 'December' }[m.toLowerCase()] || m)],
+        [/\b(Jan|Feb|Apr|Aug|Sep|Sept|Oct|Nov|Dec)\./gi,
+            (_, m) => ({ jan: 'January', feb: 'February', apr: 'April', aug: 'August', sep: 'September', sept: 'September', oct: 'October', nov: 'November', dec: 'December' }[m.toLowerCase()] || m)],
 
-                // Pronunciation traps in ordinary English and international reporting
-                [/\bbouys\b/gi, 'BOO-ees'],
-                [/\bbouy\b/gi, 'BOO-ee'],
-                [/\bbuoys\b/gi, 'BOO-ees'],
-                [/\bbuoy\b/gi, 'BOO-ee'],
-                [/\bconvoys\b/gi, 'KAHN-voys'],
-                [/\bconvoy\b/gi, 'KAHN-voy'],
-                [/\bcorvette\b/gi, 'cor-VET'],
-                [/\bcoup\b/gi, 'coo'],
-                [/\bquay\b/gi, 'key'],
-                [/\bWorcestershire\b/gi, 'WUSS-ter-sher'],
-                [/\bLeicester\b/gi, 'LESS-ter'],
-                [/\bGloucestershire\b/gi, 'GLOSS-ter-sher'],
-                [/\bEdinburgh\b/gi, 'ED-in-buh-ruh'],
-                [/\bBirmingham\b/gi, 'BUR-ming-um'],
-                [/\bReykjavík\b/gi, 'RAYK-yuh-veek'],
-                [/\bReykjavik\b/gi, 'RAYK-yuh-veek'],
-                [/\bDáil\b/gi, 'dawl'],
-                [/\bTaoiseach\b/gi, 'TEE-shock'],
-                [/\bSaoirse\b/gi, 'SEER-shuh'],
-                [/\bSiobhán\b/gi, 'shi-VAWN'],
-                [/\bNguyễn\b/gi, 'ngwin'],
-                [/\bNguyen\b/gi, 'ngwin'],
-                [/\bWagner\b/gi, 'VAHG-ner'],
-                [/\bBoeing\b/gi, 'BOH-ing'],
-                [/\bHuawei\b/gi, 'wah-WAY'],
-                [/\bHyundai\b/gi, 'HYUN-day'],
-                [/\bPorsche\b/gi, 'POR-shuh'],
-                [/\bQatar\b/gi, 'KUH-tar'],
+        // Pronunciation traps in ordinary English and international reporting
+        [/\bbouys\b/gi, 'BOO-ees'],
+        [/\bbouy\b/gi, 'BOO-ee'],
+        [/\bbuoys\b/gi, 'BOO-ees'],
+        [/\bbuoy\b/gi, 'BOO-ee'],
+        [/\bconvoys\b/gi, 'KAHN-voys'],
+        [/\bconvoy\b/gi, 'KAHN-voy'],
+        [/\bcorvette\b/gi, 'cor-VET'],
+        [/\bcoup\b/gi, 'coo'],
+        [/\bquay\b/gi, 'key'],
+        [/\bWorcestershire\b/gi, 'WUSS-ter-sher'],
+        [/\bLeicester\b/gi, 'LESS-ter'],
+        [/\bGloucestershire\b/gi, 'GLOSS-ter-sher'],
+        [/\bEdinburgh\b/gi, 'ED-in-buh-ruh'],
+        [/\bBirmingham\b/gi, 'BUR-ming-um'],
+        [/\bReykjavík\b/gi, 'RAYK-yuh-veek'],
+        [/\bReykjavik\b/gi, 'RAYK-yuh-veek'],
+        [/\bDáil\b/gi, 'dawl'],
+        [/\bTaoiseach\b/gi, 'TEE-shock'],
+        [/\bSaoirse\b/gi, 'SEER-shuh'],
+        [/\bSiobhán\b/gi, 'shi-VAWN'],
+        [/\bNguyễn\b/gi, 'ngwin'],
+        [/\bNguyen\b/gi, 'ngwin'],
+        [/\bWagner\b/gi, 'VAHG-ner'],
+        [/\bBoeing\b/gi, 'BOH-ing'],
+        [/\bHuawei\b/gi, 'wah-WAY'],
+        [/\bHyundai\b/gi, 'HYUN-day'],
+        [/\bPorsche\b/gi, 'POR-shuh'],
+        [/\bQatar\b/gi, 'KUH-tar'],
 
-                // GNN / Master-of-Orion universe names — preserve these project spellings.
-                [/\bGNN\b/g, 'G N N'],
-                [/\bChyron\b/gi, 'Ky-ron'],
-                [/\bBulrathi\b/gi, 'Bull-rah-thee'],
-                [/\bMrrshan\b/gi, 'Mur-shahn'],
-                [/\bAlkari\b/gi, 'Al-kah-ree'],
-                [/\bKlackon\b/gi, 'Klak-on'],
-                [/\bPsilon\b/gi, 'Sy-lon'],
-                [/\bSakkra\b/gi, 'Sah-kruh'],
-                [/\bDarlok\b/gi, 'Dar-lok'],
-                [/\bMeklar\b/gi, 'Mek-lar'],
-                [/\bSilicoid\b/gi, 'Sill-ih-koyd'],
-                [/\bSsyth\b/gi, 'Sissith'],
-                [/\bzortrium\b/gi, 'Zor-tree-um'],
-                [/\bAntares\b/gi, 'An-tah-reez'],
-                [/\bBetelgeuse\b/gi, 'Beetle-juice'],
-                [/\bAldebaran\b/gi, 'Al-deb-uh-ran'],
+        // GNN / Master-of-Orion universe names — preserve these project spellings.
+        [/\bGNN\b/g, 'G N N'],
+        [/\bChyron\b/gi, 'Ky-ron'],
+        [/\bBulrathi\b/gi, 'Bull-rah-thee'],
+        [/\bMrrshan\b/gi, 'Mur-shahn'],
+        [/\bAlkari\b/gi, 'Al-kah-ree'],
+        [/\bKlackon\b/gi, 'Klak-on'],
+        [/\bPsilon\b/gi, 'Sy-lon'],
+        [/\bSakkra\b/gi, 'Sah-kruh'],
+        [/\bDarlok\b/gi, 'Dar-lok'],
+        [/\bMeklar\b/gi, 'Mek-lar'],
+        [/\bSilicoid\b/gi, 'Sill-ih-koyd'],
+        [/\bSsyth\b/gi, 'Sissith'],
+        [/\bzortrium\b/gi, 'Zor-tree-um'],
+        [/\bAntares\b/gi, 'An-tah-reez'],
+        [/\bBetelgeuse\b/gi, 'Beetle-juice'],
+        [/\bAldebaran\b/gi, 'Al-deb-uh-ran'],
     ];
 
     function respell(text) {
@@ -629,19 +633,19 @@ const GNNTTS = (() => {
     function sanitize(text, opts = {}) {
         const kokoro = engine === 'kokoro' && opts.ipa !== false;
         return (kokoro ? respellKokoro : respell)(unshout(String(text || '')
-        .replace(/\s*—\s*/g, ', ')
-        .replace(/[«»"“”]/g, '')
-        .replace(/&[a-z]+;/gi, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()));
+            .replace(/\s*—\s*/g, ', ')
+            .replace(/[«»"“”]/g, '')
+            .replace(/&[a-z]+;/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()));
     }
 
     function trimForSynthesis(text, maxChars = 900) {
         if (text.length <= maxChars) return text;
         const head = text.slice(0, maxChars);
         const stop = Math.max(head.lastIndexOf('. '),
-                              head.lastIndexOf('! '),
-                              head.lastIndexOf('? '));
+            head.lastIndexOf('! '),
+            head.lastIndexOf('? '));
         if (stop > maxChars * 0.4) return head.slice(0, stop + 1).trim();
         const space = head.lastIndexOf(' ');
         return (space > 0 ? head.slice(0, space) : head).trim() + '.';
@@ -762,18 +766,18 @@ const GNNTTS = (() => {
 
     function clipKey(clean, opts) {
         return [clean, opts.voice || voice,
-        (opts.pitch !== undefined ? opts.pitch : pitchHz),
-                (opts.rate !== undefined ? opts.rate : ratePct)].join('|');
+            (opts.pitch !== undefined ? opts.pitch : pitchHz),
+            (opts.rate !== undefined ? opts.rate : ratePct)].join('|');
     }
 
     function buildUrl(clean, opts, seq) {
         return ENDPOINT
-        + '?text=' + encodeURIComponent(clean)
-        + '&voice=' + encodeURIComponent(opts.voice || voice)
-        + '&pitch=' + encodeURIComponent((opts.pitch !== undefined ? opts.pitch : pitchHz) + 'Hz')
-        + '&rate=' + encodeURIComponent((opts.rate !== undefined ? opts.rate : ratePct) + '%')
-        + '&seq=' + seq
-        + '&sid=' + SESSION;
+            + '?text=' + encodeURIComponent(clean)
+            + '&voice=' + encodeURIComponent(opts.voice || voice)
+            + '&pitch=' + encodeURIComponent((opts.pitch !== undefined ? opts.pitch : pitchHz) + 'Hz')
+            + '&rate=' + encodeURIComponent((opts.rate !== undefined ? opts.rate : ratePct) + '%')
+            + '&seq=' + seq
+            + '&sid=' + SESSION;
     }
 
     function fetchClip(clean, opts, seq) {
@@ -784,7 +788,7 @@ const GNNTTS = (() => {
             // A prefetch still waiting for a slot, and the line is wanted on
             // air now: start it rather than leave it in line.
             const start = queuedPrefetch.get(key);
-            if (start && seq) start();
+            if (start && seq) start(seq);
             // Most recently used goes to the back of the eviction order.
             clipCache.delete(key);
             clipCache.set(key, hit);
@@ -792,31 +796,31 @@ const GNNTTS = (() => {
         }
         const t0 = performance.now();
         const pending = fetch(buildUrl(clean, opts, seq))
-        .then((r) => {
-            const durMs = Math.round(performance.now() - t0);
-            if (r.status === 503) {
-                log('fetchClip: 503 unavailable', 'seq=' + seq, 'dur=' + durMs + 'ms');
-                available = false;
-                return null;
-            }
-            if (!r.ok) {
-                log('fetchClip: HTTP ' + r.status, 'seq=' + seq, 'dur=' + durMs + 'ms');
+            .then((r) => {
+                const durMs = Math.round(performance.now() - t0);
+                if (r.status === 503) {
+                    log('fetchClip: 503 unavailable', 'seq=' + seq, 'dur=' + durMs + 'ms');
+                    available = false;
+                    return null;
+                }
+                if (!r.ok) {
+                    log('fetchClip: HTTP ' + r.status, 'seq=' + seq, 'dur=' + durMs + 'ms');
+                    clipCache.delete(key);
+                    return null;
+                }
+                available = true;
+                return r.blob().then((blob) => {
+                    log('fetchClip: synthesis complete', 'seq=' + seq, 'size=' + blob.size + 'B', 'dur=' + durMs + 'ms');
+                    return blob;
+                });
+            })
+            .catch((err) => {
+                const durMs = Math.round(performance.now() - t0);
+                log('fetchClip: network error', 'seq=' + seq, 'dur=' + durMs + 'ms', 'err=' + (err && err.message ? err.message : err));
                 clipCache.delete(key);
+                if (available === null) available = false;
                 return null;
-            }
-            available = true;
-            return r.blob().then((blob) => {
-                log('fetchClip: synthesis complete', 'seq=' + seq, 'size=' + blob.size + 'B', 'dur=' + durMs + 'ms');
-                return blob;
             });
-        })
-        .catch((err) => {
-            const durMs = Math.round(performance.now() - t0);
-            log('fetchClip: network error', 'seq=' + seq, 'dur=' + durMs + 'ms', 'err=' + (err && err.message ? err.message : err));
-            clipCache.delete(key);
-            if (available === null) available = false;
-            return null;
-        });
         clipCache.set(key, pending);
         while (clipCache.size > CLIP_CACHE) {
             clipCache.delete(clipCache.keys().next().value);
@@ -865,14 +869,14 @@ const GNNTTS = (() => {
         // that arrives first finds it, waits on it, and promotes it.
         let settle;
         const placeholder = new Promise((r) => { settle = r; });
-        const start = () => {
+        const start = (seq = 0) => {
             if (!queuedPrefetch.has(key)) return;
             queuedPrefetch.delete(key);
             const i = prefetchLine.indexOf(start);
             if (i >= 0) prefetchLine.splice(i, 1);
             prefetchBusy++;
             clipCache.delete(key);
-            const real = fetchClip(clean, opts, 0);
+            const real = fetchClip(clean, opts, seq);
             real.then(settle, () => settle(null)).finally(() => {
                 prefetchBusy--;
                 pumpPrefetch();
@@ -931,7 +935,7 @@ const GNNTTS = (() => {
                 browserFallback(clean, id).then(() => {
                     if (id === requestId) finish('webspeech');
                 });
-                    return;
+                return;
             }
 
             const el = element();
@@ -960,103 +964,103 @@ const GNNTTS = (() => {
                 if (id === requestId) finish('error');
             };
 
-                fetchClip(clean, opts, id).then((blob) => {
-                    if (id !== requestId) { clearGuard(); return; }
-                    if (!blob) {
-                        clearGuard();
-                        log('speak: no blob', 'id=' + id, 'available=' + available);
-                        if (available === false) {
-                            awaitingAudio = false;
-                            browserFallback(clean, id).then(() => {
-                                if (id === requestId) finish('webspeech');
-                            });
-                        } else {
-                            finish('noblob');
-                        }
-                        return;
-                    }
-                    log('speak: blob arrived',
-                        'id=' + id,
-                        'size=' + blob.size,
-                        'blobType=' + blob.type);
-                    const begin = () => {
-                        if (id !== requestId) { clearGuard(); return; }
-                        setSource(URL.createObjectURL(blob));
-                        el.playbackRate = opts.playbackRate || 1;
-                        openVoiceGate();
+            fetchClip(clean, opts, id).then((blob) => {
+                if (id !== requestId) { clearGuard(); return; }
+                if (!blob) {
+                    clearGuard();
+                    log('speak: no blob', 'id=' + id, 'available=' + available);
+                    if (available === false) {
                         awaitingAudio = false;
-                        const p = el.play();
-                        if (p && p.then) {
-                            p.then(() => {
-                                if (id !== requestId) return;
-                                log('speak: play() resolved',
-                                    'id=' + id,
-                                    'dur=' + (isFinite(el.duration) ? el.duration.toFixed(2) : 'NaN'),
-                                    'est=' + est + 'ms');
-                            }).catch((err) => {
+                        browserFallback(clean, id).then(() => {
+                            if (id === requestId) finish('webspeech');
+                        });
+                    } else {
+                        finish('noblob');
+                    }
+                    return;
+                }
+                log('speak: blob arrived',
+                    'id=' + id,
+                    'size=' + blob.size,
+                    'blobType=' + blob.type);
+                const begin = () => {
+                    if (id !== requestId) { clearGuard(); return; }
+                    setSource(URL.createObjectURL(blob));
+                    el.playbackRate = opts.playbackRate || 1;
+                    openVoiceGate();
+                    awaitingAudio = false;
+                    const p = el.play();
+                    if (p && p.then) {
+                        p.then(() => {
+                            if (id !== requestId) return;
+                            log('speak: play() resolved',
+                                'id=' + id,
+                                'dur=' + (isFinite(el.duration) ? el.duration.toFixed(2) : 'NaN'),
+                                'est=' + est + 'ms');
+                        }).catch((err) => {
+                            if (id !== requestId) { clearGuard(); return; }
+                            // Chromium can reject the play() promise with
+                            // "the media was removed from the document"
+                            // even though the element plays fine. The
+                            // promise's internal resource-selection state
+                            // is invalidated by `cutElement()` at the top
+                            // of `speak()` — the load() reset there makes
+                            // the promise's resource reference stale —
+                            // but the element itself uses whatever source
+                            // is set by the time it starts.
+                            //
+                            // Wait a beat, then check whether audio is
+                            // actually running. If it is, this is a false
+                            // alarm and onended will resolve the line
+                            // normally. If it is not, the autoplay policy
+                            // really did refuse and the fallback fires.
+                            setTimeout(() => {
                                 if (id !== requestId) { clearGuard(); return; }
-                                // Chromium can reject the play() promise with
-                                // "the media was removed from the document"
-                                // even though the element plays fine. The
-                                // promise's internal resource-selection state
-                                // is invalidated by `cutElement()` at the top
-                                // of `speak()` — the load() reset there makes
-                                // the promise's resource reference stale —
-                                // but the element itself uses whatever source
-                                // is set by the time it starts.
-                                //
-                                // Wait a beat, then check whether audio is
-                                // actually running. If it is, this is a false
-                                // alarm and onended will resolve the line
-                                // normally. If it is not, the autoplay policy
-                                // really did refuse and the fallback fires.
-                                setTimeout(() => {
-                                    if (id !== requestId) { clearGuard(); return; }
-                                    const playing = audioEl
+                                const playing = audioEl
                                     && !audioEl.paused
                                     && audioEl.currentTime > 0;
-                                    if (playing) {
-                                        log('speak: play() rejected but element '
+                                if (playing) {
+                                    log('speak: play() rejected but element '
                                         + 'is playing — treating as success',
                                         'id=' + id,
                                         'err=' + (err && err.message ? err.message : err));
-                                        return;
-                                    }
-                                    clearGuard();
-                                    log('speak: play() refused and element is '
+                                    return;
+                                }
+                                clearGuard();
+                                log('speak: play() refused and element is '
                                     + 'not playing',
                                     'id=' + id,
                                     'err=' + (err && err.message ? err.message : err));
-                                    finish('autoplay');
-                                }, 400);
-                            });
-                        } else if (p && p.catch) {
-                            p.catch((err) => {
+                                finish('autoplay');
+                            }, 400);
+                        });
+                    } else if (p && p.catch) {
+                        p.catch((err) => {
+                            if (id !== requestId) { clearGuard(); return; }
+                            setTimeout(() => {
                                 if (id !== requestId) { clearGuard(); return; }
-                                setTimeout(() => {
-                                    if (id !== requestId) { clearGuard(); return; }
-                                    const playing = audioEl
+                                const playing = audioEl
                                     && !audioEl.paused
                                     && audioEl.currentTime > 0;
-                                    if (playing) {
-                                        log('speak: play() rejected but element '
+                                if (playing) {
+                                    log('speak: play() rejected but element '
                                         + 'is playing — treating as success',
                                         'id=' + id,
                                         'err=' + (err && err.message ? err.message : err));
-                                        return;
-                                    }
-                                    clearGuard();
-                                    log('speak: play() refused and element is '
+                                    return;
+                                }
+                                clearGuard();
+                                log('speak: play() refused and element is '
                                     + 'not playing',
                                     'id=' + id,
                                     'err=' + (err && err.message ? err.message : err));
-                                    finish('autoplay');
-                                }, 400);
-                            });
-                        }
-                    };
-                    if (handoverMs > 0) setTimeout(begin, handoverMs); else begin();
-                });
+                                finish('autoplay');
+                            }, 400);
+                        });
+                    }
+                };
+                if (handoverMs > 0) setTimeout(begin, handoverMs); else begin();
+            });
         });
     }
 
@@ -1128,9 +1132,9 @@ const GNNTTS = (() => {
         loadCatalogue, getEngine: () => engine, isCloud: () => cloud,
         /** For review tools: the exact text sent to the voice. */
         sanitize,
-                setVoice, getVoice, getVoiceName, setEnabled, isEnabled, isSpeaking,
-                setPitch, setRate, nudgePlaybackRate,
-                set onStart(fn) { onStart = fn; },
-                set onEnd(fn) { onEnd = fn; },
+        setVoice, getVoice, getVoiceName, setEnabled, isEnabled, isSpeaking,
+        setPitch, setRate, nudgePlaybackRate,
+        set onStart(fn) { onStart = fn; },
+        set onEnd(fn) { onEnd = fn; },
     };
 })();
