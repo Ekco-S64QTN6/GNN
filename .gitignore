@@ -11,6 +11,7 @@ __pycache__/
 # the game data is NOT distributed with this project — see README > Legal
 Master of Orion 1/
 .gnn-server.pid
+.gnn-server-*.pid
 gnn-server.log
 gnn-server.log.*
 gnn-transcript.log
@@ -67,6 +68,18 @@ assets/text/
 # palette-compare diagnostic output — regenerable with tools/palette_compare.py
 tools/palette_compare/
 tools/palette_survey/
+tools/palette_review/
 
 # runtime news ledger — grows during a session, not source
 gnn-news-ledger.json
+
+# Trailer: recorded takes and the rendered video are rebuilt by
+# trailer/record_takes.py and trailer/make_trailer.py.
+trailer/build/
+trailer/out/
+# Trailer build artifacts
+trailer/build/*
+!trailer/build/.gitkeep
+
+trailer/out/*
+!trailer/out/.gitkeep
