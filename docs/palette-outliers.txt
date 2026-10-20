@@ -1,0 +1,182 @@
+Items whose palette indices are unlike their siblings.
+These are candidates to settle by eye with palette_compare.py;
+an outlier is a fact about the file, not proof of a wrong palette.
+
+BLDG0        29 of 360 items
+     item 282   z=4.6
+     item 283   z=4.1
+     item 281   z=4.0
+     item 280   z=4.0
+     item 271   z=3.8
+     item 284   z=3.7
+     item 279   z=3.6
+     item 270   z=3.6
+BLDG1        36 of 360 items
+     item 216   z=4.3
+     item 226   z=4.2
+     item 227   z=4.2
+     item 217   z=4.2
+     item 229   z=4.1
+     item 238   z=4.1
+     item 218   z=4.1
+     item 230   z=4.1
+BLDG2        21 of 360 items
+     item 5     z=3.3
+     item 6     z=3.3
+     item 16    z=3.2
+     item 4     z=3.2
+     item 17    z=3.2
+     item 7     z=3.1
+     item 15    z=3.0
+     item 282   z=3.0
+BLDG3        36 of 360 items
+     item 324   z=2.6
+     item 328   z=2.6
+     item 330   z=2.6
+     item 331   z=2.6
+     item 338   z=2.6
+     item 340   z=2.6
+     item 341   z=2.6
+     item 342   z=2.6
+BUFFER0      97 of 237 items
+     item 228   z=12.9
+     item 77    z=12.9
+     item 78    z=12.9
+     item 79    z=12.9
+     item 80    z=12.9
+     item 81    z=12.9
+     item 90    z=12.9
+     item 176   z=12.9
+CMBTFGTR     16 of  76 items
+     item 64    z=4.1
+     item 65    z=4.1
+     item 66    z=4.1
+     item 67    z=4.1
+     item 68    z=4.1
+     item 69    z=4.1
+     item 70    z=4.1
+     item 71    z=4.1
+CMBTPLNT      7 of  52 items
+     item 60    z=9.4
+     item 61    z=9.1
+     item 34    z=6.1
+     item 32    z=5.9
+     item 33    z=5.4
+     item 31    z=4.0
+     item 30    z=3.7
+CMBTSFX      31 of  76 items
+     item 0     z=1348981.5
+     item 1     z=1348981.5
+     item 4     z=1348981.5
+     item 5     z=1348981.5
+     item 6     z=1348981.5
+     item 7     z=1348981.5
+     item 8     z=1348981.5
+     item 14    z=1348981.5
+CMBTSHP       3 of 352 items
+     item 91    z=3.0
+     item 98    z=3.0
+     item 99    z=2.5
+COLBLDG       1 of   7 items
+     item 2     z=12.2
+COLONY        2 of  12 items
+     item 18    z=3.1
+     item 8     z=2.6
+COLPUPS       2 of  16 items
+     item 19    z=6.2
+     item 20    z=5.4
+COLPUSP       2 of  16 items
+     item 19    z=6.2
+     item 20    z=5.4
+COLROADS      1 of 156 items
+     item 42    z=3.1
+COLSUM       10 of  21 items
+     item 2     z=30.0
+     item 7     z=28.5
+     item 6     z=27.8
+     item 8     z=27.6
+     item 5     z=27.1
+     item 4     z=26.6
+     item 9     z=25.5
+     item 10    z=24.3
+COLSYSDI     28 of  64 items
+     item 0     z=9.5
+     item 1     z=9.5
+     item 4     z=9.5
+     item 5     z=9.5
+     item 16    z=9.5
+     item 22    z=9.5
+     item 23    z=9.5
+     item 24    z=9.5
+COLVEGGI      6 of 104 items
+     item 62    z=4.9
+     item 23    z=2.9
+     item 75    z=2.9
+     item 96    z=2.9
+     item 102   z=2.8
+     item 99    z=2.8
+FLEET         1 of  88 items
+     item 17    z=3.5
+GAME          8 of  28 items
+     item 24    z=9.6
+     item 20    z=9.6
+     item 25    z=9.6
+     item 22    z=9.6
+     item 21    z=9.5
+     item 18    z=7.1
+     item 17    z=6.3
+     item 7     z=5.3
+MONSTER       2 of  19 items
+     item 20    z=6.3
+     item 8     z=6.2
+PLANETS       5 of  30 items
+     item 5     z=4.4
+     item 17    z=3.9
+     item 13    z=3.9
+     item 21    z=3.3
+     item 9     z=2.8
+RACEICON     36 of 171 items
+     item 169   z=6.2
+     item 21    z=5.4
+     item 164   z=5.3
+     item 151   z=5.3
+     item 138   z=5.2
+     item 8     z=5.1
+     item 103   z=5.0
+     item 94    z=4.9
+RACES         9 of  63 items
+     item 45    z=8.2
+     item 61    z=7.2
+     item 63    z=5.0
+     item 62    z=4.9
+     item 31    z=3.3
+     item 53    z=3.1
+     item 54    z=2.9
+     item 3     z=2.7
+RACESEL      60 of 138 items
+     item 1     z=107.0
+     item 3     z=107.0
+     item 10    z=107.0
+     item 29    z=107.0
+     item 0     z=107.0
+     item 2     z=107.0
+     item 4     z=107.0
+     item 5     z=107.0
+SHIPS        42 of 408 items
+     item 101   z=4.5
+     item 108   z=4.3
+     item 119   z=4.1
+     item 100   z=3.9
+     item 109   z=3.9
+     item 123   z=3.8
+     item 420   z=3.7
+     item 408   z=3.7
+STARBG        6 of  54 items
+     item 2     z=5.4
+     item 0     z=4.9
+     item 3     z=4.8
+     item 4     z=4.8
+     item 5     z=4.8
+     item 1     z=2.8
+
+497 flagged across 40 archives.

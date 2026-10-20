@@ -2,20 +2,21 @@
 
 # GNN — Galactic News Network
 
-**An unscripted live newscast simulation.**
-Real-world RSS, read by a desk of *Master of Orion* aliens,
-in a studio that keeps the game's archive as its footage library.
+**An unscripted, round-the-clock newscast simulation.**
+Real-world news, read by a desk of *Master of Orion* aliens,
+in a studio that keeps the games' archive as its footage library.
+Twenty-four shows, ninety-six slots a day, never off the air.
 
 [![No dependencies](https://img.shields.io/badge/frontend-vanilla_JS-f7df1e?style=flat-square&logo=javascript&logoColor=black)](#)
 [![Python](https://img.shields.io/badge/server-python_3.8%2B-3776ab?style=flat-square&logo=python&logoColor=white)](#)
 [![Canvas](https://img.shields.io/badge/render-HTML5_canvas_full--window-6fc3df?style=flat-square)](#)
-[![Assets](https://img.shields.io/badge/assets-713_items_·_3984_frames-9c6bff?style=flat-square)](#)
-[![Audio](https://img.shields.io/badge/audio-41_SFX_·_40_tracks-54e08a?style=flat-square)](#)
+[![Assets](https://img.shields.io/badge/assets-MoO1_%2B_MoO2_·_7374_items-9c6bff?style=flat-square)](#)
+[![Audio](https://img.shields.io/badge/audio-109_SFX_·_57_tracks-54e08a?style=flat-square)](#)
 [![Voice](https://img.shields.io/badge/voice-kokoro--82M_local-ff9de2?style=flat-square)](#)
-[![Cast](https://img.shields.io/badge/cast-12_characters_·_11_generated-ffb454?style=flat-square)](#)
+[![Cast](https://img.shields.io/badge/cast-14_characters-ffb454?style=flat-square)](#)
 
 <a href="https://www.youtube.com/watch?v=oadzStDgup0">
-  <img src="assets/generated/titlecards/main_desk_05.png" alt="The GNN newsroom — click to watch the full broadcast on YouTube" width="820">
+  <img src="docs/trailer_thumbnail.png" alt="The GNN newsroom with the station logo and a play button — click to watch the trailer on YouTube" width="820">
 </a>
 
 </div>
@@ -29,16 +30,21 @@ in a studio that keeps the game's archive as its footage library.
 - [Quickstart](#quickstart)
 - [How the broadcast is paced](#how-the-broadcast-is-paced)
 - [Features](#features)
+- [The channel as a channel](#the-channel-as-a-channel)
 - [Architecture](#architecture)
 - [The asset pipeline](#the-asset-pipeline)
 - [The generated asset library](#the-generated-asset-library)
 - [Verifying and rebuilding](#verifying-and-rebuilding)
+- [Contributing](#contributing)
 - [Credits](#credits)
 - [Legal](#legal)
 
-> Working on this? **[`CLAUDE.md`](CLAUDE.md)** is the source of truth for
-> current state, fixed bugs and load-bearing constraints.
-> **[`docs/ROADMAP.md`](docs/ROADMAP.md)** is what is still to build.
+> Working on this? Start with **[`CONTRIBUTING.md`](CONTRIBUTING.md)**.
+> **[`tools/PROJECT.md`](tools/PROJECT.md)** is the current
+> source of truth for the whole asset pipeline — MoO1 and MoO2, both decoders,
+> the palette map and its sources, and what remains to build.
+> **[`CLAUDE.md`](CLAUDE.md)** covers the runtime and its load-bearing
+> constraints.
 
 ---
 
@@ -56,49 +62,77 @@ real language. The 1993 aesthetic is the studio, the cutaways, the sound and
 the anchors' faces — not a translation layer that turns a tariff ruling into a
 sector trade accord. When a story about an election runs, the anchors say the
 names on the wire. When a market moves, the ticker reports the actual number.
-The MOO1 lore stays where it belongs: in the station idents, the fictional
-commercials, and the easter eggs a viewer finds by looking.
+The MOO1 and MOO2 lore stays where it belongs: in its own show — the
+*Imperial Historical Wire*, overnight — in the fictional commercials, and in
+the faults and easter eggs a viewer finds by looking. It is never read after
+a real story.
 
 The channel is built on two sources.
 
-**The archive.** Decoded out of the original `.LBX` files: **713 graphics
-items, 4,316 frames, 41 sound effects, 40 music tracks and the 154 news
-bulletins the original in-game anchor read**. It supplies the sound, the
-music, the cutaway footage, the robot who still has a real 25-cel lip matrix,
-and the easter-egg content — the sector-wire bulletins, the unlisted
-transmissions, the top-of-hour chime. The freighter convoys and tactical plots
-are *composited at runtime* out of parts the game shipped separately.
+**The archive.** Decoded out of the original `.LBX` files from both
+*Master of Orion 1* and *Master of Orion 2*: **7,374 graphics items** across
+both games, nine MoO2 cinematics, 109 sound effects, 57 music tracks, the 75
+news bulletins the original in-game anchor read, and the diplomacy the
+empires sent each other. It supplies the sound, the music, the cutaway
+footage — stills and moving video — and the lore show's copy. The freighter convoys and tactical plots are *composited
+at runtime* out of parts the game shipped separately.
 
-**The studio.** The set, the eleven generated anchors and correspondents, the
-window backdrops and the story cutaways are generated art, conditioned by
+**The studio.** The set, the generated anchors and correspondents, the window
+backdrops and the story cutaways are generated art, conditioned by
 `tools/condition_plates.py` to the resolution they are drawn at and quantised
 to 256 colours so they cut together with the decoded material rather than
 sitting on top of it looking like a different decade. Every prompt that made
 them is in [`assets/generated/Prompts/`](assets/generated/Prompts/),
 regenerated from `tools/prompt_bridge.py`.
 
-The game data itself is **not** in this repository, and is not needed to run
-it. See [Legal](#legal).
+The game data itself is **not** in this repository, and is **required** to run
+the station — the pipeline in [`tools/`](tools/) decodes it from your own
+install. See [Quickstart](#quickstart) for the one-time setup and
+[Legal](#legal) for the licensing reasoning.
 
 ---
 
 ## Screenshots
 
-| Story cutaway | Commercial break |
-| :---: | :---: |
-| <img src="docs/cutaway.png" width="400" alt="The newsroom with a picture-in-picture monitor over the anchor's shoulder showing an orbital survey plate"> | <img src="docs/commercial.png" width="400" alt="A full-frame in-universe commercial break opening on a GNN presentation card over a mining surface"> |
-| The monitor over the shoulder carries a plate matched to the story's subject, falling back to a scene composited out of archive parts. | A storyboarded 4–6 shot sequence with generated copy, read by its own announcer rather than by the anchors. |
-
-| Remote two-way | Transmission fault |
-| :---: | :---: |
-| <img src="docs/correspondent.png" width="400" alt="A Bulrathi correspondent appearing live in the studio monitor while the two anchors listen at the desk"> | <img src="docs/glitch.png" width="400" alt="The picture tearing and shearing during a scheduled transmission anomaly"> |
-| Correspondents come in through the monitor, not a second set: the anchor asks, the reporter answers in their own voice, the anchor thanks them. | Eight fault types seize the lip matrix, the audio bus and the picture. |
+Every picture below is the running station, captured by
+[`tools/capture_gallery.py`](tools/capture_gallery.py) — re-run it to refresh
+them.
 
 <div align="center">
-<img src="docs/banter.png" width="820" alt="The two anchors at the desk between headlines, one delivering a line of commentary with the station window behind them">
-<br><em>Between headlines the desk talks — to each other, to a correspondent,
-or straight to camera.</em>
+<img src="docs/gallery/hero.png" width="820" alt="Two anchors at the main desk reading a real headline, the story icon in the monitor over their shoulders">
+<br><em>Real headlines, read straight by the desk. The monitor carries the
+story's icon; the crawl carries live market quotes.</em>
 </div>
+
+| Twenty-four shows on a 96-slot day | Weather every two hours |
+| :---: | :---: |
+| <img src="docs/gallery/shows.png" width="400" alt="Nine of the channel's show title cards in a grid"> | <img src="docs/gallery/weather.png" width="400" alt="The weather desk with two anchors reading a space story"> |
+| Each show has its own set, pair and title card, and runs to the quarter hour on the viewer's clock. | Weather, sports, markets, debate, culture, overnight — and an archive hour for the lore. |
+
+| Cutaway in the monitor | Full-screen footage |
+| :---: | :---: |
+| <img src="docs/gallery/cutaway.png" width="400" alt="A generated starship plate in the studio monitor"> | <img src="docs/gallery/footage.png" width="400" alt="Master of Orion II cinematic footage filling the frame under a caption"> |
+| Generated plates, archive composites, or… | …Master of Orion II's own cinematics, labelled as archive film. |
+
+| Correspondent | Council Crossfire |
+| :---: | :---: |
+| <img src="docs/gallery/correspondent.png" width="400" alt="A Bulrathi correspondent live in the monitor"> | <img src="docs/gallery/debate.png" width="400" alt="Two guests in split monitors either side of the desk"> |
+| Remotes come in through the monitor, in their own voice. | The debate block puts a guest in each monitor. |
+
+| Galaxy Shop | Infomercial |
+| :---: | :---: |
+| <img src="docs/gallery/commercial_shop.png" width="400" alt="A product on a lit pedestal with price and stock counters"> | <img src="docs/gallery/commercial_infomercial.png" width="400" alt="A satisfied customer testimonial in front of a seminar stage"> |
+| Pods of two or three spots, each with its own announcer. | Lawyers, timeshares, and satisfied customers. |
+
+| Imperial Research Exchange | Colonial Marine Corps |
+| :---: | :---: |
+| <img src="docs/gallery/commercial_research.png" width="400" alt="The Master of Orion lab console with a blueprint on its monitor"> | <img src="docs/gallery/groundwar.png" width="400" alt="Two armies of Master of Orion II ground troops trading fire"> |
+| Technology for research points, from MoO1's own lab screen. | A recruitment spot over a ground battle built from MoO2 troop cels. |
+
+| Breaking news | Transmission faults |
+| :---: | :---: |
+| <img src="docs/gallery/breaking.png" width="400" alt="The breaking-news frame around the studio"> | <img src="docs/gallery/glitch.png" width="400" alt="An unidentified carrier overriding the broadcast"> |
+| The klaxon, the frame, and the desk interrupting itself. | Twenty-two faults, three rare events, thirty-five secrets. |
 
 ---
 
@@ -113,7 +147,53 @@ cd GNN
 # so use Python 3.10-3.12 here.
 python3.12 -m venv .venv
 .venv/bin/pip install kokoro soundfile edge-tts curl_cffi
+```
 
+### Supply your own game files
+
+The repo does not ship decoded game assets. Before the station can run, the
+extraction pipeline has to decode them from a copy of the games you own. Copy
+both games into the project so the tree looks like this:
+
+```
+Master of Orion 1/
+├── data/          ← from Master of Orion 1
+└── mastori2/      ← from Master of Orion 2
+```
+
+Both games are sold on GOG and Steam. See [Legal](#legal).
+
+### Run the pipeline (once)
+
+```bash
+python3 tools/extract_all.py              # MoO1 graphics → assets/cutscenes/, icons, manifest
+python3 tools/extract_text.py             # MoO1 text → assets/moo-strings.json
+python3 tools/build_audio.py              # MoO1 SFX + MIDI → assets/audio/, audio-manifest.json
+python3 tools/extract_moo2.py             # MoO2 graphics → assets/cutscenes/moo2/
+python3 tools/extract_moo2_text.py        # MoO2 text → assets/text/moo2/
+python3 tools/extract_sound_moo2.py       # MoO2 SFX → assets/audio/moo2/
+python3 tools/extract_moo2_video.py       # MoO2 Smacker video → assets/cutscenes/moo2_video/
+python3 tools/merge_moo2_manifests.py     # folds MoO2 graphics into assets/gfx-manifest.json
+python3 tools/merge_moo2_text.py          # folds MoO2 text into assets/moo2-strings.json
+python3 tools/build_audio.py              # re-runs to merge MoO2 audio into the manifest
+```
+
+That is about five minutes on a modern machine. `assets/generated/` — the AI
+plates the studio is made of — is already in the clone, so nothing else has to
+be generated.
+
+Verify before launching:
+
+```bash
+python3 tools/verify_assets.py
+# graphics : 7374 items, 10063 spot-checked frames
+# audio    : 109 effects, 5 stings, 57 music beds
+# OK — every runtime asset resolves inside the project.
+```
+
+### Launch
+
+```bash
 ./broadcast.sh                # opens in its own window
 ```
 
@@ -122,10 +202,6 @@ and takes it off air when that window closes. It is the way to watch the
 channel — the audio path is cleaner than opening the page in a browser tab,
 because the window grants autoplay and gets a straight audio route with no
 browser UI in the middle.
-
-`start.sh` uses `.venv/bin/python` when it exists. Without the venv the app
-still runs — it falls back to `edge-tts` if installed, and to the browser's own
-Web Speech API if not.
 
 Click once anywhere in the window — browsers require a gesture before any page
 may make sound.
@@ -157,22 +233,12 @@ If you started the station some other way:
 holding the port, and closes headless browsers the test harness started. It
 matches those on the harness's own debugging port **and** on the process really
 being a browser, so your own Chromium is never a target. `Ctrl-C` on a
-foreground `start.sh` does the same thing — the server traps `SIGINT`/`SIGTERM`,
-closes the listener and removes its PID file.
-
-These two remain because the test harness drives the server directly and does
-not want a window.
-
-### Checking the install
-
-```bash
-curl localhost:8080/api/status      # what the station has available
-python3 tools/verify_assets.py      # prove every asset resolves locally
-```
+foreground `start.sh` does the same thing.
 
 **Requirements:** Python 3.8+ and a modern browser. No build step, no bundler,
-no `node_modules`, no external services at runtime. `edge-tts` is the only
-optional dependency; the app falls back to the Web Speech API without it.
+no `node_modules`. The core broadcast runs offline, though the RSS layer and
+the market ticker reach out to external endpoints.
+
 ---
 
 ## How the broadcast is paced
@@ -197,7 +263,7 @@ stateDiagram-v2
     READ --> IDENT : every 9–14 stories
     BREAK --> READ
     IDENT --> READ
-    READ --> SHOW_CLOSE : every 9–14 stories
+    READ --> SHOW_CLOSE : at the quarter hour
     SHOW_CLOSE --> COLD_OPEN
     READ --> DRY : rundown empty
     DRY --> READ : feed returns
@@ -206,29 +272,37 @@ stateDiagram-v2
 | Segment | What actually happens |
 | :--- | :--- |
 | **READ** | A live RSS story, read as real news. The teleprompter types to the *audio element's own playback position*, so the words appear as they are said rather than to an estimate that drifts. A cutaway fires a third of the way in. |
-| **HOLD** | **Real dead air.** Voice silent, prompter holding the last line, the anchor's mouth shut, room tone carrying it. 1.5–3.6 s. This is the single biggest difference between a page reading RSS and a channel that is on. |
+| **HOLD** | **A beat of air.** Voice silent, prompter holding the last line, the anchor's mouth shut, room tone carrying it — about a second between stories, a third of a second when one anchor answers another. Measured from the audio itself (`tools/tests/speechgaps.py`), not set by a timer and hoped for. |
 | **BANTER** | Commentary on the story just read, or the two anchors talking to each other — a jab and a reply drawn from an asymmetric relationship table, each in its own voice. In real-world language, about the real story. |
 | **TWO_WAY** | A remote. A correspondent appears live in the studio monitor; the anchor asks, the reporter answers in their own voice, the anchor thanks them. One portrait rather than a second set. |
 | **TOSS** | The one-line handoff into the next item. |
 | **BREAK** | A full commercial sequence — see below. |
 | **IDENT** | Station identification. |
-| **SHOW_CLOSE** | End of a block. The lead signs off and names whoever sat with them, and the channel opens a new show rather than reading on forever. |
+| **SHOW_CLOSE** | End of a show, on the quarter hour of the viewer's own clock. The lead signs off and names whoever sat with them, a bumper plays the next show's title card over its theme, and the next show opens on its own set with its own pair. |
 | **DRY** | The feed went quiet. The anchor notices, and says so. |
 
-**Sector-wire bulletins are not in the normal rotation.** The 154 `EVENTMSG.LBX`
-bulletins the original in-game anchor read are an easter egg — they fire at the
-top of the hour, from glitch-engine anomalies, from unlisted transmissions. Not
-between real stories. The distinction is the whole point: what the viewer joins
-for is real anchors reading real news, and the archive stays where it belongs.
+**Lore has a show of its own.** The 75 `EVENTMSG.LBX` bulletins the original
+in-game anchor read, 46 more written in the same voice, and the diplomatic
+messages the empires sent each other in *Master of Orion II* are the rundown
+of the *Imperial Historical Wire* (03:00–05:00). Every other show reads real
+news, and only real news.
 
-Breaking-news keywords pre-empt the rundown, sound the klaxon and flash the
-CRT border.
+Breaking-news keywords pre-empt the rundown, sound the klaxon and put the
+station's breaking-news frame up around the picture.
 
-**Every spoken line goes through one queue.** Synthesis pre-empts itself —
-asking for a new clip cuts off the one playing — so any line fired while
-someone was talking used to kill it, and which line survived was a race. The
-director queues instead: one line at a time, a 420 ms beat of air between
+**Every spoken line goes through one queue.** Synthesis pre-empts itself, so
+any line fired while someone was talking used to kill it, and which line
+survived was a race. The director queues instead: one line at a time, the next
+one synthesised while the current one plays, a quarter-second beat between
 them, and the caption raised at the moment its own line starts.
+
+**The schedule.** Ninety-six quarter-hour slots, read from the viewer's local
+clock: *Galactic Morning Watch*, *Sector Midday Wire*, *Deep Space Economy*,
+*Market Close*, *The Evening Rim Report*, *Council Crossfire*, *Rim Sports
+Wire*, *Galactic Spotlight*, *The Night Desk*, *Anomaly: Deep Dark*, weather
+at the top of every even hour — twenty-four shows in all, each with its own
+set, pair, title card and theme. The weather desk reads real weather news and
+real NOAA space-weather alerts.
 
 ---
 
@@ -242,10 +316,9 @@ them, and the caption raised at the moment its own line starts.
 - A generated studio with the desk built into it, and the back window
   **keyed out of the plate** so a backdrop can be composited behind the
   glass and changed per show block.
-- Twelve characters with their own voices, faces and opinions of one
-  another: eleven generated species plus the MOO1 robot, keyed out of his
-  original scene with his 25-cel lip matrix intact. Anchors sit at the
-  desk; everyone else arrives through the monitor as a remote.
+- Fourteen characters with their own voices, faces and opinions of one
+  another. Anchors sit at the desk; everyone else arrives through the
+  monitor as a remote.
 - Everything inside the studio monitor is drawn to a **single viewport buffer**
   before being blitted, so faults roll, tear and desaturate the whole signal at
   once — the way a failing CRT would — rather than per element.
@@ -255,19 +328,15 @@ them, and the caption raised at the moment its own line starts.
 <details open>
 <summary><b>Lip-sync gated on the voice</b></summary>
 
-An `AnalyserNode` taps the voice bus. The robot has a real 25-cel matrix and
-indexes it directly off the envelope, bucketed into five visemes by jaw
-opening. The generated cast have two mouth states, so they flap on a syllable
-clock — but the clock is **gated on the measured level**, which runs 0.002 to
-1.000 with pauses between sentences showing as runs below 0.10. Measured in
-the running app: the mouth is open **1–2% of samples during silence and 56%
-during speech**, so it moves while a word is being said and not otherwise.
+An `AnalyserNode` taps the voice bus. The generated cast have two mouth
+states, so they flap on a syllable clock — but the clock is **gated on the
+measured level**, which runs 0.002 to 1.000 with pauses between sentences
+showing as runs below 0.10. Measured in the running app: the mouth is open
+**1–2% of samples during silence and 56% during speech**.
 
 Each `_speaking` plate is built as its hero with **only the mouth swapped
 in** — 1.4–3.1% of the plate differs, one blob on the mouth — so a flap
-cannot move anything else. Two separate generations never agree everywhere,
-and swapping whole plates five times a second showed every disagreement at
-once. During dead air they blink.
+cannot move anything else. During dead air they blink.
 
 </details>
 
@@ -277,24 +346,18 @@ once. During dead air they blink.
 The voice runs **on this machine**. `/api/tts` drives
 [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0) in
 process — 17 English voices, 24 kHz, about 7x faster than real time on CPU
-alone, no GPU required and nothing leaving the machine. The selector is built
-from `/api/voices` at boot, so it always matches the engine that is actually
-running.
+alone, no GPU required and nothing leaving the machine.
 
-Every clip is **level-matched and delivered lossless**. Voices arrive at very
-different levels — through a compressor the hot ones get squashed and the quiet
-ones do not, which is what made one voice sound clean and the next harsh. Each
-clip is matched to -21 LUFS / -3 dBTP, with gentle compression ahead of the
-gain so the limiter never has to do the levelling (it removes 1.8 dB, not
-no pumping) and served as PCM rather than re-encoded.
-`python3 tools/voice_audition.py` renders every voice the running engine offers
-back to back, so the selector can be chosen by ear.
+Every clip is **level-matched and delivered lossless**. Each clip is matched
+to -21 LUFS / -3 dBTP, with gentle compression ahead of the gain so the
+limiter never has to do the levelling. `python3 tools/voice_audition.py`
+renders every voice the running engine offers back to back, so the selector
+can be chosen by ear.
 
-Clips are **fetched before they play**, not streamed from a live URL. That
-removes the one-to-four second synthesis lag between a segment starting and its
-voice arriving — which used to leave lines still playing when the next segment
-cut them off — and lets the whole commercial break be synthesised the moment it
-is assembled.
+Clips are **fetched before they play**, not streamed from a live URL, which
+removes the one-to-four second synthesis lag between a segment starting and
+its voice arriving, and lets the whole commercial break be synthesised the
+moment it is assembled.
 
 </details>
 
@@ -302,36 +365,54 @@ is assembled.
 <summary><b>Synthesized B-roll</b></summary>
 
 *Master of Orion* never shipped a shot of a freighter convoy crossing a colony
-skyline at dusk. It shipped the skyline (`LANDING`), the freighter (`SHIPS2`),
-the nebula wash (`NEBULA`) and the tactical readout plates (`STARMAP`). This
-builds the shot.
+skyline at dusk. It shipped the skyline, the freighter, the nebula wash and
+the tactical readout plates. This builds the shot.
 
 Nine recipes — `convoy · tactical · survey · council · interview · industry ·
-anomaly · cyber · deepfield` — layer backdrops, sprites and HUD chrome on a
-320×200 buffer with independent per-layer motion models (`cross`, `orbit`,
-`approach`, `drift`, `pulse`, `scanline`) and depth-scaled parallax. Routing is
-driven by the story's own keywords. Two runs of the same recipe never look
-alike.
+anomaly · deepfield · groundwar` — layer backdrops, sprites and HUD chrome on a
+320×200 buffer with independent per-layer motion models and depth-scaled
+parallax. Routing is driven by the story's own keywords. Two runs of the same
+recipe never look alike.
 
-The composited recipes are the **fallback** for cutaways with no generated
-plate, and the primary source for the two product-hero beats inside a
-commercial break.
+`groundwar` puts *Master of Orion II*'s troop animations — infantry, tanks and
+power armour — on a planet surface as two armies trading fire. It shows
+soldiers dying, so it illustrates in-universe stories only, never real ones.
+
+Some stories get **moving footage** instead: *Master of Orion II*'s own
+cinematics, full-screen, labelled as archive film.
+
+The `interview` recipe is a special case: it composes the three specific
+EMBASSY item groups (room, ambassador, player representative) at the scale
+they were drawn at, so they line up exactly as they do in-game. Its constants
+are tunable in `tools/interview_tuner.html`.
 
 </details>
 
 <details open>
 <summary><b>Commercial breaks, not bumpers</b></summary>
 
-A break is a storyboarded 4–6 shot sequence — station ident, hook, product
-hero, spec plate, tag card, legal card — each shot with its own composited
-scene, its own voice-over beat read by its own announcer, its own sound design,
-and a hard cut or a dissolve between them. Sponsor names, product names,
-taglines and legal disclaimers are generated from the game's own vocabulary of
-118 hull classes, 39 star names and 10 races.
+A break is a **pod of two or three spots**, 40 to 60 seconds, each spot a
+storyboarded sequence — hook, product hero, spec plate, tag card, legal card —
+read by its own announcer, with its own composited scene and sound design, and
+a cut or a dissolve between shots. The station's ident opens it in a voice of
+its own.
 
-This is where the MOO1 pastiche lives in full. The anchors do not sell you a
-hull cleaner between stories; the announcer does, in a spot for a company that
-does not exist, about a product from a decade that never happened.
+The rotation: the **GNN Galaxy Shop** (21 products on a showroom pedestal,
+price and stock on screen), **overnight infomercials** (14, from class-action
+lawyers to timeshares, with testimonial portraits from satisfied customers),
+the station's **named sponsors** (Orion Heavy Industries, Sirius Hyper-Drive
+Systems, Betelgeuse Pharmaceuticals, Rigel Agricultural Cartel, Darlok
+Security Solutions — each closing on its crest), **network promos** for the
+channel's own shows, **Council public notices**, and procedural spots for
+brands made up on the spot. Built from the archive itself: the **Imperial
+Research Exchange** sells technology for research points on *Master of
+Orion*'s own lab screen, the **Orion Salvage Auction** sells *Master of Orion
+II*'s 212 applied-research pictures as lots, **Honest Gnolam's Starships** puts
+a different archive hull on the showroom pad every shot, and the **Colonial
+Marine Corps** recruits over a ground battle.
+
+Most spots are staged on generated sets — 27 of them, from a submerged ocean
+villa to a foundry floor; archive stills are the occasional throwback.
 
 > *Draconis Cybernetics presents the Annihilator-Class programme.*
 > *Rated for 26 standard years of continuous operation.*
@@ -343,11 +424,12 @@ does not exist, about a product from a decade that never happened.
 <details open>
 <summary><b>The full audio bank</b></summary>
 
-All 41 `SOUNDFX.LBX` effects are profiled offline by duration, spectral
+All 109 effects (41 MoO1, 68 MoO2) are profiled offline by duration, spectral
 brightness, attack and sustain, then bucketed into 13 roles — `click blip tick
 thud beep chirp zap servo sweep blast siren alarm drone rumble` — so the
-director asks for *a kind of noise*, not an index. All 40 `MUSIC.LBX` tracks
-(21m36s) are rendered to OGG and used as break beds, ducked under the voice.
+director asks for *a kind of noise*, not an index. All 57 music tracks (40
+MoO1 MIDI renders and 17 MoO2 cinematic/stream OGGs) are used as break beds,
+ducked under the voice.
 
 The graph is a real console: separate SFX, music and voice buses into a
 station bus, through a bit-crush glitch stage, into a master compressor.
@@ -357,16 +439,18 @@ station bus, through a bit-crush glitch stage, into a master compressor.
 <details open>
 <summary><b>Anomalies and easter eggs</b></summary>
 
-Eight scheduled fault types — `carrier_drop · lipsync_desync · signal_tear ·
-palette_burn · tape_stop · ghost_signal · interference · vertical_hold ·
-eye_flicker` — seize the anchors' lip matrices, tear the picture or stall
-it on a single cel, bit-crush the audio bus, drag the music like a dying tape
-transport, roll and tear the picture, and punch frames of otherwise-unusable
-artwork into the composite.
+Twenty-two faults: snow, macroblocking, a frozen frame, the colour guns
+drifting out of convergence, the picture flipping, a hum bar crawling up the
+tube, colour bars with line-up tone, the station's own test card, a "please
+stand by" slate, and other channels bleeding through the carrier. None repeats
+within four, and the news on air nudges which come up — a hurricane makes the
+signal snowy. Three rare events run on a clock of their own, tens of minutes
+apart, and are worth staying up for.
 
-The secrets are undocumented on purpose. The studio monitor rewards persistence,
-the anchor's optics reward curiosity, the keyboard remembers 1986, and the top
-of the hour always sounds different.
+The secrets are undocumented on purpose. There are thirty-five. The studio
+monitor rewards persistence, the anchors reward curiosity, the keyboard
+remembers 1986 and knows every species by name, some minutes of the day sound
+different, and what you find stays found.
 
 </details>
 
@@ -384,29 +468,30 @@ Three things respond to the viewer:
 - **The canvas is clickable.** The studio monitor and the anchor's face
   each do something. Discovered by trying.
 - **The keyboard is listening.** Some sequences are remembered. Some words
-  are recognised. The top of the hour is not the only thing that chimes.
+  are recognised.
 - **`Esc` or `S` opens station configuration.** Feed list, breaking
-  bulletin injection, the panel of unlisted transmissions the station has
-  logged. It closes the same way.
+  bulletin injection, the unlisted transmissions the station has logged, and
+  the **secrets board** — each secret found by name, the rest as blanks with
+  a hint.
 
 A debugging telemetry line is off by default and enabled through the
-configuration panel. It reports the current segment, rundown depth, stories
-read, stories until the next break and any active fault — useful while
-working, not part of the broadcast.
+configuration panel.
 
 ---
 
 ## Architecture
 
-No framework, no build step. Sixteen plain-script modules, each with one job.
+No framework, no build step. Seventeen plain-script modules, each with one job,
+plus one generated table.
 
 ```
 js/
 ├── asset-registry.js      manifest queries — nothing else hard-codes a path
 ├── audio-engine.js        sfx/music/voice buses, ducking, glitch DSP
 ├── tts.js                 neural voice client + lip-sync analyser
+├── pronounce-kokoro.js    generated: pronunciation checked against the voice itself
 ├── script-writer.js       banter, ad copy, ticker segments, chyrons
-├── scene-compositor.js    layered B-roll synthesis (9 recipes, 7 motion models)
+├── scene-compositor.js    layered B-roll synthesis (9 recipes, 10 motion models)
 ├── cutscene-manager.js    cutaways + the commercial break sequencer
 ├── broadcast-director.js  the rundown state machine — owns the clock
 ├── text-engine.js         teleprompter + lower-third chyron
@@ -417,13 +502,13 @@ js/
 ├── feed-manager.js        RSS ingestion, sanitising, importance scoring
 ├── cast.js                who the anchors are: voices, tics, what they
 │                          think of one another
+├── logger.js              browser-side console and transcript logger
 ├── renderer.js            viewport buffer, layer stack, CRT post-processing
 └── main.js                bootstrap, UI wiring, frame loop
 ```
 
 **Layer stack.** Everything is composited into an offscreen buffer the size of
-the window and post-processed as one signal, so a failing channel rolls and
-tears whole rather than per element:
+the window and post-processed as one signal:
 
 ```
 1  the set                              ─┐
@@ -437,23 +522,28 @@ tears whole rather than per element:
 9  alert border + glitch artefacts
 ```
 
-There is no studio frame around it and no picture inside one. The window is
-the television.
-
 **The one rule:** no module outside `asset-registry.js` may name an asset path.
-Everything asks the registry for *a kind of thing* — "a clean bright backdrop
-wider than 140px", "four readout plates bigger than a button", "an alarm longer
-than a second". That is what makes the whole 713-item library reachable instead
-of the handful of hard-coded items earlier passes could use.
+Everything asks the registry for *a kind of thing*. That is what makes the
+whole library reachable instead of a handful of hard-coded items. The registry
+handles both games — MoO2 entries carry `source: 'moo2'` and their paths
+resolve under `assets/cutscenes/moo2/`, and MoO2 strings are merged in from
+`assets/moo2-strings.json` alongside the MoO1 pool.
 
 ---
 
 ## The asset pipeline
 
-`tools/lbx.py` is an original implementation of the LBX container, the LBXGFX
-item header, the per-column run encoding and the embedded VGA palette block.
-**All 4,316 frames across 22 archives decode byte-exact** — every frame body is
-consumed to its last byte, and all 872,024 runs land inside their column.
+Both games ship their graphics in an **LBX container**, but the frame encodings
+are completely different, and `tools/lbx.py` implements both.
+
+```
+u16 count | u32 0x0000FEAD | u16 type | (count+1) × u32 item offsets
+```
+
+MoO1 pads its header to nothing (the first item starts right after the offset
+table); MoO2 pads to `0x800`.
+
+### MoO1 — column-major, delta frames
 
 ```
 u8 kind (1 = keyframe, 0 = delta over the previous frame)
@@ -469,37 +559,92 @@ u8 kind (1 = keyframe, 0 = delta over the previous frame)
         mode 0x00 = raw
 ```
 
-Three things earlier extractions got wrong, and this fixes:
+**Two rules that had to be right, and were wrong for a long time:**
 
-| | Was | Is |
-| :--- | :--- | :--- |
-| **Column structure** | one run per column | a column is a *sequence* of runs — 60% of the library has two or more, up to 12. Reading only the first smeared it down the rest of the column, which is where the vertical streaking came from. |
-| **Run offset** | absolute `y` | a **gap from the end of the previous run**. Read as absolute, every multi-run column collapses toward the top of the image. |
-| **6-bit → 8-bit colour** | inconsistent — most archives wrote the raw 6-bit value (**4× too dark**), a few used `c<<2` or `c×255/63` | `(c << 2) \| (c >> 4)`, the bit replication a VGA DAC performs, so 63 reaches a true 255 |
+- A delta column describes **only the pixels that changed**. Pixels inside a
+  re-encoded column that the encoder did not touch stay as they were on the
+  previous frame. Do not clear the column before applying the runs — that
+  turns every unchanged pixel transparent, which is what made INTRO scenes
+  show vertical stripes through the sky.
+- A pixel whose new value is `0` has been **erased** by the encoder. It writes
+  through as transparent. A pixel the encoder did not touch is written by
+  `skip`, not by writing 0. The two are different operations and only the
+  encoder knows which is which.
 
-Both structural bugs are invisible on solid artwork: the 25-cel anchor and the
-22 story icons are one run per column, so they decoded perfectly either way,
-and a spot check against them passed while planets, consoles and cinematics
-were quietly wrong. What settles it is the studio chassis — `NEWSCAST.LBX`
-item 0 is `background_tv.png`, so it can be diffed directly. Absolute offsets
-reproduce **60.1%** of its pixels; gap offsets reproduce **100%** of them —
-every one of the 64,000 pixels resolves to a consistent palette index. The
-anchor cels, globe cels and story icons all come back at 100% shape agreement
-with the artwork the project already shipped, differing only by ≤3/255 per
-channel where the old pipeline's colour ramp disagreed with itself.
+Getting the first rule wrong is what caused the missile-trail bug — every
+re-encoded column kept its previous contents, so a missile smeared from its
+launch point to its current position.
 
-Because the plates the page loads are decoded by this same pipeline
-(`extract_all.py` writes `background_tv.png`, the 25 anchor cels, the 25 globe
-cels and the 22 icons alongside the cutscene library), the whole project now
-has one colour ramp instead of three.
+### MoO2 — row-major, self-contained per frame
+
+```
+01 00        u16 frame marker (must equal 1)
+<initial_y>  u16 initial Y cursor
+  then a stream of:
+    u16 length      if > 0: u16 x_advance, `length` pixels, pad if odd
+    u16 length      if = 0: u16 y_advance; 1000 means end of frame
+```
+
+Raw frames (flag `0x0100`) are `w × h` palette indices, row-major, padded to a
+4-byte boundary. Junction frames (flag `0x2000`) composite over the previous
+frame; frame 0 is blank.
+
+### Text, Audio, and Video
+
+- **Text:** MoO2 text is stored in NUL-delimited string tables inside `.LBX`
+  archives and `.EXE` binaries. `extract_moo2_text.py` pulls them out and
+  `merge_moo2_text.py` filters them into the same pools used by the MoO1
+  strings (bulletins, leaders, topics, vocab).
+- **Audio:** MoO2 SFX are already native WAVs embedded in `SOUND.LBX` and are
+  extracted byte-for-byte by `extract_sound_moo2.py`. The music is a mix of
+  raw WAV streams in `STREAM.LBX` and audio ripped from Smacker cinematics
+  (`INTRO.LBX`, `*FIN.LBX`) by `ffmpeg` and transcoded to OGG.
+- **Video:** Smacker cinematics are decoded to PNG frame sequences by
+  `extract_moo2_video.py`.
+
+### Palettes
+
+MoO2 archives do not all use the same palette, and the assignment is not
+derivable from the files themselves. `tools/palette_map.json` encodes it, with
+four layers: archive-level base palette, per-item palette, per-item override,
+and item-range splits/override chains.
+
+The values come from two community sources, attributed in
+[`tools/PROJECT.md`](tools/PROJECT.md):
+
+- **Nick Bowler's `liblbx`** (`github.com/MarcoKull/liblbx`,
+  `doc/txt/moo2-data.txt`) — explicit assignments for 17 archives, item-range
+  splits for three more, and reference output hashes for specific test cases.
+- **Wolverine's 2007–2008 Orion Nebula research** — the COUNCIL override rule,
+  the SHIPS palette-holder mechanism, and the general palette architecture.
+
+Neither source covers the whole library. The remaining uncatalogued archives
+(CMBTSHP, CMBTSFX, INSTALL, APP_PICS, BEAMS and others) have been assigned by
+visual inspection against `tools/palette_compare.py` output.
+
+### Entry points
+
+```bash
+python3 tools/extract_all.py              # MoO1 graphics
+python3 tools/extract_moo2.py             # MoO2 graphics
+python3 tools/extract_moo2_text.py        # MoO2 NUL-delimited strings
+python3 tools/extract_sound_moo2.py       # MoO2 SFX (native WAVs)
+python3 tools/extract_moo2_video.py       # MoO2 Smacker video
+python3 tools/build_audio.py              # MoO1 + MoO2 SFX & music → manifest
+python3 tools/extract_text.py             # MoO1 text and vocabulary
+python3 tools/merge_moo2_manifests.py     # folds MoO2 graphics into gfx-manifest.json
+python3 tools/merge_moo2_text.py          # folds MoO2 text into moo2-strings.json
+python3 tools/condition_plates.py         # AI plates → 256-colour plates
+python3 tools/prompt_bridge.py            # prompts for art MOO1 cannot supply
+```
 
 Each item is measured and given a `role` (`fullscreen · panel · portrait ·
 sprite · chrome · strip · blank`) plus `coverage`, `lum`, `colors`, a `hero`
 frame index and a `noise` score. That metadata is the whole reason the engine
 can use the library safely.
 
-> **On the scrambled items.** A handful of items were authored against screen
-> palettes that live in the game executable, not in any archive. They decode
+> **On the scrambled items.** A handful were authored against screen palettes
+> that live in the game executable, not in any archive. They decode
 > structurally correct but chromatically scrambled. They are not discarded —
 > the manifest scores them, the compositor keeps them out of ordinary footage,
 > and `glitch-engine.js` uses them deliberately as transmission interference.
@@ -516,41 +661,50 @@ so a change of resolution cannot leave a plate behind.
 
 | Directory | What lives there |
 | :--- | :--- |
-| `anchors/` | Eleven species plus the MOO1 robot. `desk_hero`, `speaking`, `listening`, `listening_flip` per species. |
-| `set/` | Five studio plates — the original plus Markets, Geopolitics/War, Tech and Celebrity. Window panes are keyed out and recorded in `layout.json` so backdrops composite behind the glass. |
-| `cutaways/` | Story plates routed by subject keyword — `starship_battle`, `council_vote`, `hacker_code`, `space_vortex`, `black_hole`, `asteroid_mining`, `station_trade`, `solar_flare`, `spy_infiltration`, `council_summit`, `planet_invasion`, `virus_outbreak`. |
+| `anchors/` | Fourteen characters. `desk_hero`, `speaking`, `listening`, `listening_flip` per species. |
+| `set/` | Ten studio plates. Window panes are keyed out and recorded in `layout.json` so backdrops composite behind the glass. |
+| `cutaways/` | Story plates routed by subject keyword. |
 | `backdrops/` | Exterior views composited into the window opening, four moods across four times of day. |
-| `logos/` | One per show. Not yet wired into the renderer. |
-| `icons/` | Over-the-shoulder story icons. |
-| `titlecards/` | Full-bleed show bumpers. In testing. |
-| `Prompts/` | The prompt files that made all of the above. |
+| `correspondents/` | Monitor portraits for the two-way and debate beats. |
+| `logos/` | Show and desk logos. |
+| `icons/` | Over-the-shoulder story icons — 22 subjects; the original *Master of Orion* event icons appear now and then as a throwback. |
+| `overlays/` | The breaking-news frame and the monitor bezels (gunmetal, and brass for the warmer sets). |
+| `titlecards/` | Full-bleed show bumpers. |
+| `infomercials/`, `products/`, `sponsors/`, `testimonials/` | Commercial break art. |
+| `Prompts/` | The prompt files that made all of the above. `_OUTSTANDING.md` lists anything still to generate. |
 
 ---
 
 ## Verifying and rebuilding
 
-The app ships with `assets/` populated and needs nothing else:
+The app needs `assets/generated/` (shipped in the repo) plus decoded game
+assets from the pipeline in [Quickstart](#quickstart). Once both are in place:
 
 ```bash
 python3 tools/verify_assets.py
-# graphics : 713 items, 1382 spot-checked frames, 418 gifs
-# audio    : 41 effects, 5 stings, 40 music beds
+# graphics : 7374 items, 10063 spot-checked frames
+# audio    : 109 effects, 5 stings, 57 music beds
 # OK — every runtime asset resolves inside the project.
 ```
 
-To regenerate `assets/` you need your own copy of the game at
-`Master of Orion 1/data/` (see [Legal](#legal)):
+### Diagnostics
 
-```bash
-python3 tools/extract_all.py     # 22 archives → RGBA frames, manifest, sidecars
-python3 tools/build_audio.py     # SFX profiling + MIDI→OGG
-python3 tools/extract_text.py    # EVENTMSG / NAMES / HELP → moo-strings
-python3 tools/condition_plates.py  # generated art → 256-colour plates at draw size
-python3 tools/prompt_bridge.py   # prompts for art MOO1 cannot supply
-```
+Several tools exist for tuning specific pieces without touching the shipped
+assets:
 
-There is also a headless harness that drives the newscast over the Chrome
-DevTools Protocol, samples the director and screenshots each segment:
+| Tool | Purpose |
+| :--- | :--- |
+| `tools/scene_review.html` | Preview every recipe and cutscene item; flag assets to exclude. |
+| `tools/interview_tuner.html` | Slider tuning for the EMBASSY interview composition. |
+| `tools/studio_review.html` | Desk-line tuning for the ten studio sets. |
+| `tools/commercial_review.html` | Previewing and tuning product placement in commercial breaks. |
+| `tools/palette_compare.py` | Render one MoO2 sprite against every FONTS palette. |
+| `tools/moo2_probe.py` | Byte-level LBX inspection. |
+| `tools/drive.py` | Headless broadcast harness — runs the station, samples the director, screenshots each segment. |
+| `tools/capture_gallery.py` | Re-shoots every screenshot in this README from the running station. |
+| `tools/tests/speechgaps.py` | Times the silence between spoken lines and catches any line cut off. |
+| `tools/pronounce_kokoro.py` | Checks every pronunciation rule against the voice; `--say WORD` shows how a word will sound. |
+| `trailer/` | Records takes off air and cuts the trailer. |
 
 ```bash
 python3 tools/drive.py 120 .shot
@@ -558,27 +712,36 @@ python3 tools/drive.py 120 .shot
 # console errors: 0, exceptions: 0
 ```
 
-Full tool list and testing discipline: [`CLAUDE.md`](CLAUDE.md).
+Full tool list, testing discipline and current work status:
+[`tools/PROJECT.md`](tools/PROJECT.md) and [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
+## Contributing
+
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before changing anything — how to
+work on the station without breaking it while it is on air, and the rules
+learned from the agents who worked on it before. `CLAUDE.md` is the source
+of truth for current state; `docs/ROADMAP.md` is what comes next.
+
 ## Credits
 
-- ***Master of Orion*** (1993) — SimTex / MicroProse. All artwork, sound effects
-  and music originate there.
+- ***Master of Orion 1*** (1993) and ***Master of Orion 2*** (1996) —
+  SimTex / MicroProse. All artwork, sound effects and music originate there.
+- **LBX format documentation and MoO2 palette assignments** —
+  Nick Bowler's [`liblbx`](https://github.com/MarcoKull/liblbx) project,
+  particularly `doc/txt/moo2-data.txt`, and Wolverine's original 2007–2008
+  Orion Nebula forum research.
 - **Speech** — [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0),
   run locally. Microsoft neural voices via [`edge-tts`](https://github.com/rany2/edge-tts)
   remain as a fallback.
-- **Music rendering** — FluidSynth with the FluidR3 GM soundfont.
+- **Music rendering** — FluidSynth with the FluidR3 GM soundfont. Smacker
+  video decoding via `ffmpeg`.
 - **Type** — *Press Start 2P* and *Outfit* via Google Fonts.
-- **RSS** — 25 feeds tagged by show block (world, tech, fleet, sport,
-  markets, diplomacy, anomaly, science): Ars Technica, NASA, ESA,
-  Spaceflight Now, BBC, Al Jazeera, UN News, MarketWatch, ESPN,
-  ScienceDaily, Phys.org, Nature, Hacker News and others, fetched through
-  rss2json.
-- **Local fallback** — rss2json has a daily cap, and when it is reached
-  every feed errors at once. `/api/localnews` parses the newest daily
-  digest off disk so the channel still has a rundown.
+- **News** — 26 RSS feeds tagged by topic, fetched by the server proxy, and
+  [NOAA SWPC](https://www.swpc.noaa.gov/) space-weather alerts for the weather desk.
+- **Local fallback** — `/api/localnews` parses the newest daily digest off
+  disk so the channel still has a rundown when the proxy is rate-limited.
 
 ---
 
@@ -588,19 +751,27 @@ Full tool list and testing discipline: [`CLAUDE.md`](CLAUDE.md).
 intended.**
 
 *Master of Orion* is a trademark of its respective owners; the game, its
-artwork, its music and its sound effects are © 1993 SimTex Software and
+artwork, its music and its sound effects are © 1993–1996 SimTex Software and
 MicroProse Software, and all rights in them remain with their current holders.
 This project is not affiliated with, authorised by, endorsed by or sponsored by
 SimTex, MicroProse, Atari, Wargaming, or any successor rights holder.
 
-**No game data is distributed here in original form, and the game's `.LBX`
-archives are not included in this repository.** The tools in `tools/` are
-clean-room format readers written to interoperate with a copy of the game you
-already own; running them requires you to supply your own legally obtained copy
-of *Master of Orion 1* (it is sold on GOG and Steam). The derived material under
-`assets/` exists only to demonstrate the rendering, pacing and compositing
-engine, and is used here in what the author believes to be a transformative,
-non-commercial, educational manner.
+**No game data is distributed here in any form.**
+
+- The game's `.LBX` archives are not included in this repository.
+- The decoded PNGs, GIFs, WAVs, OGGs and manifests that the extraction
+  pipeline produces from those archives are also **not** included. They are
+  gitignored deliberately. Anyone running this project supplies their own
+  copy of the games and runs the pipeline to produce their own assets.
+- What *is* included under `assets/generated/` is **AI-generated art**
+  (the studio set, the anchors, the cutscenes, the commercial plates) made
+  from the prompts in `assets/generated/Prompts/`. It is not derived from
+  any SimTex or MicroProse asset.
+
+The tools in `tools/` are clean-room format readers written to interoperate
+with a copy of the games you already own. Running them requires you to supply
+your own legally obtained copy of *Master of Orion 1* and *Master of Orion 2*
+(both are sold on GOG and Steam).
 
 If you represent a rights holder and would prefer any part of this repository
 be taken down, please open an issue and it will be removed promptly.
@@ -610,3 +781,4 @@ belong to their respective owners and appear only as transient news data.
 
 The **original code** in this repository — the engine, the extractors, the
 broadcast director and the compositor — is released under the MIT License.
+```
