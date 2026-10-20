@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-build_audio.py — profile the 41 SOUNDFX.LBX effects, render all 40 MUSIC.LBX
-tracks to OGG with the FluidR3 GM soundfont, and emit assets/audio-manifest.json.
+build_audio.py — profile the SOUNDFX.LBX effects (both games), render all
+40 MUSIC.LBX tracks to OGG with the FluidR3 GM soundfont, and emit
+assets/audio-manifest.json.
 
 Every effect is measured (duration, RMS, peak, spectral centroid, attack time)
 and given a role so the broadcast engine can pick a plausible sound for a
@@ -86,6 +87,7 @@ def role_of(p):
 def main():
     manifest = {'sfx': [], 'music': [], 'stings': []}
 
+    # --- MoO1 SFX ---
     for i in range(41):
         name = 'sfx_%02d.wav' % i
         path = os.path.join(AUDIO, name)
@@ -98,6 +100,33 @@ def main():
                   'role': role_of(p)})
         manifest['sfx'].append(p)
 
+    # --- MoO2 SFX ---
+    # The SOUND.LBX extractor writes WAVs into assets/audio/moo2/
+    # and a manifest alongside them. Read that manifest, profile
+    # each WAV, and append them to the main sfx pool so the audio
+    # engine can play them.
+    moo2_dir = os.path.join(AUDIO, 'moo2')
+    moo2_manifest_path = os.path.join(moo2_dir, 'manifest.json')
+    if os.path.exists(moo2_manifest_path):
+        with open(moo2_manifest_path, 'r', encoding='utf-8') as fh:
+            moo2_data = json.load(fh)
+        for entry in moo2_data.get('items', []):
+            path = os.path.join(ROOT, entry['file'])
+            if not os.path.exists(path):
+                continue
+            p = profile(*read_wav(path))
+            if not p:
+                continue
+            p.update({
+                'id': f'moo2_{entry["id"]}',
+                'file': entry['file'],
+                'role': role_of(p),
+                'name': entry.get('name', '')
+            })
+            manifest['sfx'].append(p)
+        print(f'  merged {len(moo2_data.get("items", []))} MoO2 SFX')
+
+    # --- MoO1 Stings ---
     for name in sorted(os.listdir(AUDIO)):
         if not name.startswith('intro_sfx_') or not name.endswith('.wav'):
             continue
@@ -108,11 +137,14 @@ def main():
                   'role': role_of(p)})
         manifest['stings'].append(p)
 
+    # --- Music (Both Games) ---
     os.makedirs(MUSIC_OUT, exist_ok=True)
     have_sf = os.path.exists(SOUNDFONT)
     if not have_sf:
         print('soundfont missing (%s) — keeping any OGGs already rendered'
               % SOUNDFONT)
+
+    # MoO1 Music
     for i in range(40):
         mid = os.path.join(AUDIO, 'music_track_%02d.mid' % i)
         ogg = os.path.join(MUSIC_OUT, 'track_%02d.ogg' % i)
@@ -130,7 +162,8 @@ def main():
                                check=False, stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL)
                 os.remove(wav)
-        entry = {'id': 'track_%02d' % i, 'midi': 'assets/audio/music_track_%02d.mid' % i}
+        entry = {'id': 'track_%02d' % i, 'source': 'moo1',
+                 'midi': 'assets/audio/music_track_%02d.mid' % i}
         if os.path.exists(ogg):
             out = subprocess.run(
                 ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
@@ -142,6 +175,29 @@ def main():
             entry['file'] = 'assets/audio/music/track_%02d.ogg' % i
             entry['bytes'] = os.path.getsize(ogg)
         manifest['music'].append(entry)
+
+    # MoO2 Music
+    moo2_music_dir = os.path.join(MUSIC_OUT, 'moo2')
+    if os.path.isdir(moo2_music_dir):
+        for name in sorted(os.listdir(moo2_music_dir)):
+            if not name.endswith('.ogg'):
+                continue
+            path = os.path.join(moo2_music_dir, name)
+            stem = os.path.splitext(name)[0]
+            out = subprocess.run(
+                ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
+                 '-of', 'csv=p=0', path], capture_output=True, text=True)
+            try:
+                dur = round(float(out.stdout.strip()), 2)
+            except ValueError:
+                dur = 0
+            manifest['music'].append({
+                'id': f'moo2_{stem}',
+                'source': 'moo2',
+                'file': 'assets/audio/music/moo2/' + name,
+                'dur': dur,
+                'bytes': os.path.getsize(path),
+            })
 
     dest = os.path.join(ROOT, 'assets', 'audio-manifest.json')
     with open(dest, 'w') as fh:

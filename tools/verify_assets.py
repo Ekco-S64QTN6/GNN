@@ -60,15 +60,12 @@ def main():
         need('assets/' + name, 'manifest')
 
     # --- the newsroom ------------------------------------------------
-    # The MOO1 cels are no longer drawn: the broadcast is a generated set
-    # with cut-out anchors in front of it. The anchor cels stay because
-    # tools/key_robot.py reads them to produce the robot's plates; the
-    # studio frame and the globe went with the render path that used them.
-    for i in range(1, 26):
-        need('assets/anchor_frame_%03d.png' % i, 'robot source cel')
-        need('assets/generated/anchors/robot_frame_%03d.png' % i, 'robot cel')
+    # The MoO1 robot's 25 keyed cels are retired: he is a generated anchor
+    # with the same four plates as everyone else, and nothing reads the cels
+    # or the source frames `key_robot.py` keyed them from. The desk is part
+    # of the set plate, not a plate of its own. Checking for any of these
+    # reported 51 missing paths on every clean run and hid real misses.
     need('assets/generated/set/studio_wide_empty.png', 'set plate')
-    need('assets/generated/set/desk_oval_front.png', 'desk plate')
     for sid in ('human', 'mrrshan_f'):
         for state in ('desk_hero', 'speaking', 'listening'):
             need('assets/generated/anchors/%s_%s.png' % (sid, state),
@@ -83,15 +80,25 @@ def main():
     gfx = load('gfx-manifest.json') or {}
     items = frames = gifs = 0
     for archive, entries in gfx.items():
+        # Underscore keys are manifest metadata (`_moo2_keys` is a list of
+        # names), not directories of items. Walking them crashed this tool
+        # outright from the day the MoO2 merge added the field.
+        if archive.startswith('_') or not isinstance(entries, list):
+            continue
         for e in entries:
+            if not isinstance(e, dict):
+                continue
             items += 1
-            stem = 'assets/cutscenes/%s/item_%02d' % (e['dir'], e['item'])
+            # MoO2 frames live under cutscenes/moo2/<dir>, the same rule
+            # `framePath()` applies at runtime.
+            src = (e['source'] + '/') if e.get('source') else ''
+            stem = 'assets/cutscenes/%s%s/item_%02d' % (src, e['dir'], e['item'])
             # the runtime can ask for any frame index, and always the hero
             for idx in {0, e.get('hero', 0), e['frames'] - 1}:
                 need('%s_frame_%03d.png' % (stem, idx), '%s frame' % e['id'])
                 frames += 1
             if e.get('gif'):
-                need('assets/cutscenes/%s/%s' % (e['dir'], e['gif']), '%s gif' % e['id'])
+                need('assets/cutscenes/%s%s/%s' % (src, e['dir'], e['gif']), '%s gif' % e['id'])
                 gifs += 1
 
     # --- audio -------------------------------------------------------

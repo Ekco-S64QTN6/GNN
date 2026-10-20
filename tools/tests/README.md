@@ -65,6 +65,33 @@ they each install a `ScriptProcessor` and hold the CDP session.
 
 ---
 
+## 4a. Programming, commercials & faults
+
+Probes written while building the commercial pods, the lore separation,
+the cinematic footage and the expanded glitch engine. Each one checks
+behaviour on air, not the presence of code — several of them found bugs
+that a parse check and a clean drive both missed.
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `podcheck.py` | Forces three commercial breaks and prints each one's shot kinds and the voice reading each shot. A break should be 2–3 spots, each spot one announcer, the ident a voice of its own. | `python3 tools/tests/podcheck.py` |
+| `breakcheck.py` | Forces commercial breaks and times every seam from the media elements and frame loop: toss → picture, picture → first line, line → line, frozen animation tails, last line → desk, cut lines, frame stalls. `-v` dumps the raw events. | `python3 tools/tests/breakcheck.py 3` · `… 3 night_desk commercials=archive` |
+| `breakedges.py` | Interruptions: skip mid-break (no return line over the next story), a secret typed mid-break (announcer not cut off), and a show promo's card and anchors. | `python3 tools/tests/breakedges.py` |
+| `content_check.py` | **Offline** — no browser, no server, safe while on air. Fails (exit 1) if a scheduled pair has no exchanges, a promo does not resolve to its show's card and anchors, a non-sports show draws the sports bucket, or a show has no title card; lists art the code names that is not on disk yet. `GNN_ROOT` points it at another tree (how it was validated: four planted faults, four caught). | `python3 tools/tests/content_check.py` |
+| `productsheet.py` | **Offline.** Contact-sheets every product still on the stage it actually airs on, composited exactly as `compositeProduct()` does. Look at it after adding a still, a stage or a slot: a slot whose bottom edge is not the surface makes every product on that set float or sink. | `python3 tools/tests/productsheet.py [outdir]` |
+| `offline.sh` | **Run this after any change.** Every check that needs no server: `node --check` on each JS file, `server.py` compiles, `content_check`, the MoO2 unit tests, `verify_assets`, and the product sheet. Exit code 1 on any failure. Safe while on air. | `tools/tests/offline.sh` |
+| `logocheck.py` | Forces a spot of a given kind and saves a frame strip of the whole break to `<dir>/<label>_strip.png`. Edit the `run(...)` lines at the bottom to pick kinds (`promo`, `qvc`, `infomercial`, `sponsor`, `commercial`). This is how the sponsor crests and testimonial portraits were checked. | `python3 tools/tests/logocheck.py /tmp` |
+| `lorecheck.py` | Runs one show block and lists every story read with its source, and every sector-wire line presented. A real-news block must show **0** archive stories and 0 sector-wire lines; the lore block must show only archive stories. | `python3 tools/tests/lorecheck.py archives 100` · `… evening_rim 100` |
+| `cinecheck.py` | Forces footage as the cutaway source (`?cutaways=footage`), routes three test headlines, and saves a strip of the monitor to `<dir>/cine_live.png`. | `python3 tools/tests/cinecheck.py /tmp` |
+| `faultsheet.py` | Fires every glitch-engine fault (or a comma list given as the second argument) and saves one mid-fault frame of each to `<dir>/faults.png`. **Look at the sheet.** Three faults were invisible on air while passing every other check. | `python3 tools/tests/faultsheet.py /tmp` · `… /tmp crosstalk_shop,test_card` |
+| `speechgaps.py` | Boots a show and times the silence between consecutive voice lines from the audio elements themselves, counts how often the booth ident starts (must be 1), and reports any line cut off mid-speech. A third argument forces that many commercial breaks. The probe behind the hand-over timing fix: 2.2 s median before, 1.25 s after. | `python3 tools/tests/speechgaps.py night_desk 150` · `… evening_rim 180 3` |
+| `spamcheck.py` | Types eight secret words in quick succession and reports which secret lines were actually spoken, and when. Expect exactly two, played back to back after the line in progress. Zero means the speech queue is dropping interjections — this is the probe that found the watchdog bug. | `python3 tools/tests/spamcheck.py` |
+
+Note: `faultsheet.py` writes `faults2.png` when given a list and `faults.png`
+otherwise — the strip it saves is named in its output.
+
+---
+
 ## 5. Screenshot capture
 
 Only two scripts here, on purpose — five different variations accumulated

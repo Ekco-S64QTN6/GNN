@@ -1730,6 +1730,53 @@ def do_sponsors():
         print('%d of %d conditioned at 256px max' % (done, len(names)))
 
 
+
+def do_overlays():
+    """Key broadcast overlays so their interiors are clear.
+
+    The breaking-news frame came back with its interior filled by a white
+    haze at about 37% opacity rather than left clear; drawn as it is, it
+    washes the whole broadcast out. Every pixel that is translucent and
+    pale is cleared, the opaque frame and its lettering are kept, and the
+    result is fitted to the canvas. Written to overlays/keyed/, so the
+    source in overlays/ is never overwritten and the pass is idempotent.
+    """
+    src = os.path.join(ROOT, 'assets', 'generated', 'overlays')
+    out = os.path.join(src, 'keyed')
+    if not os.path.isdir(src):
+        return
+    names = sorted(f for f in os.listdir(src) if f.endswith('.png'))
+    if not names:
+        return
+    os.makedirs(out, exist_ok=True)
+    print('\n--- overlays ---')
+    for name in names:
+        a = np.asarray(Image.open(os.path.join(src, name)).convert('RGBA')).copy()
+        if name.startswith('monitor_frame'):
+            # The monitor bezel is prompted with its screen filled flat
+            # chroma green: image models rarely return a real transparent
+            # opening. Key the green out (and soften its fringe), keep the
+            # frame's own proportions — renderer.js measures the opening
+            # from the alpha and fits it to the monitor rectangle.
+            rgb = a[:, :, :3].astype(int)
+            g = rgb[:, :, 1] - np.maximum(rgb[:, :, 0], rgb[:, :, 2])
+            a[g > 90, 3] = 0
+            fringe = (g > 40) & (g <= 90)
+            a[fringe, 3] = (a[fringe, 3] * (90 - g[fringe]) / 50).astype(np.uint8)
+            a[fringe, 1] = np.maximum(a[fringe, 0], a[fringe, 2])
+            im = Image.fromarray(a, 'RGBA')
+            im.thumbnail((640, 640), Image.LANCZOS)
+            im.save(os.path.join(out, name))
+            print('%-28s green screen keyed, %dx%d' % ((name,) + im.size))
+            continue
+        pale = a[:, :, :3].min(axis=2) > 200
+        haze = (a[:, :, 3] < 140) & pale
+        a[haze, 3] = 0
+        Image.fromarray(a, 'RGBA').resize((VIEW_W, VIEW_H), Image.LANCZOS) \
+            .save(os.path.join(out, name))
+        print('%-28s keyed, %d%% of the frame cleared' % (name, round(100.0 * haze.mean())))
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     made = {}
@@ -1898,6 +1945,7 @@ def main():
     do_products()
     do_testimonials()
     do_sponsors()
+    do_overlays()
     return 0
 
 

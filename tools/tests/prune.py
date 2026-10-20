@@ -17,14 +17,22 @@ CUT = os.path.join(ROOT, 'assets', 'cutscenes')
 
 
 def frame_path(e, i):
-    return os.path.join(CUT, e['dir'], 'item_%02d_frame_%03d.png'
-                        % (e['item'], i))
+    # MoO2 items live under cutscenes/moo2/<DIR>/ (entry.source == 'moo2').
+    src = e.get('source')
+    base = os.path.join(CUT, src, e['dir']) if src else os.path.join(CUT, e['dir'])
+    return os.path.join(base, 'item_%02d_frame_%03d.png' % (e['item'], i))
 
 
 m = json.load(open(MAN))
 dropped, trimmed, kept = 0, 0, 0
 out = {}
 for d, items in m.items():
+    # Bookkeeping keys (`_moo2_keys`, …) are not archive lists: keep as is.
+    # The first version of this tool crashed on them, and would have
+    # dropped them from the file it wrote back.
+    if d.startswith('_') or not isinstance(items, list) or (items and not isinstance(items[0], dict)):
+        out[d] = items
+        continue
     keep = []
     for e in items:
         have = 0
@@ -40,7 +48,7 @@ for d, items in m.items():
             e['frames'] = have
             trimmed += 1
         gif = e.get('gif')
-        if gif and not os.path.exists(os.path.join(CUT, e['dir'],
+        if gif and not os.path.exists(os.path.join(os.path.dirname(frame_path(e, 0)),
                                                    os.path.basename(gif))):
             e['gif'] = None
         keep.append(e)
@@ -52,7 +60,11 @@ print('kept %d, dropped %d, frame-count corrected %d' % (kept, dropped, trimmed)
 from collections import Counter
 pools = Counter()
 for items in out.values():
+    if not isinstance(items, list):
+        continue
     for e in items:
+        if not isinstance(e, dict):
+            continue
         for p in e.get('pools') or []:
             pools[p] += 1
 print('pools:', dict(pools))

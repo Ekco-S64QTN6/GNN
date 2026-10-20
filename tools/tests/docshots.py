@@ -1,6 +1,6 @@
 """README screenshots from the running broadcast.
 
-capture_docs.py waits for live wire states and hangs when the feeds 429.
+capture_docs.py (since deleted) waited for live wire states and hung when the feeds 429.
 These drive the director instead: enqueue, then force the state wanted.
 """
 import base64, os, sys, time

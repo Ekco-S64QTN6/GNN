@@ -5,7 +5,7 @@ import sys
 import tempfile
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TOOLS = os.path.join(ROOT, 'tools')
 sys.path.insert(0, TOOLS)
 
@@ -27,7 +27,9 @@ def make_moo2_item(flags=0x1000, w=2, h=1, first_color=5, colors=None):
         palette_bytes = struct.pack('<HH', first_color, len(colors))
         palette_bytes += b''.join(bytes(c) for c in colors)
     frame_start = table_end + len(palette_bytes)
-    frame_body = b'\x00\x00'
+    # Marker 1, initial y 0, then the (0, 1000) end-of-frame command: a frame
+    # that draws nothing. The decoder's grammar is in lbx.py:_decode_moo2_one.
+    frame_body = struct.pack('<HHHH', 1, 0, 0, 1000)
     frame_end = frame_start + len(frame_body)
     header = struct.pack('<6H', w, h, 0, nframes, 0, flags)
     offsets = struct.pack('<2I', frame_start, frame_end)
@@ -35,10 +37,11 @@ def make_moo2_item(flags=0x1000, w=2, h=1, first_color=5, colors=None):
 
 
 def make_moo2_sprite(colors=(1, 2), flags=0):
-    """Build a 2x1 image encoded as one line with an end-of-line marker."""
+    """Build a 2x1 image: marker, one run of pixels at x 0, end of frame."""
     nframes = 1
     table_end = 0x0C + (nframes + 1) * 4
-    frame_body = b'\x00\x00' + struct.pack('<HH', len(colors), 0) + bytes(colors) + b'\x00\x00'
+    frame_body = (struct.pack('<HH', 1, 0) + struct.pack('<HH', len(colors), 0)
+                  + bytes(colors) + struct.pack('<HH', 0, 1000))
     frame_start = table_end
     frame_end = frame_start + len(frame_body)
     return (struct.pack('<6H', 2, 1, 0, nframes, 0, flags)
@@ -144,11 +147,13 @@ class Moo2ToolsTests(unittest.TestCase):
         archive_map = {'SHIPS': 3}
         item_palettes = {'SHIPS': {42: 12}}
         item_overrides = {'SHIPS': {42: 49}}
-        result = apply_forced_palette(3, archive_map, 1, item_palettes, item_overrides)
-        self.assertEqual(result, ({}, 3, {}, {}))
+        result = apply_forced_palette(3, archive_map, 1, item_palettes, item_overrides,
+                                      {'GAME': [[0, 9, 2]]}, {'MONSTER': [[0, 9, 4]]})
+        self.assertEqual(result, ({}, 3, {}, {}, {}, {}))
 
     def test_moo2_decoder_exposes_truncated_run_diagnostic(self):
-        body = b'\x00\x00' + struct.pack('<HH', 5, 0) + b'\x7f'
+        # A run that declares five pixels and carries one.
+        body = struct.pack('<HH', 1, 0) + struct.pack('<HH', 5, 0) + b'\x7f'
         nframes = 1
         table_end = 0x0C + (nframes + 1) * 4
         header = struct.pack('<6H', 2, 1, 0, nframes, 0, 0)
@@ -156,7 +161,7 @@ class Moo2ToolsTests(unittest.TestCase):
         item = GfxItem(header + offsets + body, format='moo2')
         _pixels, clean = item.decode_frame(0)
         self.assertFalse(clean)
-        self.assertEqual(item.decode_warnings[0][0]['kind'], 'truncated_run_pixels')
+        self.assertEqual(item.decode_warnings[0][0]['kind'], 'truncated_pixel_run')
         self.assertEqual(item.decode_warnings[0][0]['declared_length'], 5)
         self.assertEqual(item.decode_warnings[0][0]['remaining_bytes'], 1)
 
@@ -170,7 +175,7 @@ class Moo2ToolsTests(unittest.TestCase):
                     '_item_palettes': {'SHIPS': {'42': 12}},
                     '_item_overrides': {'SHIPS': {'42': 49}},
                 }, fh)
-            archive_map, default, per_item, overrides = load_palette_map(path)
+            archive_map, default, per_item, overrides, _splits, _chains = load_palette_map(path)
             self.assertEqual(default, 1)
             self.assertEqual(archive_map, {'SHIPS': 3})
             self.assertEqual(per_item['SHIPS'], {42: 12})
