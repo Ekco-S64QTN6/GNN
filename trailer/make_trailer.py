@@ -365,7 +365,7 @@ def card_newscast(bulletin, logo_s=2.0, zoom_s=1.0):
             # The globe is the little monitor beside the anchor's head,
             # in the upper-right of the viewport — not down in the text
             # panel. Drawn on top of the robot so it sits in its frame.
-            im.alpha_composite(globe[k % 25], (242, 20))
+            im.alpha_composite(globe[k % 25], (210, 30))
         big = im.convert('RGB').resize((vw, H), Image.NEAREST)
         d = ImageDraw.Draw(big)
         if t >= logo_s + 0.3:

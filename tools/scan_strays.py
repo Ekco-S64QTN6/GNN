@@ -7,7 +7,7 @@ the end of the table and the first item. Some tools — and some of the game's
 own installers — leave orphan data in that padding, or after the last
 declared item. This script walks the whole file and reports every region
 that is not covered by a declared item, then probes each region for a
-plausible MoO1 (0x12-byte header) or MoO2 (0x10-byte header) item.
+plausible MoO1 (0x12-byte header) or MoO2 (0x0C-byte header) item.
 
 Usage
     python3 tools/scan_strays.py path/to/file.lbx
@@ -29,11 +29,7 @@ import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lbx import LBX_MAGIC, GFX_HEADER          # noqa: E402
-
-
-MOO2_HEADER = 0x10
-
+from lbx import LBX_MAGIC, MOO1_HEADER, MOO2_HEADER  # noqa: E402
 
 # ----------------------------------------------------------------------
 # Header probes
@@ -47,16 +43,8 @@ MOO2_HEADER = 0x10
 # The MoO2 probe allows 1024 on both axes, since MoO2 shipped at 640x480
 # and a few scenes at higher internal resolutions.
 
-def _fits(off, header_len, nframes, blob_len):
-    table_end = off + header_len + (nframes + 1) * 4
-    if table_end > blob_len:
-        return False
-    first_off = struct.unpack_from('<I', b'\x00\x00\x00\x00' + b'\x00' * 4, 0)  # placeholder
-    return True  # unused; see below
-
-
 def looks_like_moo1_item(blob, off):
-    if off + GFX_HEADER > len(blob):
+    if off + MOO1_HEADER > len(blob):
         return None
     (w, h, _u, nframes,
      _ls, _fl) = struct.unpack_from('<6H', blob, off)
@@ -64,11 +52,11 @@ def looks_like_moo1_item(blob, off):
         return None
     if not (0 < nframes <= 512):
         return None
-    table_end = off + GFX_HEADER + (nframes + 1) * 4
+    table_end = off + MOO1_HEADER + (nframes + 1) * 4
     if table_end > len(blob):
         return None
-    first_off = struct.unpack_from('<I', blob, off + GFX_HEADER)[0]
-    if first_off < GFX_HEADER + (nframes + 1) * 4:
+    first_off = struct.unpack_from('<I', blob, off + MOO1_HEADER)[0]
+    if first_off < MOO1_HEADER + (nframes + 1) * 4:
         return None
     if first_off > len(blob) - off:
         return None
