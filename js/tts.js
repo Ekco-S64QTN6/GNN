@@ -29,10 +29,14 @@ const GNNTTS = (() => {
     // last one and the server refuses every one of them.
     const SESSION = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
 
-    // Boot-race diagnostics. Every line is prefixed [TTS] so it can be
-    // grepped out once the load-order fault is understood. Flip to false
-    // to silence without editing every site; leave it true for now.
-    const DEBUG = true;
+    // Boot-race diagnostics are opt-in so normal broadcasts do not flood
+    // the browser console. Enable them in DevTools with
+    // localStorage.setItem('gnnTtsDebug', '1') and reload; remove the key
+    // (or set it to anything else) to silence them again.
+    const DEBUG = (() => {
+        try { return localStorage.getItem('gnnTtsDebug') === '1'; }
+        catch (_) { return false; }
+    })();
     function log(...args) {
         if (!DEBUG) return;
         // eslint-disable-next-line no-console
