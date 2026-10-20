@@ -15,7 +15,7 @@ Twenty-four shows, ninety-six slots a day, never off the air.
 [![Voice](https://img.shields.io/badge/voice-kokoro--82M_local-ff9de2?style=flat-square)](#)
 [![Cast](https://img.shields.io/badge/cast-14_characters-ffb454?style=flat-square)](#)
 
-<a href="https://www.youtube.com/watch?v=oadzStDgup0">
+<a href="https://www.youtube.com/watch?v=iAQWnEE2qmM">
   <img src="docs/trailer_thumbnail.png" alt="The GNN newsroom with the station logo and a play button — click to watch the trailer on YouTube" width="820">
 </a>
 
