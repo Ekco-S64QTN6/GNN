@@ -37,25 +37,32 @@ If the image header has the `0x1000` flag set, the image contains a "patch" pale
 In some archives, the correct palette is not stored in the image itself, but in **another item (a sibling)** within the same `.LBX` file. 
 *   **DIPLOMAT:** The palette for items 13-38 is actually stored in items 0-12.
 *   **RACES:** The palette for the portraits (items 32+) is stored in item 0.
-*   **How to resolve:** The extractor must merge the sibling's embedded palette over the base FONTS/IFONTS palette.
+*   **How to resolve:** The extractor must merge the sibling's embedded palette over the base FONTS/IFONTS palette. (e.g., `SIBLING:0`).
 
 ### C. Palette Holders (The "RUN" State)
-Some archives use tiny 1x1 or 2x2 images as "palette holders." As the game engine loads the `.LBX` sequentially, it merges the palette of these holders into the *currently active* palette.
-*   **The implication:** An item's color depends on its **position in the file**. If you extract item 10 in isolation using `FONTS:1`, it will be wrong if item 5 was a palette holder.
-*   **CMBTPLNT:** This is the prime example. Items 0-4 use the default palette (green blobs). Item 5 is a palette holder. Items 6+ inherit item 5's palette and look correct. To fix items 0-4, you must force the extractor to apply item 5's palette backwards.
+Some archives use tiny 1x1 or 2x1 images as "palette holders" (often with 8 frames, though the color data is repeated). As the game engine loads the `.LBX` sequentially, it merges the palette of these holders into the *currently active* palette.
+*   **The implication:** An item's color depends on its **position in the file**. If you extract item 70 in isolation using `FONTS:1`, it will be wrong if item 68 was a palette holder.
+*   **CMBTSFX (Item 68):** Item 68 is exactly this. It is a 2x1 image with `Flags: 0x1000` and 8 frames. It acts as a palette holder for items 69 and above.
+*   **CMBTPLNT (Backward Propagation):** Items 0-4 use the default palette (green blobs). Item 5 is a palette holder. Items 6+ inherit item 5's palette and look correct. To fix items 0-4, you must force the extractor to apply item 5's palette *backwards* (using `SIBLING:5` in your map).
 
 ---
 
 ## 3. The 6-Rule Priority Resolution
 
-To extract an image correctly, your tool must resolve the palette in this exact priority order:
+To extract an image correctly, your tool must resolve the palette using a **Base Selection + Additive Merge** model. It is *not* a simple "first match wins" list.
 
+### Step 1: Base Selection (Pick One)
+The engine first selects the base palette for the item:
 1.  **`_item_split`**: Hardcoded archive ranges (e.g., `GAME` menus vs. main menu).
 2.  **External Override**: Specific per-item FONTS or IFONTS assignments (e.g., `FONTS:4`).
-3.  **Sibling Override Chain**: Merging a named sibling item's internal palette (e.g., `DIPLOMAT`).
-4.  **Running Palette State**: The accumulated palette-holder state up to this item's index in the archive.
-5.  **Item's Own Embedded Palette**: The patch stored inside the image (Flag `0x1000`).
-6.  **Archive Default**: The fallback from `moo2-data.txt` or `FONTS:1`.
+3.  **Running Palette State**: The accumulated palette-holder state up to this item's index in the archive.
+4.  **Archive Default**: The fallback from `moo2-data.txt` or `FONTS:1`.
+
+### Step 2: Additive Merges (Apply in Order)
+Once the base is selected, the engine merges the following on top of it:
+1.  **Sibling Override Chain**: Merging a named sibling item's internal palette (e.g., `_palette_overrides`).
+2.  **Item Override Chain**: Merging a specific sibling item's palette (e.g., `_item_overrides`).
+3.  **Item's Own Embedded Palette**: The patch stored inside the image (Flag `0x1000`).
 
 ---
 
@@ -70,12 +77,23 @@ During the development of the GNN extractor, several specific archives required 
 *   **Binary Proof:** Items 51, 143, 307, and 343 are all exactly `7244` bytes and `73x88` pixels. However, their MD5 hashes differ, and items 143+ have their internal palette flags stripped (`0x0`). This indicates the developers appended a second, corrupted batch of portraits (likely during a patch) without correctly rebuilding the palette headers. 
 *   **The Fix:** The higher-numbered items are impossible to extract cleanly because the pixel data points to corrupt indices. The correct solution is to **skip extracting items 143+ entirely**; the game engine uses the intact lower-numbered versions (21–87).
 
-### CMBTSFX.LBX (The Functional Color Trap)
-*   **Flag `0x800` (Functional Color):** This is the most misunderstood archive in the game. Items with this flag (e.g., 9-13, 16-39, 52-67) are **not standard color images**. Their pixel values represent an **intensity mask** (how bright/hot the explosion is at that pixel), not a color index.
-*   **The Trap:** If you extract these with a standard FONTS/IFONTS palette, you are mapping random intensity numbers (0-255) to actual colors. You will get green static, purple boxes, or solid black frames. 
-*   **The Fix:** To view these correctly, you must either:
-    1.  Map the indices to **Grayscale** (`{i: (i, i, i)}`), which reveals the true shape of the smoke/fire.
-    2.  Map them to a **Synthetic Fire Gradient** (Dark Red -> Orange -> Yellow -> White) to simulate what the game engine draws at runtime with additive blending.
+### CMBTSFX.LBX (Functional colors, fill-background images, and palette state)
+
+#### 1. Explosions & Energy Effects (`0x0800`)
+Items flagged with `0x0800` (e.g., 9-67) are **not** standard color images. Their pixel values (Hex `F1`-`FF`) represent an **intensity mask** (1-15). 
+*   **The Fix:** These are extracted using a synthetic heat gradient (Dark Red -> Orange -> Yellow -> White) with an alpha curve. The low nibble (`v & 0x0F`) is normalized from `0.0` to `1.0`. This perfectly reconstructs the additive blending the game engine used.
+
+#### 2. Shields/Beams (`0x0400` Fill Background)
+Item 08 is a 308x39 energy beam/shield that uses palette indices `161`-`175`. It appears black under the default archive palette. Item 68 is a 2x1 palette holder that patches exactly this range.
+*   **The Fix:** An `_item_overrides` entry (`"8": 68`) forces Item 08 to use Item 68's embedded palette, revealing the correct pink/magenta energy effect.
+
+#### 3. Palette Holders (Multi-Frame)
+Item 68 is a 2x1 image with 8 frames. Standard palette-holder detection requires `nframes == 1`, which caused the extractor to skip it.
+*   **The Fix:** Update `is_palette_holder()` to accept tiny images regardless of frame count. Item 68 correctly patches the running palette for subsequent items.
+
+#### 4. Smoke & Dust Trails (Standard Palettes)
+Items 69-78 (flags `0x0000`) are the lingering smoke and dust clouds left behind after an explosion. Their pixel indices are low (0-50), which correctly map to greys and whites in `FONTS:4`. 
+*   These are extracted normally. Their sparse, black/white appearance is correct; they are meant to be overlaid on top of a damaged `MONSTER` or `SHIPS` sprite.
 
 ### COUNCIL.LBX
 *   **Item 0** acts as the master palette holder. Its embedded palette must be applied to items 0–196. The previous community range was 0–23, which left most of the archive rendering as chromatic noise.
@@ -89,8 +107,9 @@ During the development of the GNN extractor, several specific archives required 
 
 When inspecting the `u16 flags` at offset `0x0A` in the MoO2 item header:
 *   **`0x0100` (RAW):** The frame is uncompressed `w * h` row-major data. It is padded to a 4-byte boundary.
-*   **`0x0800` (FUNCTIONAL_COLOR):** Used for special effects (explosions, beams). The palette indices are an **intensity map**, not color lookups. Must be rendered with a custom gradient or grayscale.
-*   **`0x1000` (INTERNAL_PALETTE):** The item contains its own color patch.
+*   **`0x0400` (FILL_BACKGROUND):** Indicates the image is meant to be drawn over a solid background rather than transparently. Found on `CMBTSFX` items 7 and 8.
+*   **`0x0800` (FUNCTIONAL_COLOR):** Used for special effects (explosions, beams). The palette indices are an **intensity map**, not color lookups. High nibble is `F`, low nibble is `1`-`F` (intensity 1-15).
+*   **`0x1000` (INTERNAL_PALETTE):** The item contains its own color patch. If the item is tiny (1x1, 2x1), it acts as a sequential palette holder for items that follow it (e.g., `CMBTSFX` item 68).
 *   **`0x2000` (JUNCTION):** The item is a delta frame. It only contains the pixels that changed from the previous frame. It must be composited over the previous frame buffer.
 
 ---

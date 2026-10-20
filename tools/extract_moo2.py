@@ -40,6 +40,12 @@ in this priority order:
                          valid internal palette, that patch is applied
                          last and takes precedence over everything else.
 
+Functional Color (0x0800). Items flagged with 0x0800 are not standard
+color graphics. Their pixel indices represent an intensity mask (1-15)
+rather than palette lookups. The standard extractor bypasses external
+palettes for these items and applies a synthetic fire gradient to simulate
+the game's additive blending.
+
 Pool assignment. Every item is measured the same way MoO1 items are in
 tools/extract_all.py: coverage, mean luminance, distinct colour count and
 horizontal chroma noise are sampled on the item's hero frame, and a
@@ -73,9 +79,9 @@ PALETTE_MAP = 'tools/palette_map.json'
 
 
 def is_palette_holder(item):
-    """True only for a tiny one-frame image with a valid internal palette."""
+    """True only for a tiny image with a valid internal palette."""
     return (
-        item.w <= 2 and item.h <= 2 and item.nframes == 1
+        item.w <= 2 and item.h <= 2
         and item.internal_palette() is not None
     )
 
@@ -455,6 +461,54 @@ def load_palette_map(path):
     )
 
 
+def render_functional_rgba(item, frame_index):
+    """Render a MoO2 functional-color (0x800) frame as a synthetic fire effect.
+    
+    Items with the 0x800 flag use their pixel indices as an intensity mask
+    rather than a palette lookup. The high nibble (F) indicates the functional
+    mode. The low nibble (1-15) is the intensity level.
+    """
+    pixels, clean = item.decode_frame(frame_index)
+    values = np.frombuffer(bytes(pixels), dtype=np.uint8).reshape(item.h, item.w)
+    
+    # Extract the low nibble (1-15 intensity)
+    level = (values & 0x0F).astype(np.float32) / 15.0
+    
+    # Synthetic Heatmap: Dark red -> Orange -> Yellow -> White
+    stops = np.array([0.00, 0.15, 0.35, 0.58, 0.78, 0.93, 1.00], dtype=np.float32)
+    colors = np.array([
+        [ 48,   0,   0],  # Dark red
+        [150,   3,   0],  # Deep red
+        [235,  28,   0],  # Red-orange
+        [255, 105,   0],  # Orange
+        [255, 190,  25],  # Yellow-orange
+        [255, 240, 145],  # Hot yellow
+        [255, 255, 245],  # White-hot core
+    ], dtype=np.float32)
+    
+    flat = level.ravel()
+    rgb = np.stack([
+        np.interp(flat, stops, colors[:, channel])
+        for channel in range(3)
+    ], axis=-1).reshape(item.h, item.w, 3)
+    
+    # Alpha curve (fades out at the edges)
+    alpha = np.rint(255.0 * np.power(level, 0.8)).astype(np.uint8)
+    alpha[values == 0] = 0  # Fully transparent where intensity is 0
+    
+    # Respect missing pixels in sparse MoO2 animation frames.
+    coverage = item._moo2_coverage_cache.get(frame_index)
+    if coverage is not None:
+        covered = np.frombuffer(coverage, dtype=np.uint8).reshape(item.h, item.w).astype(bool)
+        alpha[~covered] = 0
+        
+    rgba = np.dstack((
+        np.clip(rgb, 0, 255).astype(np.uint8),
+        alpha
+    ))
+    return rgba.tobytes(), clean
+
+
 def extract_archive(lbx_path, out_dir, base_palette, base_palette_index,
                     palette_for, item_palette_map=None, item_override_map=None,
                     item_split_ranges=None, palette_override_ranges=None,
@@ -604,7 +658,12 @@ def extract_archive(lbx_path, out_dir, base_palette, base_palette_index,
         probe_stats = []
 
         for frame_index in range(item.nframes):
-            rgba, clean = item.render_rgba(frame_index, effective_palette)
+            # Use the custom renderer for functional color effects (explosions)
+            if item.flags & 0x0800:
+                rgba, clean = render_functional_rgba(item, frame_index)
+            else:
+                rgba, clean = item.render_rgba(frame_index, effective_palette)
+
             if not clean:
                 unclean_frames += 1
                 if unclean_frames <= 5:
