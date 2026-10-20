@@ -784,7 +784,7 @@ const GNNTTS = (() => {
             // A prefetch still waiting for a slot, and the line is wanted on
             // air now: start it rather than leave it in line.
             const start = queuedPrefetch.get(key);
-            if (start && seq) start();
+            if (start && seq) start(seq);
             // Most recently used goes to the back of the eviction order.
             clipCache.delete(key);
             clipCache.set(key, hit);
@@ -865,14 +865,14 @@ const GNNTTS = (() => {
         // that arrives first finds it, waits on it, and promotes it.
         let settle;
         const placeholder = new Promise((r) => { settle = r; });
-        const start = () => {
+        const start = (seq = 0) => {
             if (!queuedPrefetch.has(key)) return;
             queuedPrefetch.delete(key);
             const i = prefetchLine.indexOf(start);
             if (i >= 0) prefetchLine.splice(i, 1);
             prefetchBusy++;
             clipCache.delete(key);
-            const real = fetchClip(clean, opts, 0);
+            const real = fetchClip(clean, opts, seq);
             real.then(settle, () => settle(null)).finally(() => {
                 prefetchBusy--;
                 pumpPrefetch();
