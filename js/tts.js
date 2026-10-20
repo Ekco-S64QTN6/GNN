@@ -159,7 +159,7 @@ const GNNTTS = (() => {
     // Initialisms that are genuinely spoken letter by letter.
     const SPELLED_OUT = new Set([
         'US', 'USA', 'UK', 'EU', 'UN', 'UAE', 'FBI', 'CIA', 'NSA', 'DOJ',
-        'NHS', 'BBC', 'CNN', 'ITV', 'WHO', 'IMF', 'WTO', 'OPEC', 'NFL',
+        'NHS', 'BBC', 'CNN', 'ITV', 'IMF', 'WTO', 'OPEC', 'NFL',
         'NBA', 'MLB', 'UFC', 'GDP', 'CEO', 'CFO', 'IPO', 'AI', 'EV', 'UFO',
         'ISS', 'ESA', 'FAA', 'CDC', 'EPA', 'IRS', 'GOP', 'PM', 'MP', 'DC',
     ]);
@@ -174,6 +174,7 @@ const GNNTTS = (() => {
         'END', 'TOP', 'WAR', 'LAW', 'BIG', 'OLD', 'MAY', 'CAN', 'GET',
         'GOT', 'PUT', 'SET', 'RUN', 'DAY', 'MAN', 'MEN', 'WIN', 'DIE',
         'HIT', 'CUT', 'ASK', 'YET', 'FAR', 'BAD', 'LOW', 'KEY', 'JOB',
+        'VS',
     ]);
 
     function unshout(text) {
@@ -211,10 +212,31 @@ const GNNTTS = (() => {
         // International organisations and initialisms
         [/\bWorld Health Organization\b/gi, 'World Health Organization'],
         // Keep the TV character distinct from the health agency acronym.
-        [/\bDR\.?\s+WHO\b/g, 'Doctor Who'],
+        [/\bDR\.?\s+WHO\b/gi, 'Doctor Who'],
         [/\bDr\.(?=\s+[A-Z])/g, 'Doctor'],
-                [/\bWHO\b/g, 'W H O'],
-                [/\bWho(?=\s+(?:says|said|warns|warned|reports|reported|announces|announced|confirms|confirmed|urges|urged|calls|called|estimates|estimated|finds|found|declares|declared|has|is|was|will|expects|expected|backs|backed|criticizes|criticised|criticizes|criticized|raises|raised|links|linked|advises|advised)\b)/g, 'W H O'],
+        // Wire-style abbreviations Kokoro reads as letters or as a word
+        // ("Mt." M-T, "Sen." sen, "Gov." guv). Titles only with their full
+        // stop and a name after, so a surname Sen is left alone; both cases,
+        // since unshout() leaves vowel-less MT/FT in capitals.
+        [/\b(?:Sen|SEN)\.\s+(?=[A-Z])/g, 'Senator '],
+        [/\b(?:Gov|GOV)\.\s+(?=[A-Z])/g, 'Governor '],
+        [/\b(?:Gen|GEN)\.\s+(?=[A-Z])/g, 'General '],
+        [/\b(?:Rep|REP)\.\s+(?=[A-Z])/g, 'Representative '],
+        [/\b(?:Lt|LT)\.\s+(?=[A-Z])/g, 'Lieutenant '],
+        [/\b(?:Sgt|SGT)\.\s+(?=[A-Z])/g, 'Sergeant '],
+        [/\b(?:Capt|CAPT)\.\s+(?=[A-Z])/g, 'Captain '],
+        [/\b(?:Col|COL)\.\s+(?=[A-Z])/g, 'Colonel '],
+        [/\b(?:Mt|MT)\.?\s+(?=[A-Z])/g, 'Mount '],
+        [/\b(?:Ft|FT)\.?\s+(?=[A-Z])/g, 'Fort '],
+        // "Ford Motor Co." is a company; "Co. Kerry" a county.
+        [/\b([A-Z][A-Za-z]+)\s+Co\.(?=\s|$|,)/g, (m, w) => (/^(?:In|Of|From|At|To|The|And|Near)$/i.test(w)
+            ? m : w + ' Company')],
+        [/\b(?:Co|CO)\.\s+(?=[A-Z])/g, 'County '],
+        // "Main St. shooting": a street when no name follows; St. Louis stays.
+        [/\b([A-Z][a-z]+)\s+St\.(?=\s*(?:$|[,;:)]|\s+[a-z]))/g, '$1 Street'],
+        [/\b([Tt]he\s+)?W\.H\.O\.(?:\b|\s|$)/gi, (m, the) => (the ? the : '') + 'W H O '],
+        [/\b([Tt]he\s+)who\b/gi, '$1W H O'],
+        [/\bwho(?=\s+(?:director|chief|head|officials?|spokes(?:man|woman|person)|panel|team|report|reports|reported|reporting|guidance|guidelines?|warning|warns?|warned|says?|said|declared|declares|confirms?|confirmed|health|covid|mpox|ebola|flu|polio|pandemic|epidemic|emergency|committee)\b)/gi, 'W H O'],
                 [/\bUNESCO\b/gi, 'you-NESS-koh'],
                 [/\bUNICEF\b/gi, 'you-nih-sef'],
                 [/\bUNHCR\b/gi, 'U N H C R'],
@@ -234,7 +256,6 @@ const GNNTTS = (() => {
                 [/\bIAEA\b/gi, 'I A E A'],
                 [/\bOPEC\b/g, 'O P E C'],
                 [/\bOECD\b/gi, 'O E C D'],
-                [/\bWHO\b/g, 'W H O'],
                 [/\bNGO\b/gi, 'N G O'],
                 [/\bINGO\b/gi, 'I N G O'],
                 [/\bIDF\b/g, 'I D F'],
@@ -420,7 +441,6 @@ const GNNTTS = (() => {
                 [/\bRSV\b/g, 'R S V'],
                 [/\bHIV\b/g, 'H I V'],
                 [/\bAIDS\b/g, 'AIDS'],
-                [/\bWHO\b/g, 'W H O'],
                 [/\bNvidia\b/gi, 'en-VID-ee-uh'],
                 [/\bHuawei\b/gi, 'wah-WAY'],
                 [/\bXiaomi\b/gi, 'shy-OW-mee'],
@@ -457,8 +477,9 @@ const GNNTTS = (() => {
                 [/\bmg\b/gi, 'milligrams'],
                 [/\bGHz\b/g, 'gigahertz'],
                 [/\bMHz\b/g, 'megahertz'],
-                [/\bGB\b/g, 'gigabytes'],
-                [/\bTB\b/g, 'terabytes'],
+                // Units only after a number: "Team GB's Morris" is Great Britain.
+                [/(\d)\s?GB\b/g, '$1 gigabytes'],
+                [/(\d)\s?TB\b/g, '$1 terabytes'],
                 [/\bUSD\b/g, 'U S dollars'],
                 [/\bEUR\b/g, 'euros'],
                 [/\bGBP\b/g, 'pounds sterling'],
@@ -469,7 +490,27 @@ const GNNTTS = (() => {
                 [/\bFY(\d{2,4})\b/gi, 'financial year $1'],
                 [/\bNo\.\s*(\d+)\b/g, 'number $1'],
 
+                // Matchups and legal/sports abbreviations: "Arsenal vs Chelsea", "Team A vs. Team B", "Roe v. Wade"
+                [/\bvs(?:\.|\b)/gi, 'versus'],
+                [/\bv\.\s+(?=[A-Z])/gi, 'versus '],
+
+                // Abbreviated months in dates: "17 Oct", "Oct 17", "Oct 2026", "since Oct"
+                [/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+(\d{1,2}(?:st|nd|rd|th)?)\b/gi,
+                    (_, m, d) => ({jan:'January',feb:'February',mar:'March',apr:'April',may:'May',jun:'June',jul:'July',aug:'August',sep:'September',sept:'September',oct:'October',nov:'November',dec:'December'}[m.toLowerCase()] || m) + ' ' + d],
+                [/\b(\d{1,2}(?:st|nd|rd|th)?)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b\.?/gi,
+                    (_, d, m) => d + ' ' + ({jan:'January',feb:'February',mar:'March',apr:'April',may:'May',jun:'June',jul:'July',aug:'August',sep:'September',sept:'September',oct:'October',nov:'November',dec:'December'}[m.toLowerCase()] || m)],
+                [/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+(\d{4})\b/gi,
+                    (_, m, y) => ({jan:'January',feb:'February',mar:'March',apr:'April',may:'May',jun:'June',jul:'July',aug:'August',sep:'September',sept:'September',oct:'October',nov:'November',dec:'December'}[m.toLowerCase()] || m) + ' ' + y],
+                [/\b(in|since|until|from|by|during|before|after|early|mid|late)\s+(Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b\.?/gi,
+                    (_, p, m) => p + ' ' + ({jan:'January',feb:'February',mar:'March',apr:'April',may:'May',jun:'June',jul:'July',aug:'August',sep:'September',sept:'September',oct:'October',nov:'November',dec:'December'}[m.toLowerCase()] || m)],
+                [/\b(Jan|Feb|Apr|Aug|Sep|Sept|Oct|Nov|Dec)\./gi,
+                    (_, m) => ({jan:'January',feb:'February',apr:'April',aug:'August',sep:'September',sept:'September',oct:'October',nov:'November',dec:'December'}[m.toLowerCase()] || m)],
+
                 // Pronunciation traps in ordinary English and international reporting
+                [/\bbouys\b/gi, 'BOO-ees'],
+                [/\bbouy\b/gi, 'BOO-ee'],
+                [/\bbuoys\b/gi, 'BOO-ees'],
+                [/\bbuoy\b/gi, 'BOO-ee'],
                 [/\bconvoys\b/gi, 'KAHN-voys'],
                 [/\bconvoy\b/gi, 'KAHN-voy'],
                 [/\bcorvette\b/gi, 'cor-VET'],
@@ -520,8 +561,74 @@ const GNNTTS = (() => {
         return out;
     }
 
-    function sanitize(text) {
-        return respell(unshout(String(text || '')
+    // ---------------------------------------------------------
+    // Kokoro's own table
+    // ---------------------------------------------------------
+    //
+    // Most respellings above mark stress with capitals — `you-KRAYN`,
+    // `MAH-lee` — and Kokoro reads a capitalised chunk it does not know as
+    // an initialism: Ukraine went out as "you K-R-A-Y-N". The rules were
+    // causing the spelled-out words they were written to prevent. For
+    // Kokoro, tools/pronounce_kokoro.py checked every rule against the
+    // phonemiser itself (js/pronounce-kokoro.js): a rule is dropped where
+    // Kokoro's dictionary already has the word, and replaced with misaki's
+    // inline phoneme markup `[word](/phonemes/)` where it does not. The
+    // cloud and browser voices keep the table above; markup means nothing
+    // to them and is stripped before it could reach one.
+    const MARKUP = /\[[^\]]*\]\(\/[^)]*\/\)/g;
+    let kokoroRules = null;
+
+    function kokoroTable() {
+        if (kokoroRules) return kokoroRules;
+        const K = (typeof window !== 'undefined' && window.GNN_PRONOUNCE_KOKORO) || null;
+        if (!K) return null;
+        const esc = (w) => w.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const rules = [];
+        for (const [re, to] of PRONOUNCE) {
+            const a = K.actions[re.source + '/' + re.flags];
+            if (a === 'drop') continue;
+            if (a && a.ipa) rules.push([re, '[$&](/' + a.ipa + '/)']);
+            else if (a && a.text) rules.push([re, a.text]);
+            else rules.push([re, to]);
+        }
+        // Names added from the news corpus, longest first so "Khan Younis"
+        // is matched before any shorter name inside it.
+        Object.keys(K.extras || {}).sort((a, b) => b.length - a.length).forEach((w) => {
+            rules.push([new RegExp('\\b' + esc(w) + '\\b', 'g'), '[$&](/' + K.extras[w] + '/)']);
+        });
+        kokoroRules = rules;
+        return rules;
+    }
+
+    /** Apply one rule to the text outside any phoneme markup already placed. */
+    function replaceOutsideMarkup(text, re, to) {
+        let out = '';
+        let last = 0;
+        MARKUP.lastIndex = 0;
+        let m;
+        while ((m = MARKUP.exec(text))) {
+            out += text.slice(last, m.index).replace(re, to) + m[0];
+            last = m.index + m[0].length;
+        }
+        return out + text.slice(last).replace(re, to);
+    }
+
+    function respellKokoro(text) {
+        const rules = kokoroTable();
+        if (!rules) return respell(text);
+        let out = text;
+        for (const [re, to] of rules) out = replaceOutsideMarkup(out, re, to);
+        return out;
+    }
+
+    /** Markup back to plain words, for any voice that is not Kokoro. */
+    function stripMarkup(text) {
+        return String(text || '').replace(MARKUP, (m) => m.slice(1, m.indexOf('](')));
+    }
+
+    function sanitize(text, opts = {}) {
+        const kokoro = engine === 'kokoro' && opts.ipa !== false;
+        return (kokoro ? respellKokoro : respell)(unshout(String(text || '')
         .replace(/\s*—\s*/g, ', ')
         .replace(/[«»"“”]/g, '')
         .replace(/&[a-z]+;/gi, ' ')
@@ -632,7 +739,8 @@ const GNNTTS = (() => {
                 setTimeout(resolve, estimateMs(text));
                 return;
             }
-            const u = new SpeechSynthesisUtterance(sanitize(text));
+            // The browser's own voice: no phoneme markup, plain respellings.
+            const u = new SpeechSynthesisUtterance(sanitize(text, { ipa: false }));
             u.rate = 0.98; u.pitch = 0.72;
             u.onend = () => { if (id === requestId) resolve(); };
             u.onerror = () => { if (id === requestId) resolve(); };
@@ -645,7 +753,11 @@ const GNNTTS = (() => {
     // ---------------------------------------------------------
 
     const clipCache = new Map();
-    const CLIP_CACHE = 16;
+    // A three-spot break prefetches 16 lines at once, on top of the desk's
+    // own next-story prefetch. At 16 entries, first-in-first-out, the
+    // break's opening line was evicted before it aired and synthesised cold:
+    // four seconds of picture with no voice. ~200 KB a clip.
+    const CLIP_CACHE = 48;
     let objectUrl = null;
 
     function clipKey(clean, opts) {
@@ -669,6 +781,13 @@ const GNNTTS = (() => {
         const hit = clipCache.get(key);
         if (hit) {
             log('fetchClip: cache hit', 'seq=' + seq, 'key=' + key.slice(0, 40));
+            // A prefetch still waiting for a slot, and the line is wanted on
+            // air now: start it rather than leave it in line.
+            const start = queuedPrefetch.get(key);
+            if (start && seq) start();
+            // Most recently used goes to the back of the eviction order.
+            clipCache.delete(key);
+            clipCache.set(key, hit);
             return hit;
         }
         const t0 = performance.now();
@@ -723,10 +842,49 @@ const GNNTTS = (() => {
         }
     }
 
+    // Prefetches run two at a time, in the order asked. A commercial break
+    // prefetches sixteen lines at once, and the browser allows six
+    // connections to the server: all six went to lines needed a minute
+    // later, and the anchor's throw to the break — a live line — waited in
+    // the browser for up to six seconds of silence before it was even sent.
+    const PREFETCH_SLOTS = 2;
+    const prefetchLine = [];
+    const queuedPrefetch = new Map();      // key -> start()
+    let prefetchBusy = 0;
+
+    function pumpPrefetch() {
+        while (prefetchBusy < PREFETCH_SLOTS && prefetchLine.length) prefetchLine[0]();
+    }
+
     function prefetch(text, opts = {}) {
         const clean = sanitize(text);
         if (!enabled || !clean || available === false) return;
-        fetchClip(clean, opts, 0);
+        const key = clipKey(clean, opts);
+        if (clipCache.has(key)) return;
+        // A placeholder holds the line's place in the cache, so a speak()
+        // that arrives first finds it, waits on it, and promotes it.
+        let settle;
+        const placeholder = new Promise((r) => { settle = r; });
+        const start = () => {
+            if (!queuedPrefetch.has(key)) return;
+            queuedPrefetch.delete(key);
+            const i = prefetchLine.indexOf(start);
+            if (i >= 0) prefetchLine.splice(i, 1);
+            prefetchBusy++;
+            clipCache.delete(key);
+            const real = fetchClip(clean, opts, 0);
+            real.then(settle, () => settle(null)).finally(() => {
+                prefetchBusy--;
+                pumpPrefetch();
+            });
+        };
+        queuedPrefetch.set(key, start);
+        prefetchLine.push(start);
+        clipCache.set(key, placeholder);
+        while (clipCache.size > CLIP_CACHE) {
+            clipCache.delete(clipCache.keys().next().value);
+        }
+        pumpPrefetch();
     }
 
     function setSource(url) {
@@ -906,10 +1064,21 @@ const GNNTTS = (() => {
     // Voice controls
     // ---------------------------------------------------------
 
-    function setVoice(v) {
+    /**
+     * Change the default voice.
+     *
+     * `{ restart: true }` is for the viewer's voice picker: the line in
+     * progress starts again in the new voice so the choice is heard at once.
+     * Every other caller wants the default changed for the *next* line. The
+     * director sets the incoming lead's voice at each cold open, while the
+     * booth ident is still playing; with a restart, any show whose lead had a
+     * different voice heard the ident twice ("This is the Galactic News
+     * Network. This is the Galactic News Network.").
+     */
+    function setVoice(v, opts = {}) {
         if (!v || v === voice) return;
         voice = v;
-        if (!speaking || !lastLine) return;
+        if (!opts.restart || !speaking || !lastLine) return;
         const pending = currentResolve;
         currentResolve = null;
         speak(lastLine.text, lastLine.opts);
@@ -957,6 +1126,8 @@ const GNNTTS = (() => {
         waitingForAudio,
         trimForSynthesis,
         loadCatalogue, getEngine: () => engine, isCloud: () => cloud,
+        /** For review tools: the exact text sent to the voice. */
+        sanitize,
                 setVoice, getVoice, getVoiceName, setEnabled, isEnabled, isSpeaking,
                 setPitch, setRate, nudgePlaybackRate,
                 set onStart(fn) { onStart = fn; },

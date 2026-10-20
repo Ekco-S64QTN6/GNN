@@ -9,6 +9,26 @@
    ------------------------------------------------------------
    Recent changes:
 
+     MoO2 archives in recipes
+                    Every recipe's `dirs` array now names the
+                    MoO2 archives that hold footage for that
+                    subject: CMBTSHP and CMBTSFX for convoy,
+                    STARBG and GSTAR for survey, COUNCIL and
+                    DIPLOMAT for council, BLDG0..4 for industry,
+                    and so on. MoO2 items were already admitted
+                    to pools by extract_moo2.py and folded into
+                    the manifest by merge_moo2_manifests.py;
+                    what was missing was a recipe that named
+                    their directory.
+
+                    Archives whose names collide with an MoO1
+                    archive (SHIPS, PLANETS, MONSTER, SHIPS2)
+                    need no change here — MoO2 entries carry
+                    `dir: 'SHIPS'` just like the MoO1 ones, so
+                    `{dirs: ['SHIPS']}` already reaches both
+                    libraries and the runtime tells them apart
+                    by the `source` field when it builds a path.
+
      INTERVIEW_DEFAULTS
                     Tuned in tools/interview_tuner.html and locked
                     in here. The constants were moved to the top of
@@ -33,7 +53,7 @@
 
      synthesize     A named recipe that does not exist returns null.
    ============================================================ */
-console.log('[scene-compositor] v12 — interview defaults tuned');
+console.log('[scene-compositor] v13 — MoO2 archives in recipe dirs');
 const GNNSceneCompositor = (() => {
     'use strict';
 
@@ -124,6 +144,37 @@ const GNNSceneCompositor = (() => {
 
         ...Array.from({ length: 34 }, (_, i) =>
             'VORTEX/item_' + String(i + 1).padStart(2, '0')),
+
+        // Found by contact-sheeting the whole broll pool, which is what
+        // commercials draw from. VORTEX/item_00 is the only VORTEX item the
+        // range above left eligible, and it is the scrambled one — a magenta
+        // field with the landscape smeared through it. INTRO2/item_00 is
+        // black from edge to edge. SPIES 00 and 27 are keyed-out figures on
+        // black, the same reason the other SPIES items are already here.
+        'VORTEX/item_00',
+        'INTRO2/item_00',
+        // INTRO2/item_02 is the game's scrolling credits. It aired behind a
+        // correspondent in the monitor; the owner deleted its frames, and
+        // this keeps a re-extraction from putting it back on air.
+        'INTRO2/item_02',
+        'SPIES/item_00', 'SPIES/item_27',
+        // MoO2's EVENTS archive is the game's own GNN newsroom and the event
+        // pictures it showed — in-universe, GNN-branded. They air only on the
+        // lore show, loaded by path in icon-manager.js. Denied here so a
+        // re-merge that pools them by size cannot put them behind real news.
+        ...Array.from({ length: 38 }, (_, i) =>
+            'moo2/EVENTS/item_' + String(i).padStart(2, '0')),
+        // DIPLOMAT: MoO2's holographic ambassadors, one pair of animations
+        // per race, in-universe faces. Same reason as EVENTS.
+        ...Array.from({ length: 39 }, (_, i) =>
+            'moo2/DIPLOMAT/item_' + String(i).padStart(2, '0')),
+        // MoO2 COUNCIL: the Galactic Council's members and chamber. Decoded
+        // correctly since 2026-10-18 (palette rule widened); in-universe.
+        ...Array.from({ length: 197 }, (_, i) =>
+            'moo2/COUNCIL/item_' + String(i).padStart(i < 100 ? 2 : 3, '0')),
+        // MoO2 OFFICER: leader portraits, in-universe faces.
+        ...Array.from({ length: 344 }, (_, i) =>
+            'moo2/OFFICER/item_' + String(i).padStart(i < 100 ? 2 : 3, '0')),
     ]);
 
     function loadDynamicDeny() {
@@ -242,6 +293,18 @@ const GNNSceneCompositor = (() => {
         pulse(t, p) {
             return { x: 0, y: 0, s: 1, r: 0, a: p.min + (p.max - p.min) * (0.5 + 0.5 * Math.sin(t * p.speed * 6.283)) };
         },
+        // One-shot moves, for things that travel once and stop: a tracer
+        // bolt across the field, a trooper running in to his position.
+        // Measured from the layer's own start time `t0`, unlike the
+        // looping models above.
+        shot(t, p) {
+            const u = Math.max(0, Math.min(1, (t - p.t0) / p.dur));
+            return { x: p.dx * u, y: p.dy * u, s: 1, r: 0, a: 1 };
+        },
+        advance(t, p) {
+            const u = Math.max(0, Math.min(1, (t - p.t0) / p.dur));
+            return { x: p.from * (1 - u), y: 0, s: 1, r: 0, a: 1 };
+        },
         scanline(t, p) {
             return { x: 0, y: ((t * p.speed * BASE_H) % (BASE_H + p.h)) - p.h, s: 1, r: 0, a: p.a || 0.5 };
         },
@@ -333,8 +396,13 @@ const GNNSceneCompositor = (() => {
             if (layer.in !== undefined && t < layer.in) continue;
             if (layer.out !== undefined && t > layer.out) continue;
 
+            // Hold the last frame instead of wrapping. Same fix as
+            // cutscene-manager.js: the modulo sent an over-length
+            // animation back to frame zero mid-shot, which reads to the
+            // viewer as the picture starting over.
             const idx = layer.fps
-                ? (Math.floor((t + layer.offset) * layer.fps) % layer.frames.length)
+                ? Math.min(layer.frames.length - 1,
+                    Math.floor((t + layer.offset) * layer.fps))
                 : Math.min(layer.frames.length - 1, layer.frameIndex || 0);
             const img = layer.frames[idx];
             if (!img) continue;
@@ -379,7 +447,34 @@ const GNNSceneCompositor = (() => {
     // Scene synthesis
     // ---------------------------------------------------------
 
-    const SPRITE_DIRS = ['SHIPS', 'SHIPS2', 'MISSILE', 'NEBULA', 'PLANETS', 'SPACE', 'VORTEX'];
+    // Every directory a sprite query may draw from, across both games.
+    //
+    // MoO1: the ship, missile and nebula archives the original recipes
+    //       were written against.
+    //
+    // MoO2: the combat and fleet archives the extractor now admits to
+    //       the `sprite` pool. `CMBTSHP` is the MoO2 ship catalogue
+    //       (the analogue of MoO1's `SHIPS`), `CMBTMISL` its missiles,
+    //       `CMBTFGTR` the fighter cels, `CMBTSFX` beam and explosion
+    //       effects, `COMBAT` the combat-screen overlays. `FLEET` and
+    //       `FLTICONS` are the strategic-map ship markers, useful for
+    //       a convoy beat. `BEAMS` is standalone beam art. `GSTAR` and
+    //       `STARBG` are star fields that read as sprite-sized washes.
+    //
+    // Note that `SHIPS`, `SHIPS2`, `PLANETS` and `MONSTER` name both
+    // games at once: MoO2 entries carry `dir: 'SHIPS'` just like MoO1
+    // entries do, so a query for `{dirs: ['SHIPS']}` returns both.
+    // The runtime distinguishes them by `entry.source` when it builds
+    // a frame path. Colliding archives need no second entry here.
+    const SPRITE_DIRS = [
+        // MoO1
+        'SHIPS', 'SHIPS2', 'MISSILE', 'NEBULA', 'PLANETS', 'SPACE', 'VORTEX',
+        // MoO2 (non-colliding only)
+        'CMBTSHP', 'CMBTMISL', 'CMBTFGTR', 'CMBTSFX', 'COMBAT',
+        // Not FLEET (leader portraits and buttons) and not STARBG
+        // (cut-out nebula blobs) — both looked wrong on air.
+        'FLTICONS', 'BEAMS', 'GSTAR',
+    ];
 
     const CLEAN_BACKDROP = 95;
     const CLEAN_PLATE = 95;
@@ -487,15 +582,214 @@ const GNNSceneCompositor = (() => {
         };
     }
 
+    // ---------------------------------------------------------
+    // Ground war: MoO2's COLGCBT troop animations on a planet surface
+    // ---------------------------------------------------------
+    //
+    // COLGCBT holds four unit types with five animations each — move, die,
+    // shoot, hit, idle. Infantry come in both facings (00–04 face right,
+    // 05–09 face left); the tank (10–14) and the power-armour trooper
+    // (15–19) face left only, so the left army flips them. Item 20 is a
+    // 9x8 impact spark. The shadow under every unit decodes as a flat
+    // purple (108,48,108): it is redrawn as a translucent dark. The two
+    // armies are told apart by tint — the right army hue-rotated from the
+    // archive's green to red.
+    const GW_TYPES = {
+        infantryR: { move: 0, die: 1, shoot: 2, idle: 4, flash: 1, size: 'inf' },
+        infantryL: { move: 5, die: 6, shoot: 7, idle: 9, flash: 1, size: 'inf' },
+        tank: { move: 10, die: 11, shoot: 12, idle: 14, flash: 2, size: 'tank' },
+        armour: { move: 15, die: 16, shoot: 17, idle: 19, flash: 4, size: 'inf' },
+    };
+    const GW_FPS = 10;
+    const GW_SECONDS = 10;
+    const gwCache = new Map();
+
+    function gwEntry(n) {
+        const id = 'moo2/COLGCBT/item_' + String(n).padStart(2, '0');
+        return GNNAssets.get(id) || GNNAssets.get('COLGCBT/item_' + String(n).padStart(2, '0'));
+    }
+
+    /** One animation's frames, shadow fixed and tinted for its army. */
+    async function gwFrames(n, tint) {
+        const key = n + ':' + tint;
+        if (gwCache.has(key)) return gwCache.get(key);
+        const entry = gwEntry(n);
+        const raw = entry ? await GNNAssets.loadClip(entry, entry.frames) : [];
+        const out = raw.map((img) => {
+            const c = document.createElement('canvas');
+            c.width = img.width; c.height = img.height;
+            const g = c.getContext('2d');
+            g.drawImage(img, 0, 0);
+            const src = document.createElement('canvas');
+            src.width = img.width; src.height = img.height;
+            const sg = src.getContext('2d');
+            sg.drawImage(img, 0, 0);
+            const a = sg.getImageData(0, 0, c.width, c.height).data;
+            const d = g.getImageData(0, 0, c.width, c.height);
+            for (let i = 0; i < a.length; i += 4) {
+                if (a[i + 3] && a[i] === 108 && a[i + 1] === 48 && a[i + 2] === 108) {
+                    d.data[i] = 0; d.data[i + 1] = 0; d.data[i + 2] = 0; d.data[i + 3] = 96;
+                } else if (tint && a[i + 1] > a[i] && a[i + 1] > a[i + 2]) {
+                    // Recolour the uniform only — green-dominant pixels —
+                    // by swapping red and green. A hue rotation of the
+                    // whole sprite also turned its muzzle flashes and
+                    // explosions blue.
+                    d.data[i] = a[i + 1]; d.data[i + 1] = a[i];
+                }
+            }
+            g.putImageData(d, 0, 0);
+            return c;
+        });
+        gwCache.set(key, out);
+        return out;
+    }
+
+    function gwBolt(colour) {
+        const c = document.createElement('canvas');
+        c.width = 7; c.height = 2;
+        const g = c.getContext('2d');
+        g.fillStyle = colour; g.fillRect(0, 0, 7, 1);
+        g.globalAlpha = 0.5; g.fillRect(1, 1, 5, 1);
+        return c;
+    }
+
+    async function groundWarScene(seconds = GW_SECONDS) {
+        const ground = pick(find({ pool: 'broll', dirs: ['PLANETS'] })
+            .filter((e) => e.source === 'moo2' && e.w >= 600));
+        const sky = pick(find({ pool: 'broll', dirs: ['STARVIEW'] }));
+        const layers = [];
+        if (sky) layers.push(await makeLayer(sky, { fit: 'cover', fps: 0 }));
+        if (ground) layers.push(await makeLayer(ground, { fit: 'cover', fps: 0 }));
+
+        const total = GW_FPS * seconds;
+        const sides = [
+            { dir: 1, tint: 0, xs: [0.04, 0.38], bolt: gwBolt('#ffe27a'),
+              kinds: ['infantryR', 'infantryR', 'infantryR', 'tank', 'armour'] },
+            { dir: -1, tint: 240, xs: [0.62, 0.96], bolt: gwBolt('#ff5a7a'),
+              kinds: ['infantryL', 'infantryL', 'infantryL', 'tank', 'armour'] },
+        ];
+        // Item 20 was meant as the hit spark, but at 9x8 it decodes as a
+        // red heart. A small drawn burst reads as a hit at any size.
+        const spark = [(() => {
+            const c = document.createElement('canvas');
+            c.width = 9; c.height = 9;
+            const g = c.getContext('2d');
+            const r = g.createRadialGradient(4.5, 4.5, 0, 4.5, 4.5, 4.5);
+            r.addColorStop(0, 'rgba(255,255,230,1)');
+            r.addColorStop(0.45, 'rgba(255,190,80,0.9)');
+            r.addColorStop(1, 'rgba(255,90,20,0)');
+            g.fillStyle = r; g.fillRect(0, 0, 9, 9);
+            return c;
+        })()];
+        const units = [];
+
+        for (const side of sides) {
+            const n = 5 + ((Math.random() * 3) | 0);
+            for (let i = 0; i < n; i++) {
+                const kind = side.kinds[(Math.random() * side.kinds.length) | 0];
+                const T = GW_TYPES[kind];
+                const flip = side.dir === 1 && kind !== 'infantryR';
+                const [move, die, shoot, idle] = await Promise.all(
+                    [T.move, T.die, T.shoot, T.idle].map((k) => gwFrames(k, side.tint)));
+                if (!shoot.length || !idle.length) continue;
+                // Evenly spaced slots across the army's ground, with a
+                // little jitter, alternating near and far so they do not
+                // stand on each other.
+                const depth = ((i % 2) ? 0.55 : 0) + Math.random() * 0.45;
+                const footY = 0.70 + depth * 0.22;
+                const scale = (T.size === 'tank' ? 1.5 : 1.55) + depth * 0.7;
+                const nw = shoot[0].width, nh = shoot[0].height;
+                const w = nw * scale, h = nh * scale;
+                const slot = (i + 0.5) / n + (Math.random() - 0.5) * (0.5 / n);
+                const cx = (side.xs[0] + slot * (side.xs[1] - side.xs[0])) * BASE_W;
+                const rect = { x: (cx - w / 2) / BASE_W, y: (footY * BASE_H - h) / BASE_H,
+                    w: w / BASE_W, h: h / BASE_H };
+                // Run in from the army's own edge, then hold and fire.
+                const t0 = Math.random() * 1.6;
+                const runFor = (T.size === 'tank' ? 2.4 : 1.6) + Math.random() * 0.6;
+                const from = side.dir === 1 ? -(cx + w) : (BASE_W - cx + w);
+                const dies = Math.random() < 0.4;
+                const deathAt = dies ? seconds * (0.4 + Math.random() * 0.45) : Infinity;
+                const frames = [];
+                const shots = [];
+                const moveSeq = move.length ? move : idle;
+                while (frames.length < (t0 + runFor) * GW_FPS) {
+                    frames.push(moveSeq[frames.length % moveSeq.length]);
+                }
+                while (frames.length < total && frames.length / GW_FPS < deathAt) {
+                    const wait = 2 + ((Math.random() * 9) | 0);
+                    for (let k = 0; k < wait; k++) frames.push(idle[0]);
+                    shots.push((frames.length + T.flash) / GW_FPS);
+                    frames.push(...shoot);
+                }
+                if (dies && die.length) {
+                    frames.length = Math.min(frames.length, Math.round(deathAt * GW_FPS));
+                    frames.push(...die);
+                }
+                const unit = {
+                    side, rect, flip, deathAt: dies ? deathAt + die.length / GW_FPS * 0.5 : Infinity,
+                    shots: shots.filter((t) => t < deathAt),
+                    layer: {
+                        entry: null, frames, fps: GW_FPS, motion: 'advance',
+                        params: { t0, dur: runFor, from }, blend: 'source-over', alpha: 1,
+                        fit: 'native', rect, offset: 0, flip, depth,
+                    },
+                };
+                units.push(unit);
+            }
+        }
+        // Nearer units are drawn over further ones.
+        units.sort((a, b) => a.layer.depth - b.layer.depth);
+        units.forEach((u) => layers.push(u.layer));
+
+        // Tracer fire. Each shot leaves the shooter's muzzle and lands on an
+        // enemy that is still standing when it arrives; a spark marks the hit.
+        for (const u of units) {
+            const foes = units.filter((v) => v.side !== u.side);
+            for (const ts of u.shots) {
+                const flight = 0.35 + Math.random() * 0.25;
+                const alive = foes.filter((v) => v.deathAt > ts + flight);
+                if (!alive.length) continue;
+                const v = alive[(Math.random() * alive.length) | 0];
+                const mx = (u.side.dir === 1 ? u.rect.x + u.rect.w * 0.95 : u.rect.x + u.rect.w * 0.05) * BASE_W;
+                const my = (u.rect.y + u.rect.h * 0.4) * BASE_H;
+                const tx = (v.rect.x + v.rect.w * 0.5) * BASE_W;
+                const ty = (v.rect.y + v.rect.h * 0.45) * BASE_H;
+                layers.push({
+                    entry: null, frames: [u.side.bolt], fps: 0, motion: 'shot',
+                    params: { t0: ts, dur: flight, dx: tx - mx, dy: ty - my },
+                    blend: 'lighter', alpha: 1, fit: 'native',
+                    rect: { x: mx / BASE_W, y: my / BASE_H, w: 7 / BASE_W, h: 2 / BASE_H },
+                    offset: 0, in: ts, out: ts + flight,
+                });
+                if (spark.length) {
+                    layers.push({
+                        entry: null, frames: spark, fps: 0, motion: 'still', params: {},
+                        blend: 'lighter', alpha: 1, fit: 'native',
+                        rect: { x: (tx - 4) / BASE_W, y: (ty - 4) / BASE_H, w: 9 / BASE_W, h: 8 / BASE_H },
+                        offset: 0, in: ts + flight, out: ts + flight + 0.18,
+                    });
+                }
+            }
+        }
+        return { label: 'GROUND ASSAULT', layers: layers.filter(Boolean), duration: seconds * 1000 };
+    }
+
     const RECIPES = {
         async convoy() {
+            // MoO1's SHIPS/SHIPS2 supply the freighter hulls the recipe
+            // was written against; MoO2's CMBTSHP supplies combat hulls
+            // and CMBTMISL supplies missile-shaped contrails for the
+            // same beat. All four live behind one query because MoO2
+            // entries carry the plain `dir` name.
             const bg = pick(backdrops({
                 dirs: ['LANDING'], roles: ['fullscreen'], minLum: 26, minCoverage: 0.5,
             })) || pick(backdrops({ minLum: 20 })) || pick(backdrops());
             const wash = pick(find({ dirs: ['NEBULA'] }));
             const hulls = pickMany(
                 find({
-                    dirs: ['SHIPS', 'SHIPS2'], roles: ['sprite'],
+                    dirs: ['SHIPS', 'SHIPS2', 'CMBTSHP'],
+                    roles: ['sprite'],
                     minW: 24, maxNoise: 110,
                 }), 4);
             const layers = [await makeLayer(bg, { fit: 'cover', fps: bg && bg.frames > 1 ? 10 : 0 })];
@@ -520,11 +814,20 @@ const GNNSceneCompositor = (() => {
         },
 
         async tactical() {
+            // MoO2 STARBG and GSTAR are star-field plates that read as a
+            // combat backdrop the way MoO1's STARVIEW does. The target
+            // comes from either game's ship archives, plus CMBTFGTR for
+            // the fighter cels MoO1 does not have a clean source for.
+            // No STARBG: every STARBG item is a cut-out nebula about 190 px
+            // wide (coverage ~0.5), which blown up to fill the frame is a
+            // soft blob. Owner saw it constantly and it looked bad.
             const bg = pick(find({
-                dirs: ['STARVIEW', 'SPACE'], minW: 200, maxNoise: 140,
+                dirs: ['STARVIEW', 'SPACE', 'GSTAR'],
+                minW: 200, maxNoise: 140,
             })) || pick(backdrops());
             const target = pick(find({
-                dirs: ['SHIPS'], roles: ['sprite'], minW: 24,
+                dirs: ['SHIPS', 'CMBTSHP', 'CMBTFGTR'],
+                roles: ['sprite'], minW: 24,
                 maxCoverage: 0.85, maxNoise: 110,
             }));
             const layers = [await makeLayer(bg, { fit: 'cover', alpha: 0.9 })];
@@ -536,13 +839,21 @@ const GNNSceneCompositor = (() => {
         },
 
         async survey() {
+            // STARBG is MoO2's own equivalent of STARVIEW; GSTAR is the
+            // strategic star field. Both are picked as the establishing
+            // world shot when an MoO1 star field is not available.
             const world = pick(find({
-                dirs: ['STARVIEW'], roles: ['fullscreen'], minCoverage: 0.25, maxNoise: 140,
+                dirs: ['STARVIEW', 'GSTAR'],
+                roles: ['fullscreen'], minCoverage: 0.25, maxNoise: 140,
             }))
                 || pick(find({ dirs: ['PLANETS'], minW: 30 }));
             const wash = pick(find({ dirs: ['NEBULA'] }));
+            // CMBTMISL for the probe: MoO2 draws its survey probes with
+            // the same sprite grammar as its missiles and they read as
+            // small moving objects the same way.
             const probe = pick(find({
-                dirs: ['SHIPS2'], roles: ['sprite'], minW: 18, maxNoise: 110,
+                dirs: ['SHIPS2', 'CMBTMISL'],
+                roles: ['sprite'], minW: 18, maxNoise: 110,
             }));
             const bar = pick(find({
                 pool: 'sprite', dirs: ['SPACE'], roles: ['strip'],
@@ -563,8 +874,19 @@ const GNNSceneCompositor = (() => {
         },
 
         async council() {
+            // MoO2's COUNCIL archive holds the actual council-chamber
+            // plates; DIPLOMAT and DIPSTARS are the diplomacy screen
+            // and star map from the same game. All three read as the
+            // hall and the starfield behind a vote. Note that MoO1's
+            // COUNCIL archive is entirely denied — its items decode
+            // against a palette the archive does not carry — so on the
+            // MoO2 side, COUNCIL items are the only council footage
+            // available and the query finds them because MoO2 entries
+            // carry `dir: 'COUNCIL'` under a `_moo2`-suffixed key.
             const hall = pick(backdrops({
-                dirs: ['EMBASSY', 'INTRO', 'LANDING'], roles: ['fullscreen'],
+                dirs: ['EMBASSY', 'INTRO', 'LANDING',
+                    'COUNCIL', 'DIPLOMAT', 'DIPSTARS'],
+                roles: ['fullscreen'],
                 minCoverage: 0.3,
             })) || pick(backdrops());
             const layers = [await makeLayer(hall, { fit: 'cover', fps: 8 })];
@@ -576,41 +898,52 @@ const GNNSceneCompositor = (() => {
          * function the tuner also calls — with no overrides, so the
          * recipe and the tuner share one code path. Tune constants in
          * INTERVIEW_DEFAULTS at the top of the module.
+         *
+         * EMBASSY is MoO1 only; MoO2's diplomacy screen is a menu, not
+         * a composited three-plate scene, and there is no equivalent to
+         * draw from on that side.
          */
         async interview() {
             return composeInterview();
         },
 
         async industry() {
+            // MoO2's BLDG0..4 archives are the colony building cels —
+            // one per building tier — and COLROADS is the road/path
+            // overlay that sits under them. BEAMS is standalone beam
+            // art that reads as industrial lighting in a factory shot.
+            // These join MoO1's LANDING and BACKGRND as the establishing
+            // shot, and MoO1's TECHNO as the panel.
             const bg = pick(find({
                 pool: 'broll',
-                dirs: ['LANDING', 'BACKGRND'],
+                dirs: ['LANDING', 'BACKGRND',
+                    'BLDG0', 'BLDG1', 'BLDG2', 'BLDG3', 'BLDG4',
+                    'COLROADS'],
                 roles: ['fullscreen'],
                 maxNoise: CLEAN_BACKDROP, minLum: 18,
             })) || pick(backdrops({ minLum: 12 })) || pick(backdrops());
-            const machines = pickMany(find({
-                dirs: ['TECHNO'], roles: ['panel'], maxNoise: CLEAN_PLATE,
-                minW: 40, maxCoverage: 0.7,
-            }), 2);
-            const layers = [await makeLayer(bg, { fit: 'cover', alpha: 0.85 })];
-            for (let i = 0; i < machines.length; i++) {
-                layers.push(await makeLayer(machines[i], {
-                    rect: { x: 0.52 + i * 0.2, y: 0.12 + i * 0.3, w: 0.3, h: 0.34 },
-                    alpha: 0.8, blend: 'lighter',
-                    motion: 'pulse', params: { min: 0.4, max: 0.85, speed: 0.5 + i * 0.2 },
-                }));
-            }
+            // The "machines" — BEAMS and BLDG cels added with `lighter`
+            // blending and pulsing — are gone. Over a landscape they read
+            // as yellow and blue blotches, not machinery (owner, from a
+            // screenshot). The establishing shot stands on its own.
+            const layers = [await makeLayer(bg, { fit: 'cover', alpha: 0.95 })];
             return { label: 'INDUSTRIAL FLOOR', layers: layers.filter(Boolean), duration: 8000 };
         },
 
         async anomaly() {
+            // GSTAR and EVENTS are MoO2's star-field and event-cel
+            // archives; they read as a black-hole or wormhole wash the
+            // same way MoO1's VORTEX and INTRO plates do. CMBTSHP and
+            // CMBTSFX join the debris field alongside MoO1 ships.
             const core = pick(find({
                 dir: 'VORTEX', roles: ['fullscreen'], animated: true, maxNoise: CLEAN_BACKDROP,
             })) || pick(find({
-                dirs: ['INTRO', 'INTRO2'], roles: ['fullscreen'], maxNoise: CLEAN_BACKDROP,
+                dirs: ['INTRO', 'INTRO2', 'GSTAR', 'EVENTS'],
+                roles: ['fullscreen'], maxNoise: CLEAN_BACKDROP,
             }));
             const debris = pickMany(find({
-                dirs: ['SHIPS', 'SHIPS2'], roles: ['sprite'], minW: 20, maxNoise: 110,
+                dirs: ['SHIPS', 'SHIPS2', 'CMBTSHP', 'CMBTSFX'],
+                roles: ['sprite'], minW: 20, maxNoise: 110,
             }), 3);
             const layers = [await makeLayer(core, { fit: 'cover', fps: 14 })];
             for (let i = 0; i < debris.length; i++) {
@@ -623,15 +956,23 @@ const GNNSceneCompositor = (() => {
             return { label: 'GRAVITIC ANOMALY', layers: layers.filter(Boolean), duration: 9000 };
         },
 
+        // Lore stories and the recruitment spot only — see cutscene-manager
+        // routeFor(). Excluded from random recipe picks (LORE_ONLY).
+        async groundwar() { return groundWarScene(); },
+
         async deepfield() {
+            // STARBG and GSTAR join the nebula washes; BEAMS provides
+            // the faint high-contrast streaks that read as distant
+            // emission lines in the same layer.
             const washes = pickMany(find({
                 pool: 'sprite',
-                dirs: ['NEBULA', 'SPACE'],
+                dirs: ['NEBULA', 'SPACE', 'GSTAR'],
                 minW: 20, minH: 20, maxNoise: 110,
             }), 3);
             const star = pick(find({
                 pool: 'broll',
-                dirs: ['STARVIEW'], roles: ['fullscreen'],
+                dirs: ['STARVIEW', 'GSTAR'],
+                roles: ['fullscreen'],
                 maxNoise: 140, minCoverage: 0.2,
             }));
             const layers = [await makeLayer(star, { fit: 'cover', alpha: 0.8 })];
@@ -645,7 +986,10 @@ const GNNSceneCompositor = (() => {
         },
     };
 
-    const RECIPE_NAMES = Object.keys(RECIPES);
+    // Recipes a random pick must never land on. The ground war shows
+    // soldiers dying; it illustrates in-universe stories, never real ones.
+    const LORE_ONLY = new Set(['groundwar']);
+    const RECIPE_NAMES = Object.keys(RECIPES).filter((k) => !LORE_ONLY.has(k));
 
     async function synthesize(kind) {
         if (kind && !RECIPES[kind]) {
@@ -680,6 +1024,7 @@ const GNNSceneCompositor = (() => {
     return {
         BASE_W, BASE_H,
         synthesize, single, makeLayer, draw,
+        groundWar: (seconds) => groundWarScene(seconds),
         composeInterview,
         INTERVIEW_DEFAULTS,
         recipes: () => RECIPE_NAMES.slice(),

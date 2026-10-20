@@ -417,8 +417,75 @@ const GNNAudio = (() => {
         }
     }
 
+    /**
+     * A sine tone on the effects bus — the 1 kHz line-up tone under colour
+     * bars, a 440 under the test card.
+     *
+     * A fresh node every call, faded in over 15 ms and out over 40 ms, so
+     * there is no step on any live path (constraint 8). It joins the
+     * effects bus and is ducked and limited with everything else.
+     */
+    function playTone(freq = 1000, ms = 1200, opts = {}) {
+        if (!ensureContext()) return;
+        const now = ctx.currentTime + (opts.delay || 0);
+        const end = now + Math.max(0.08, ms / 1000);
+        const osc = ctx.createOscillator();
+        osc.type = opts.type || 'sine';
+        osc.frequency.value = freq;
+        const g = ctx.createGain();
+        const level = opts.gain === undefined ? 0.12 : opts.gain;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(level, now + 0.015);
+        g.gain.setValueAtTime(level, end - 0.04);
+        g.gain.linearRampToValueAtTime(0.0001, end);
+        osc.connect(g); g.connect(sfxBus);
+        osc.start(now); osc.stop(end + 0.02);
+    }
+
+    let staticBuffer = null;
+
+    /**
+     * Band-limited static: the hiss of a receiver with no signal. One
+     * second of noise is generated once and looped, then shaped by a
+     * band-pass so it reads as a tube receiver rather than a white-noise
+     * test. Same fade discipline as `playTone`.
+     */
+    function playStatic(ms = 900, opts = {}) {
+        if (!ensureContext()) return;
+        if (!staticBuffer) {
+            staticBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+            const d = staticBuffer.getChannelData(0);
+            for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        }
+        const now = ctx.currentTime + (opts.delay || 0);
+        const end = now + Math.max(0.08, ms / 1000);
+        const src = ctx.createBufferSource();
+        src.buffer = staticBuffer;
+        src.loop = true;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = opts.freq || 2600;
+        bp.Q.value = 0.6;
+        const g = ctx.createGain();
+        const level = opts.gain === undefined ? 0.16 : opts.gain;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(level, now + 0.02);
+        g.gain.setValueAtTime(level, end - 0.06);
+        g.gain.linearRampToValueAtTime(0.0001, end);
+        src.connect(bp); bp.connect(g); g.connect(sfxBus);
+        src.start(now, Math.random() * 0.8); src.stop(end + 0.02);
+    }
+
     function playUiClick() { play('sfx_36', { gain: VOLUME.ui }); }
-    function playKlaxon() { play('sfx_03', { gain: 0.7 }); }
+    // Every siren in both games' banks, not one: thirteen of them sat in
+    // the 'siren' role with nothing that ever asked for it.
+    function playKlaxon() {
+        if (typeof GNNAssets !== 'undefined' && GNNAssets.pickSfx('siren')) {
+            playRole('siren', { gain: 0.7 });
+        } else {
+            play('sfx_03', { gain: 0.7 });
+        }
+    }
 
     // ---------------------------------------------------------
     // Music bed (rendered from the 40 MUSIC.LBX MIDI tracks)
@@ -486,6 +553,10 @@ const GNNAudio = (() => {
         src.connect(g); g.connect(musicBus);
         src.start(0, opts.offset || 0);
         musicBaseGain = opts.gain !== undefined ? opts.gain : 1;
+        // Anchor the ramp at now. Assigning `.value` schedules no event,
+        // and a ramp with no event before it starts wherever the
+        // implementation decides (constraint 8).
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
         g.gain.linearRampToValueAtTime(
             Math.max(0.0001, musicBaseGain * musicDuck),
             ctx.currentTime + (opts.fadeIn || 1.4));
@@ -543,6 +614,7 @@ const GNNAudio = (() => {
         g.gain.value = 0.0001;
         src.connect(g); g.connect(musicBus);
         src.start(0);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
         g.gain.linearRampToValueAtTime(
             Math.max(0.0001, gain * musicDuck),
             ctx.currentTime + (opts.fadeIn || 1.4));
@@ -743,7 +815,7 @@ const GNNAudio = (() => {
         preload, load, play, playRole, playChord, CORE_SFX,
         playTypingBlip, playUiClick, playKlaxon,
         playMusic, playBootTrack, stopMusic, duckMusic, duckEffects, duckUnderVoice, getCurrentTrack,
-        glitchCrush, tapeStop, setStationGain,
+        glitchCrush, tapeStop, setStationGain, playTone, playStatic,
         toggleMute, isMuted,
         VOLUME,
     };

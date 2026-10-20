@@ -1,62 +1,81 @@
 /* ============================================================
-   GNN — Broadcast Director
-   ------------------------------------------------------------
-   Owns the clock. Everything the station does in time is decided
-   here.
+ GNN — Broadcast Director
+ ------------------------------------------------------------
+ Owns the clock. Everything the station does in time is decided
+ here.
 
-   The old build had one mode: read the next headline, forever,
-   with a fixed two-second gap. A real newscast has rhythm — the
-   anchor lands a story, lets it sit, adds a line of his own,
-   throws to the next item, and every few stories the whole desk
-   goes away for a break.
+ The old build had one mode: read the next headline, forever,
+with a fixed two-second gap. A real newscast has rhythm — the
+anchor lands a story, lets it sit, adds a line of his own,
+throws to the next item, and every few stories the whole desk
+goes away for a break.
 
-   The rundown is generated as it plays:
+The rundown is generated as it plays:
 
-       READ -> HOLD -> [BANTER -> HOLD] -> [TOSS] -> READ ...
-                                   \-> BREAK every 4-7 stories
-                                   \-> IDENT every ~11 stories
+READ -> HOLD -> [BANTER -> HOLD] -> [TOSS] -> READ ...
+\-> BREAK every 4-7 stories
+\-> IDENT every ~11 stories
 
-   HOLD is real dead air: the voice is silent, the prompter keeps
-   the last line up, the anchor's mouth is shut and the room tone
-   carries it. That silence is the single biggest difference
-   between "a page reading RSS" and "a channel that is on".
+HOLD is real dead air: the voice is silent, the prompter keeps
+the last line up, the anchor's mouth is shut and the room tone
+carries it. That silence is the single biggest difference
+between "a page reading RSS" and "a channel that is on".
 
-   ------------------------------------------------------------
-   Recent fix:
+------------------------------------------------------------
+Wall-clock daypart gating.
 
-   Between-show bumpers. When a block ends and the next one is
-   about to begin — the HOLD case fires with `holdNext` set to
-   COLD_OPEN and `blockIndex > 0` — the director hands the
-   transition to `window.GNNBumper.play()`, which is main.js's
-   nine-second slate → show-card → studio sequence with a music
-   interlude. The director pauses for the bumper's duration and
-   waits. When the bumper calls `handoffColdOpen()`, this module
-   clears its state and runs the cold open, then the bumper calls
-   `resume()` and the frame loop picks back up.
+The broadcast day is 96 quarter-hour slots (`DAY_GRID`), four
+shows an hour, read from the viewer's local clock at *every*
+cold open. A show runs to the end of its slot, so the channel
+stays on the clock however long a read or a break runs. Shows
+draw stories from topic buckets (`draws`), so twenty-four shows
+share the wire instead of splitting it twenty-four ways.
 
-   The previous shape of this handoff had a race: the HOLD case
-   cleared `holdNext` before dispatching, so a bumper launched on
-   one tick would be cancelled on the next — the HOLD case
-   re-fired, saw its own pending flag, and took the fall-through
-   branch into `beginColdOpen` while the bumper was still showing
-   cards. The `coldOpenPending` flag and the `handoffColdOpen()`
-   API fix it by making the transition explicit: the bumper owns
-   the cold open until it says otherwise, and no path through the
-   HOLD case advances past the handoff except the handoff itself.
+Two URL flags, for testing and harness runs:
 
-   A safety timeout — `BUMPER_HANDOFF_TIMEOUT_MS` — releases the
-   director if a bumper fails to call back. Without it, a bumper
-   that hit an exception between `play()` and `handoffColdOpen()`
-   would deadlock the HOLD case: the state machine would wait
-   forever for a handoff that was never coming.
+?clock=off       disable the grid; the director walks
+SHOW_SCHEDULE in order, fifteen minutes a show.
+?block=<id>      pin one specific show for the session,
+ignoring the clock.
 
-   `setState` also clears `coldOpenPending` when the director
-   leaves HOLD by any path other than the handoff. That catches
-   the case where an operator hits Skip during the bumper, or a
-   breaking story pre-empts — the handoff is stale by then, and
-   the next COLD_OPEN transition must run its own bumper rather
-   than firing a half-completed handoff from the previous one.
-   ============================================================ */
+See `DAY_GRID`, `slotAt()` and `beginColdOpen()` below.
+
+------------------------------------------------------------
+Recent fix:
+
+Between-show bumpers. When a block ends and the next one is
+about to begin — the HOLD case fires with `holdNext` set to
+COLD_OPEN and `blockIndex > 0` — the director hands the
+transition to `window.GNNBumper.play()`, which is main.js's
+nine-second slate → show-card → studio sequence with a music
+interlude. The director pauses for the bumper's duration and
+waits. When the bumper calls `handoffColdOpen()`, this module
+clears its state and runs the cold open, then the bumper calls
+`resume()` and the frame loop picks back up.
+
+The previous shape of this handoff had a race: the HOLD case
+cleared `holdNext` before dispatching, so a bumper launched on
+one tick would be cancelled on the next — the HOLD case
+re-fired, saw its own pending flag, and took the fall-through
+branch into `beginColdOpen` while the bumper was still showing
+cards. The `coldOpenPending` flag and the `handoffColdOpen()`
+API fix it by making the transition explicit: the bumper owns
+the cold open until it says otherwise, and no path through the
+HOLD case advances past the handoff except the handoff itself.
+
+A safety timeout — `BUMPER_HANDOFF_TIMEOUT_MS` — releases the
+director if a bumper fails to call back. Without it, a bumper
+that hit an exception between `play()` and `handoffColdOpen()`
+would deadlock the HOLD case: the state machine would wait
+forever for a handoff that was never coming.
+
+    `setState` also clears `coldOpenPending` when the director
+    leaves HOLD by any path other than the handoff. That catches
+    the case where an operator hits Skip during the bumper, or a
+    breaking story pre-empts — the handoff is stale by then, and
+    the next COLD_OPEN transition must run its own bumper rather
+    than firing a half-completed handoff from the previous one.
+    ============================================================ */
 
 const GNNDirector = (() => {
     'use strict';
@@ -68,20 +87,6 @@ const GNNDirector = (() => {
     };
 
     // --- Show length -----------------------------------------
-    //
-    // A show is fifteen minutes of airtime, measured on the wall clock, not
-    // on a story count. The story count was the previous design — read
-    // between nine and fourteen stories and sign off — and it did not match
-    // what a channel actually does: a fast wire closed the show in six
-    // minutes, a slow one ran it long, and there was no way to keep two
-    // consecutive shows to the same length.
-    //
-    // The floor is a safety rail, not a driver. A very productive wire
-    // should not close a show after two stories just because the clock has
-    // somehow run out (it cannot, but a stuck `showStartedAt` could), and a
-    // very slow one should not overrun forever because it has not filed
-    // enough to satisfy a minimum. Four stories and fifteen minutes is the
-    // shortest acceptable show.
     const SHOW_MS = 15 * 60 * 1000;
     const MIN_STORIES_PER_SHOW = 4;
 
@@ -127,40 +132,62 @@ const GNNDirector = (() => {
     // not a label. "IRAN WAR LIVE:" is stripped because "LIVE" is the
     // last word before the colon and the words before it are all caps.
     const BROADCAST_LABEL_RE =
-        /^\s*(?:(?:[A-Z][A-Z0-9' -]{0,38}?\s+)?(?:LIVE|WATCH|UPDATE|DEVELOPING|BREAKING(?:\s+NEWS)?|VIDEO|RECAP|ANALYSIS|OPINION))\s*:\s*/i;
+    /^\s*(?:(?:[A-Z][A-Z0-9' -]{0,38}?\s+)?(?:LIVE|WATCH|UPDATE|DEVELOPING|BREAKING(?:\s+NEWS)?|VIDEO|RECAP|ANALYSIS|OPINION))\s*:\s*/i;
 
     // --- Pacing knobs (ms) -----------------------------------
     const PACE = {
-        holdAfterRead: [1500, 3600],
-        holdAfterBanter: [900, 2100],
-        holdBeforeBreak: [700, 1400],
-        breathAfterToss: [500, 1100],
+        // The pauses between lines. Measured on air (tools/tests/speechgaps.py)
+        // the silence between one anchor finishing and the next starting was
+        // 2.2 s median and up to 5 s — the owner heard it as one or two
+        // beats too long. These were 1.5–3.6 s, 0.9–2.1 s, 0.7–1.4 s and
+        // 0.5–1.1 s; the synthesis of each line also stood in the gap until
+        // the pump learnt to prefetch.
+        holdAfterRead: [600, 1300],
+        holdAfterBanter: [300, 750],
+        holdBeforeBreak: [500, 950],
+        breathAfterToss: [250, 550],
         dryLoop: [6000, 11000],
         storiesPerBreak: [4, 7],
         storiesPerIdent: [9, 14],
         banterChance: 0.55,
-        wireShare: 0.35,          // of banter beats, how many are sector-wire
-        exchangeShare: 0.33,      // ...and how many are the two anchors
-        twoWayShare: 0.22,        // ...and how many go to a correspondent
+        wireShare: 0.35,
+        exchangeShare: 0.33,
+        twoWayShare: 0.22,
         tossChance: 0.42,
         cutawayChance: 0.62,
-        cutawayAt: 0.34,          // fraction through the read
+        cutawayAt: 0.34,
         doubleBanterChance: 0.16,
     };
+
+    // --- URL flags for testing and harness runs ---------------
+    const URL_FLAGS = (() => {
+        if (typeof window === 'undefined' || !window.location) {
+            return { disableClock: false, forcedBlock: null };
+        }
+        const q = String(window.location.search || '');
+        return {
+            disableClock: /[?&]clock=off\b/.test(q),
+                       forcedBlock: (q.match(/[?&]block=([a-z_]+)/i) || [])[1] || null,
+        };
+    })();
 
     let state = S.BOOT;
     let stateSince = 0;
     let holdUntil = 0;
 
-    let queue = []; // active show's queue only; all other stories live in showQueues.
-    let pinnedRundown = null; // Teased stories from the cold open rundown, preserved in promised order.
+    let queue = [];
+    let pinnedRundown = null;
     // Retained for legacy diagnostics/API compatibility. Normal feed stories now
     // use strict per-show queues and are never released across categories.
     const heldByCategory = Object.create(null);
     const showQueues = Object.create(null);
     const directorStoryKeys = new Set();
     let activeQueueShowId = null;
-    const HELD_CAP = 40;
+    // Stories waiting per topic bucket. The buckets were unbounded: every
+    // poll added, only reading removed, and a bucket no show draws on often
+    // (archives held 367) grew for as long as the channel ran. Over the cap,
+    // the lowest-scoring stories — the oldest and least important — go.
+    const BUCKET_CAP = 60;
     let current = null;
     let storiesRead = 0;
     let sinceBreak = 0;
@@ -182,43 +209,214 @@ const GNNDirector = (() => {
     // gets a debate instead of a two-way, not in addition to one.
     let correspondentUsed = false;
 
-    // Which show block we are on. Incremented at the end of each show, at
-    // the same moment the director schedules a new cold open, so the
-    // station walks the ten blocks in order across a long session rather
-    // than picking one at random.
-    //
-    // The renderer is what actually swaps the set, the window rect, the
-    // backdrop and the seated pair; this counter is the index it swaps to.
-    // See `GNNRenderer.setShowBlock()` — that is where the whole bundle
-    // lives.
+    // Which show block we are on: an index into SHOW_SCHEDULE. Read from
+    // the clock (DAY_GRID) at load and again at every cold open; with
+    // `?clock=off` the shows are walked in list order instead. Before a
+    // bumper the director sets it to the incoming show early
+    // (`incomingBlockSet`) so the card and studio swap under the overlay.
     let blockIndex = 0;
 
+    // True once the first cold open has run. After that, a cold open that
+    // lands in the slot the outgoing show already used moves on to the next
+    // slot's show (a show that closed early is not re-opened), and show
+    // changes go through the bumper. The boot's cold open has its own
+    // card sequence in main.js and skips the bumper.
+    let firstColdOpenDone = false;
+
+    // Length of the show on air now: to the end of its slot on the clock,
+    // SHOW_MS when the clock is off or a block is forced.
+    let showLengthMs = 15 * 60 * 1000;
+
+    // Every show the channel runs. `draws` names the story buckets it reads
+    // from, first is primary (see targetShowFor). A bucket is a topic, a
+    // show is a presentation — title, set, pair, card — so twenty-four
+    // shows share twelve buckets instead of splitting the wire twenty-four
+    // ways. A show with no `draws` reads its own id's bucket. Set and pair
+    // come from assets/generated/show-config.json, by id.
     const SHOW_SCHEDULE = [
-        { id: 'morning_watch', title: 'Galactic Morning Watch', desk: 'MAIN DESK', genre: 'morning' },
+        { id: 'morning_watch', title: 'Galactic Morning Watch', desk: 'MAIN DESK', genre: 'morning', draws: ['morning_watch', 'diplomacy'] },
         { id: 'economy', title: 'Deep Space Economy', desk: 'TRADE DESK', genre: 'business' },
-        { id: 'crossfire', title: 'Council Crossfire', desk: 'SECTOR DEBATE', genre: 'debate' },
+        { id: 'crossfire', title: 'Council Crossfire', desk: 'SECTOR DEBATE', genre: 'debate', draws: ['crossfire', 'diplomacy'] },
         { id: 'cybernetics', title: 'Deep Survey & Cybernetics', desk: 'TECH DESK', genre: 'science' },
-        { id: 'machine_intel', title: 'Machine Intelligence Log', desk: 'AUTOMATON DESK', genre: 'ai' },
-        { id: 'trade_minerals', title: 'Colonial Mining & Trade', desk: 'COMMERCE DESK', genre: 'industry' },
+        { id: 'machine_intel', title: 'Machine Intelligence Log', desk: 'AUTOMATON DESK', genre: 'ai', draws: ['machine_intel', 'cybernetics'] },
+        { id: 'trade_minerals', title: 'Colonial Mining & Trade', desk: 'COMMERCE DESK', genre: 'industry', draws: ['trade_minerals', 'economy'] },
         { id: 'diplomacy', title: 'Council Summit Floor', desk: 'DIPLOMATIC DESK', genre: 'politics' },
-        { id: 'evening_rim', title: 'The Evening Rim Report', desk: 'PRIME DESK', genre: 'prime' },
+        { id: 'evening_rim', title: 'The Evening Rim Report', desk: 'PRIME DESK', genre: 'prime', draws: ['evening_rim', 'morning_watch'] },
         { id: 'anomaly', title: 'Anomaly: Deep Dark', desk: 'INVESTIGATION DESK', genre: 'latenight' },
         { id: 'archives', title: 'Imperial Historical Wire', desk: 'ARCHIVE DESK', genre: 'archive' },
+        // --- added with the 96-slot day -----------------------------------
+        { id: 'sector_weather', title: 'Sector Weather Watch', desk: 'WEATHER DESK', genre: 'weather', draws: ['weather', 'cybernetics', 'morning_watch'] },
+        { id: 'solar_wind', title: 'Solar Wind Overnight', desk: 'WEATHER DESK', genre: 'weather', draws: ['weather', 'cybernetics', 'anomaly'] },
+        { id: 'rim_sports', title: 'Rim Sports Wire', desk: 'SPORTS DESK', genre: 'sports', draws: ['sports'] },
+        { id: 'arena_hour', title: 'The Arena Hour', desk: 'SPORTS DESK', genre: 'sports', draws: ['sports'] },
+        { id: 'midday_wire', title: 'Sector Midday Wire', desk: 'MAIN DESK', genre: 'midday', draws: ['morning_watch', 'diplomacy', 'economy'] },
+        { id: 'market_close', title: 'Market Close', desk: 'TRADE DESK', genre: 'business', draws: ['economy', 'trade_minerals'] },
+        { id: 'orbital_briefing', title: 'Orbital Briefing', desk: 'FLEET DESK', genre: 'space', draws: ['cybernetics', 'anomaly'] },
+        { id: 'council_hour', title: 'The Council Hour', desk: 'SECTOR DEBATE', genre: 'debate', draws: ['crossfire', 'diplomacy'] },
+        { id: 'galactic_spotlight', title: 'Galactic Spotlight', desk: 'CULTURE DESK', genre: 'culture', draws: ['evening_rim'] },
+        { id: 'night_desk', title: 'The Night Desk', desk: 'OVERNIGHT DESK', genre: 'overnight', draws: ['evening_rim', 'morning_watch', 'diplomacy'] },
+        { id: 'deep_signal', title: 'Deep Signal', desk: 'INVESTIGATION DESK', genre: 'latenight', draws: ['anomaly', 'cybernetics'] },
+        { id: 'old_empires', title: 'Chronicles of the Old Empires', desk: 'ARCHIVE DESK', genre: 'archive' },
+        { id: 'world_tonight', title: 'World Desk Tonight', desk: 'WORLD DESK', genre: 'world', draws: ['morning_watch', 'crossfire', 'diplomacy'] },
+        { id: 'signal_circuit', title: 'Signal & Circuit', desk: 'TECH DESK', genre: 'tech', draws: ['cybernetics', 'machine_intel'] },
     ];
 
-    // Which show blocks run as a debate rather than a normal two-way.
+    // Buckets only the shows that draw them may read, even when another
+    // show runs dry and borrows.
+    const SEGREGATED_BUCKETS = new Set(['sports']);
+
+    function drawsFor(showId) {
+        const show = SHOW_SCHEDULE.find((x) => x.id === showId);
+        return (show && show.draws) || [showId];
+    }
+
+    // The broadcast day: 96 quarter-hour slots, four shows an hour, read
+    // from the viewer's local clock at every cold open. No show airs in
+    // two adjacent slots (checked at load, below). Weather at the top of
+    // every even hour — Sector Weather Watch by day, Solar Wind Overnight
+    // by night. Lore stays in its own hours (03:00–05:00).
+    const DAY_GRID = {
+        0: ['solar_wind', 'deep_signal', 'anomaly', 'night_desk'],
+        1: ['anomaly', 'deep_signal', 'night_desk', 'anomaly'],
+        2: ['solar_wind', 'night_desk', 'anomaly', 'deep_signal'],
+        3: ['archives', 'old_empires', 'archives', 'old_empires'],
+        4: ['solar_wind', 'archives', 'old_empires', 'archives'],
+        5: ['machine_intel', 'signal_circuit', 'machine_intel', 'night_desk'],
+        6: ['sector_weather', 'morning_watch', 'rim_sports', 'morning_watch'],
+        7: ['orbital_briefing', 'morning_watch', 'economy', 'morning_watch'],
+        8: ['sector_weather', 'morning_watch', 'diplomacy', 'morning_watch'],
+        9: ['economy', 'orbital_briefing', 'diplomacy', 'midday_wire'],
+        10: ['sector_weather', 'diplomacy', 'council_hour', 'diplomacy'],
+        11: ['midday_wire', 'diplomacy', 'galactic_spotlight', 'midday_wire'],
+        12: ['sector_weather', 'midday_wire', 'economy', 'trade_minerals'],
+        13: ['economy', 'trade_minerals', 'midday_wire', 'economy'],
+        14: ['sector_weather', 'trade_minerals', 'rim_sports', 'trade_minerals'],
+        15: ['cybernetics', 'machine_intel', 'cybernetics', 'market_close'],
+        16: ['sector_weather', 'market_close', 'cybernetics', 'orbital_briefing'],
+        17: ['signal_circuit', 'cybernetics', 'rim_sports', 'galactic_spotlight'],
+        18: ['sector_weather', 'evening_rim', 'rim_sports', 'evening_rim'],
+        19: ['galactic_spotlight', 'evening_rim', 'arena_hour', 'evening_rim'],
+        20: ['sector_weather', 'evening_rim', 'world_tonight', 'arena_hour'],
+        21: ['crossfire', 'council_hour', 'crossfire', 'world_tonight'],
+        22: ['solar_wind', 'crossfire', 'council_hour', 'world_tonight'],
+        23: ['night_desk', 'galactic_spotlight', 'world_tonight', 'deep_signal'],
+    };
+    const SLOT_MS = 15 * 60 * 1000;
+    const DAY_SLOTS = [];
+    for (let h = 0; h < 24; h++) DAY_SLOTS.push(...DAY_GRID[h]);
+
+    (function checkGrid() {
+        const ids = new Set(SHOW_SCHEDULE.map((x) => x.id));
+        const bad = [];
+        DAY_SLOTS.forEach((id, i) => {
+            if (!ids.has(id)) bad.push(i + ':' + id + ' unknown');
+            if (id === DAY_SLOTS[(i + 1) % DAY_SLOTS.length]) bad.push(i + ':' + id + ' twice running');
+        });
+        if (DAY_SLOTS.length !== 96) bad.push('slots=' + DAY_SLOTS.length);
+        // eslint-disable-next-line no-console
+        if (bad.length) console.warn('[GNN Director] DAY_GRID problems:', bad.join(', '));
+    })();
+
+    function slotAt(date) {
+        return date.getHours() * 4 + Math.floor(date.getMinutes() / 15);
+    }
+
+    /** Milliseconds from `date` to the end of its quarter-hour slot. */
+    function msLeftInSlot(date) {
+        const into = (date.getMinutes() % 15) * 60000 + date.getSeconds() * 1000
+            + date.getMilliseconds();
+        return SLOT_MS - into;
+    }
+
+    function blockIndexForSlot(slot) {
+        const id = DAY_SLOTS[((slot % 96) + 96) % 96];
+        const idx = SHOW_SCHEDULE.findIndex((x) => x.id === id);
+        return idx >= 0 ? idx : 0;
+    }
+
+    function blockIndexForHour(hour) {
+        return blockIndexForSlot(hour * 4);
+    }
+
+    function currentWallClockBlockIndex() {
+        if (URL_FLAGS.forcedBlock) {
+            const idx = SHOW_SCHEDULE.findIndex(
+                (x) => x.id === URL_FLAGS.forcedBlock);
+            if (idx >= 0) return idx;
+        }
+        if (URL_FLAGS.disableClock) return blockIndex;
+        try {
+            return blockIndexForSlot(slotAt(new Date()));
+        } catch (_) {
+            return blockIndex;
+        }
+    }
+
+    function initialBlockIndex() {
+        return currentWallClockBlockIndex();
+    }
+
+    function nextBlockIndex() {
+        if (URL_FLAGS.forcedBlock) {
+            const idx = SHOW_SCHEDULE.findIndex(
+                (x) => x.id === URL_FLAGS.forcedBlock);
+            if (idx >= 0) return idx;
+        }
+        if (URL_FLAGS.disableClock) {
+            return (blockIndex + 1) % SHOW_SCHEDULE.length;
+        }
+        try {
+            const d = new Date();
+            let slot = slotAt(d);
+            if (firstColdOpenDone && blockIndexForSlot(slot) === blockIndex) {
+                slot += 1;
+            }
+            return blockIndexForSlot(slot);
+        } catch (_) {
+            return (blockIndex + 1) % SHOW_SCHEDULE.length;
+        }
+    }
+
+    const DEBATE_BLOCKS = new Set(['crossfire', 'council_hour']);
+
+    // Lore and real news are kept completely apart.
     //
-    // Council Crossfire is the one. Its format — a polarized panel shouting
-    // past each other while the anchor tries to get a question in — is what
-    // the split-screen `openDebate()` in `cutscene-manager.js` was built
-    // for, and the reason that feature is in the codebase at all. Every
-    // other block runs the standard single-monitor two-way.
+    // Owner: "they are mixing Master of Orion lore with real news items i
+    // don't like that it should be completely separate." They were mixed in
+    // two places: a third of banter beats after a real story were a MoO1
+    // event bulletin under a SECTOR WIRE cue, and `GNNScript.banter()` fell
+    // through to the same thing. A real BBC story would be followed by "the
+    // Psilon colony on Mentar reports a plague", and the second read as the
+    // news too.
     //
-    // To make another show a debate, add its id here. No other wiring is
-    // needed: `beginBanter` reads this set and switches path on the match,
-    // and the rest of the machinery — the arming flag, the drain, the
-    // latch on `correspondentUsed` — is shared with the two-way code.
-    const DEBATE_BLOCKS = new Set(['crossfire']);
+    // Now lore has a show of its own and appears nowhere else. *Imperial
+    // Historical Wire* — "the wars, treaties and catastrophes that made the
+    // sector what it is" — reads the original GNN bulletins as its rundown
+    // instead of the RSS queue, which it leaves untouched for the next
+    // block. Every other block reads real news and never a bulletin.
+    const LORE_BLOCKS = new Set(['archives', 'old_empires']);
+
+    function isLoreShow() {
+        return LORE_BLOCKS.has(getShowInfo().id);
+    }
+
+    /**
+     * One in-universe story: an original GNN bulletin, filled — or, a
+     * quarter of the time, an intercepted transmission between empires
+     * from the archive, read with its attribution.
+     */
+    function loreItem() {
+        const intercepted = (typeof GNNScript !== 'undefined' && GNNScript.intercepted
+            && Math.random() < 0.25) ? GNNScript.intercepted() : null;
+        const text = intercepted
+            || ((typeof GNNScript !== 'undefined' && GNNScript.sectorWire)
+                ? GNNScript.sectorWire() : null);
+        if (!text) return null;
+        return {
+            title: text, description: '', source: 'Imperial Archive',
+            link: '', category: 'archive', lore: true, timestamp: Date.now(),
+        };
+    }
 
     // Species that have a correspondent plate on disk under
     // `assets/generated/correspondents/`.
@@ -297,6 +495,7 @@ const GNNDirector = (() => {
     // the state machine.
     let coldOpenPending = false;
     let coldOpenPendingSince = 0;
+    let incomingBlockSet = false;
 
     let onStateChange = null;
     let onStory = null;
@@ -319,6 +518,7 @@ const GNNDirector = (() => {
         if (prev === S.HOLD) {
             coldOpenPending = false;
             coldOpenPendingSince = 0;
+            incomingBlockSet = false;
         }
         const qLen = queue ? queue.length : 0;
         // eslint-disable-next-line no-console
@@ -339,11 +539,6 @@ const GNNDirector = (() => {
     // ---------------------------------------------------------
     // Who is reading
     // ---------------------------------------------------------
-    //
-    // A desk with two people at it where one of them reads everything is
-    // one person and a bystander. The chair passes on each story, and the
-    // voice and the moving mouth follow it, so the station sounds like two
-    // anchors rather than one anchor and a decoration.
 
     let seatIndex = 0;
 
@@ -372,6 +567,24 @@ const GNNDirector = (() => {
         if (n > 1) seatIndex = (seatIndex + 1) % n;
     }
 
+    /** The anchor who will take the chair for the next story. */
+    function nextStorySpeaker() {
+        if (typeof GNNRenderer === 'undefined' || !GNNRenderer.seatedIds) return null;
+        const ids = GNNRenderer.seatedIds();
+        if (!ids.length || typeof GNNCast === 'undefined') return null;
+        const nextIndex = ids.length > 1 ? (seatIndex + 1) % ids.length : 0;
+        return GNNCast.get(ids[nextIndex]);
+    }
+
+    /** Warm the next story in the rundown for the anchor who will read it. */
+    function prefetchUpcomingStory() {
+        const upcoming = queue[0];
+        if (!upcoming || typeof GNNTTS === 'undefined' || !GNNTTS.prefetch) return;
+        const nxt = nextStorySpeaker();
+        const opts = (nxt && nxt.voice) ? { voice: nxt.voice } : {};
+        GNNTTS.prefetch(storyText(upcoming), opts);
+    }
+
     // One line at a time, in order, with a beat of air between them.
     //
     // `GNNTTS.speak()` bumps its own request id and cuts off whatever is
@@ -388,16 +601,19 @@ const GNNDirector = (() => {
     // text box used to appear before the voice.
     const speechQueue = [];
     let pumping = false;
-    // Dead air between lines. Without it the next line begins on the same
-    // frame the last one ends and the desk sounds like a machine reading.
-    const LINE_GAP_MS = 420;
+    // The minimum a spoken segment holds its state. Segments also wait for
+    // `speaking` to clear, so this is only a floor. It used to be the lines'
+    // *estimated* length plus a second or so, and whenever the voice ran
+    // faster than the estimate the difference became dead air.
+    const SPOKEN_FLOOR_MS = 500;
+    // Between lines queued together — one anchor answering another.
+    const LINE_GAP_MS = 240;
 
     // Whether the voice on the wire right now belongs to someone at the
     // desk. Read by the animator (through `speakerIsSeated()`) so that a
     // correspondent appearing in the monitor does not move a seated
     // anchor's mouth. Set at the top of each job in `pump()`.
     let currentLineDrivesDesk = true;
-
     // The cast entry speaking the line currently on the air, or null when
     // the line is being read by the chair (the default for a story, a toss,
     // plain banter, an ident and a commercial beat). Set at the top of each
@@ -433,9 +649,20 @@ const GNNDirector = (() => {
             text, opts, est, token: speechToken,
             drivesDesk: opts.drivesDesk !== false,
             speakerId: opts.speakerId || null,
+            interjection: !!opts.interjection,
+            expiresAt: opts.expiresAt || 0,
         });
         speaking = true;
-        speechDeadline = performance.now() + est * 2.4 + 8000;
+        // Only ever *extend* the watchdog. This used to set the deadline
+        // from the line just queued, overwriting the deadline of the line
+        // already playing — so queueing a short line behind a long read cut
+        // the deadline below the read's own length, the watchdog decided
+        // speech had hung, and cleared the queue mid-read. Two-ways, panels
+        // and every secret line queued behind a story were being dropped.
+        // The deadline now covers everything still waiting to be said.
+        const waiting = speechQueue.reduce((n, j) => n + (j.est || 0), 0);
+        speechDeadline = Math.max(speechDeadline,
+            performance.now() + waiting * 2.4 + 8000);
         pump();
         return est;
     }
@@ -474,11 +701,11 @@ const GNNDirector = (() => {
                 }
             }
             const pitch = typeof opts.pitch === 'function'
-                ? opts.pitch(speaker.id)
-                : (opts.pitch !== undefined ? opts.pitch : -3);
+            ? opts.pitch(speaker.id)
+            : (opts.pitch !== undefined ? opts.pitch : -3);
             const drivesDesk = typeof opts.drivesDesk === 'function'
-                ? opts.drivesDesk(speaker.id)
-                : (opts.drivesDesk !== undefined ? opts.drivesDesk : true);
+            ? opts.drivesDesk(speaker.id)
+            : (opts.drivesDesk !== undefined ? opts.drivesDesk : true);
             total += say(line.text, {
                 voice: speaker.voice,
                 pitch,
@@ -495,6 +722,22 @@ const GNNDirector = (() => {
     }
 
     /**
+     * An unlisted transmission: a secret's line, spoken over the rundown.
+     *
+     * Queued behind whatever is playing, so it never cuts a line off. Two
+     * guards on top of that: at most two can be queued at once, so a viewer
+     * typing every word the station knows does not leave the anchors
+     * reading a backlog of secrets for the next minute; and one that has
+     * waited longer than a full story read is dropped, because by then the
+     * moment it belonged to has passed.
+     *
+     * The wait was 6 s at first, which is shorter than a single read: a
+     * secret typed while an anchor was mid-story always expired, and the
+     * viewer got nothing back at all. 45 s covers the longest read plus
+     * the other queued interjection.
+     */
+    const INTERJECT_MAX_WAIT_MS = 45000;
+    /**
      * Queue a line that is not on the rundown — an unlisted transmission,
      * a staff-channel message, the top-of-hour chime.
      *
@@ -507,9 +750,33 @@ const GNNDirector = (() => {
      * like anything else.
      */
     function interject(text, opts = {}) {
+        const queued = speechQueue.filter((j) => j.interjection).length;
+        if (queued >= 2) return 0;
         return say(text, Object.assign({
             caption: { kind: 'wire', cue: '◆ UNLISTED TRANSMISSION' },
+            interjection: true,
+            expiresAt: performance.now() + INTERJECT_MAX_WAIT_MS,
         }, opts));
+    }
+
+    /** The options a queued line is spoken with: its own, plus the voice. */
+    function ttsOptsFor(job, who) {
+        const opts = Object.assign({}, job.opts);
+        delete opts.caption;
+        delete opts.interjection;
+        delete opts.expiresAt;
+        delete opts.drivesDesk;
+        delete opts.speakerId;
+        delete opts.addressedTo;
+        delete opts.headline;
+        delete opts.sourceUrl;
+        if (!opts.voice && who && who.voice) opts.voice = who.voice;
+        return opts;
+    }
+
+    function nextSpeakerGuess(job) {
+        if (job.speakerId && typeof GNNCast !== 'undefined') return GNNCast.get(job.speakerId);
+        return job.drivesDesk !== false ? speaker() : null;
     }
 
     async function pump() {
@@ -518,8 +785,22 @@ const GNNDirector = (() => {
         try {
             while (speechQueue.length) {
                 const job = speechQueue[0];
+                // A commercial break owns the voice. A line queued while it
+                // plays — a secret typed mid-break — used to go straight to
+                // the engine, which cut the announcer off mid-sentence, and
+                // the next shot then cut the secret. It waits for the break,
+                // kept alive against the watchdog; its expiry still applies.
+                if (GNNCutsceneManager.isBreakActive()) {
+                    speechDeadline = Math.max(speechDeadline, performance.now() + 8000);
+                    await new Promise((r) => setTimeout(r, 150));
+                    continue;
+                }
                 // Dropped if the rundown moved on while it waited.
                 if (job.token !== speechToken) { speechQueue.shift(); continue; }
+                // A stale interjection is dropped, not read late.
+                if (job.expiresAt && performance.now() > job.expiresAt) {
+                    speechQueue.shift(); continue;
+                }
                 speechQueue.shift();
                 // Set the line's speaker and its drives-desk flag *before*
                 // anything reads them — in particular before the voice
@@ -527,23 +808,13 @@ const GNNDirector = (() => {
                 // otherwise hear the previous line's speaker.
                 currentLineDrivesDesk = job.drivesDesk;
                 currentLineSpeaker = (job.speakerId && typeof GNNCast !== 'undefined')
-                    ? GNNCast.get(job.speakerId) : null;
+                ? GNNCast.get(job.speakerId) : null;
                 let who = currentLineSpeaker;
                 if (!who && job.drivesDesk !== false) {
                     who = speaker();
                 }
 
-                const opts = Object.assign({}, job.opts);
-                delete opts.caption;
-                delete opts.drivesDesk;
-                delete opts.speakerId;
-                delete opts.addressedTo;
-                delete opts.headline;
-                delete opts.sourceUrl;
-
-                if (!opts.voice) {
-                    if (who && who.voice) opts.voice = who.voice;
-                }
+                const opts = ttsOptsFor(job, who);
                 const activeVoice = opts.voice || (typeof GNNTTS !== 'undefined' ? GNNTTS.getVoice() : null);
 
                 const isAutomation = (job.drivesDesk === false && !who) || job.speakerId === 'automation' || opts.voice === 'vox_unit';
@@ -598,7 +869,7 @@ const GNNDirector = (() => {
                         expectedVoiceId: expectedVoice,
                         isMismatch: isMismatch,
                         headline: current ? current.title : (job.opts.headline || null),
-                        sourceUrl: current ? (current.sourceUrl || current.link) : (job.opts.sourceUrl || null),
+                                                   sourceUrl: current ? (current.sourceUrl || current.link) : (job.opts.sourceUrl || null),
                     });
                 }
 
@@ -611,6 +882,15 @@ const GNNDirector = (() => {
                         { durationMs: job.est }, job.opts.caption));
                 }
                 speechDeadline = performance.now() + job.est * 2.4 + 8000;
+                // Synthesise the next queued line while this one plays. It
+                // used to be synthesised only when its turn came, which put
+                // half a second to a second and a half of silence into every
+                // handover between anchors. A wrong guess at its voice only
+                // costs a cache miss.
+                const nextJob = speechQueue.find((j) => j.token === speechToken);
+                if (nextJob && GNNTTS.prefetch) {
+                    try { GNNTTS.prefetch(nextJob.text, ttsOptsFor(nextJob, nextSpeakerGuess(nextJob))); } catch (_) { /* best effort */ }
+                }
                 try {
                     await GNNTTS.speak(job.text, opts);
                 } catch (e) { /* the rundown outranks the voice */ }
@@ -657,6 +937,9 @@ const GNNDirector = (() => {
         speechToken++;
         speechQueue.length = 0;
         speaking = false;
+        // The next `say()` extends the deadline with Math.max; a cancelled
+        // read's deadline would otherwise carry over to it.
+        speechDeadline = 0;
         currentLineDrivesDesk = true;
         currentLineSpeaker = null;
         GNNTTS.stop();
@@ -744,8 +1027,8 @@ const GNNDirector = (() => {
 
     function directorStoryKey(item) {
         return String((item && (item.ledgerKey || item.titleKey)) || (item && item.title) || '')
-            .toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9]+/g, ' ').trim();
+        .toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ').trim();
     }
 
     /** Assign every wire item to exactly one show. Specific subject cues beat broad feed categories. */
@@ -768,7 +1051,12 @@ const GNNDirector = (() => {
         const isPolitical = has(/\b(election|parliament|congress|senate|government|minister|president|prime minister|campaign|legislation|policy|sanction|diplomacy|summit|treaty|war|ceasefire|peace talks|foreign affairs)\b/);
         const isDebate = has(/\b(debate|opposition|clash|showdown|court challenge|party leaders|contested|dispute)\b/);
         const isOdd = has(/\b(mysterious|anomal|unexplained|strange|oddity|extraterrestrial|alien life|ufo|unidentified|deep space signal|exoplanet|dark matter|cosmic mystery)\b/);
-        const isSport = has(/\b(sport|football|soccer|basketball|baseball|hockey|tennis|olympic|championship|league|playoff|world cup|formula one|f1 racing)\b/);
+        const isWeather = has(/\b(weather|forecast|storm|hurricane|typhoon|cyclone|tornado|heatwave|heat wave|blizzard|snowfall|rainfall|flood|floods|flooding|drought|wildfire|wildfires|monsoon|el nino|la nina|met office|noaa|space weather|solar storm|geomagnetic)\b/);
+        // Sport airs only on the sports shows, so a sport headline from a
+        // general feed must not fall through to the catch-all bucket. Team
+        // pages rarely say "football"; the vocabulary of the match does.
+        const sportFeed = /\/sport\b|espn\.com/i.test([item.sourceUrl, item.link, item.source].filter(Boolean).join(' '));
+        const isSport = sportFeed || has(/\b(sport|sports|football|soccer|basketball|baseball|hockey|tennis|golf|cricket|rugby|boxing|olympic|olympics|championship|league|playoff|playoffs|world cup|cup final|grand prix|formula one|f1 racing|stoppage time|tournament|semi-final|quarter-final|premier league|champions league|nfl|nba|mlb|nhl|ufc|fifa|uefa|ncaa|cfp|college football|super bowl|stanley cup|wimbledon|grand slam|hat-trick|hat trick|striker|goalkeeper|midfielder|quarterback|touchdown|wicket|innings|transfer window|medallist|medalist)\b/);
         const isMarket = has(/\b(stock|stocks|market|markets|earnings|revenue|inflation|interest rate|central bank|economy|economic|currency|shares|investor|banking|profit|gdp|recession)\b/);
         const isSpaceTech = has(/\b(nasa|esa|rocket|spacecraft|spaceflight|satellite|orbit|launch|lunar|mars|asteroid|telescope|space station|astronaut|mission control)\b/);
         const isTech = has(/\b(software|cyber|cybersecurity|computer|chip|processor|quantum|internet|app|smartphone|data breach|vulnerability|technology|tech company)\b/);
@@ -780,7 +1068,8 @@ const GNNDirector = (() => {
 
         if (isArchive || sourceAgeDays > 7 || (oldRssAgeDays > 21 && oldRssAgeDays < 3650)) return 'archives';
         if (isOdd || category === 'anomaly') return 'anomaly';
-        if (isSport || category === 'sport') return 'evening_rim';
+        if (isWeather || category === 'weather') return 'weather';
+        if (isSport || category === 'sport') return 'sports';
         if (isResource) return 'trade_minerals';
         if (isAI) return 'machine_intel';
         if (isMarket || category === 'markets') return 'economy';
@@ -808,16 +1097,33 @@ const GNNDirector = (() => {
 
     function sortActiveQueue() {
         const now = Date.now();
+        // A show reads its primary bucket first — the first of its `draws`.
+        // Sorted only by score, a weather show drawing weather, science and
+        // the morning desk read whichever scored highest, and 300 tech
+        // stories outranked the dozen weather ones it existed to read.
+        const primary = drawsFor(getShowInfo().id)[0];
+        // A story placed by hand — an inject, or a review tool's chosen
+        // headline (importance 9000+) — still goes first, whatever its topic.
+        const forced = (x) => (x.importance || 0) >= 9000 || !!x.breaking;
+        const byPrimary = (a, b) => (forced(b) - forced(a))
+            || ((b.targetShow === primary) - (a.targetShow === primary));
+        // Forced stories are taken out before either ordering and put back
+        // at the front: ahead of the stories teased in the cold open, and
+        // where the topic interleave cannot push them back. Both did — a
+        // chosen headline injected during the first read of a show waited
+        // behind two teased stories and never aired in time.
+        const front = queue.filter(forced);
+        const rest = queue.filter((x) => !forced(x));
         if (pinnedRundown && pinnedRundown.length) {
             const pinnedSet = new Set(pinnedRundown);
-            const remaining = queue.filter((item) => !pinnedSet.has(item));
-            remaining.sort((a, b) => storyScore(b, now) - storyScore(a, now));
+            const remaining = rest.filter((item) => !pinnedSet.has(item));
+            remaining.sort((a, b) => byPrimary(a, b) || storyScore(b, now) - storyScore(a, now));
             const interleaved = interleaveByTopic(remaining);
-            const activePinned = pinnedRundown.filter((item) => queue.includes(item));
-            queue = [...activePinned, ...interleaved];
+            const activePinned = pinnedRundown.filter((item) => rest.includes(item));
+            queue = [...front, ...activePinned, ...interleaved];
         } else {
-            queue.sort((a, b) => storyScore(b, now) - storyScore(a, now));
-            queue = interleaveByTopic(queue);
+            rest.sort((a, b) => byPrimary(a, b) || storyScore(b, now) - storyScore(a, now));
+            queue = [...front, ...interleaveByTopic(rest)];
         }
     }
 
@@ -827,20 +1133,43 @@ const GNNDirector = (() => {
         const target = getShowInfo().id;
         if (!activeQueueShowId) activeQueueShowId = target;
         if (activeQueueShowId !== target) {
-            if (queue.length) {
-                const oldBucket = showQueues[activeQueueShowId] || (showQueues[activeQueueShowId] = []);
-                oldBucket.push(...queue);
-                queue = [];
+            // Leftovers go back to the bucket each story was routed to, not
+            // to the outgoing show: a show that draws several buckets would
+            // otherwise re-file every story under its own name.
+            for (const it of queue) {
+                const b = it.targetShow || activeQueueShowId;
+                (showQueues[b] || (showQueues[b] = [])).push(it);
             }
+            queue = [];
             activeQueueShowId = target;
             // eslint-disable-next-line no-console
-            console.log(`[GNN Director] queue -> ${target} `
-                + `(leftovers returned to ${Object.keys(showQueues).join(', ') || 'none'})`);
+            console.log(`[GNN Director] queue -> ${target} draws ${drawsFor(target).join('+')} `
+            + `(held: ${Object.keys(showQueues).filter((k) => showQueues[k].length).join(', ') || 'none'})`);
         }
-        const bucket = showQueues[target];
-        if (bucket && bucket.length) {
-            queue.push(...bucket);
-            delete showQueues[target];
+        for (const b of drawsFor(target)) {
+            const bucket = showQueues[b];
+            if (bucket && bucket.length) {
+                queue.push(...bucket);
+                delete showQueues[b];
+            }
+        }
+        // A show whose buckets are empty would read nothing, go dry and
+        // close: borrow from the fullest buckets rather than air dead
+        // time. Lore shows read the archive, not the queue.
+        // Sport is never borrowed by a show that does not draw it: the
+        // sports bucket is usually the fullest, so an empty Evening Rim used
+        // to fill itself with match reports.
+        if (!LORE_BLOCKS.has(target)) {
+            const want = MIN_STORIES_PER_SHOW + 2;
+            const draws = drawsFor(target);
+            while (queue.length < want) {
+                const fullest = Object.keys(showQueues)
+                    .filter((k) => k !== 'archives' && showQueues[k].length)
+                    .filter((k) => !SEGREGATED_BUCKETS.has(k) || draws.includes(k))
+                    .sort((a, b) => showQueues[b].length - showQueues[a].length)[0];
+                if (!fullest) break;
+                queue.push(showQueues[fullest].shift());
+            }
         }
         sortActiveQueue();
     }
@@ -858,8 +1187,8 @@ const GNNDirector = (() => {
             // Some restored ledger records use the canonical key rather than
             // the exact title; track both so alternate sources do not re-enqueue.
             const titleKey = String(it.title || '').toLowerCase()
-                .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
-                .replace(/[^a-z0-9]+/g, ' ').trim();
+            .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, ' ').trim();
             if (directorStoryKeys.has(titleKey)) continue;
 
             // Always recompute the target. Do NOT trust it.targetShow from the
@@ -876,11 +1205,20 @@ const GNNDirector = (() => {
             }
             directorStoryKeys.add(key);
             directorStoryKeys.add(titleKey);
-            if (target === currentShow) {
+            // A forced story (an inject, a review tool's chosen headline)
+            // goes on air in this show whatever its topic; otherwise a
+            // headline the topic words miss was filed elsewhere and never
+            // aired.
+            if (drawsFor(currentShow).includes(target) || (it.importance || 0) >= 9000) {
                 queue.push(it);
             } else {
                 const bucket = showQueues[target] || (showQueues[target] = []);
                 bucket.push(it);
+                if (bucket.length > BUCKET_CAP) {
+                    const t = Date.now();
+                    bucket.sort((a, b) => storyScore(b, t) - storyScore(a, t));
+                    bucket.length = BUCKET_CAP;
+                }
             }
             addedByShow[target] = (addedByShow[target] || 0) + 1;
             addedCount++;
@@ -894,6 +1232,7 @@ const GNNDirector = (() => {
             GNNFeedManager.saveLedger();
         }
     }
+
     /**
      * Release stories from the held buckets back into the queue.
      *
@@ -920,7 +1259,6 @@ const GNNDirector = (() => {
         const beat = deskBeat();
         const taken = [];
 
-        // First pass: categories the desk covers.
         for (const cat of Object.keys(heldByCategory)) {
             if (taken.length >= maxItems) break;
             if (!beat || !beat.has(cat)) continue;
@@ -954,10 +1292,10 @@ const GNNDirector = (() => {
     function injectBreaking(title, description) {
         pendingBreaking = {
             title: String(title || '').toUpperCase(),
-            description: description || '',
-            breaking: true,
-            importance: 9999,
-            timestamp: Date.now(),
+                     description: description || '',
+                     breaking: true,
+                     importance: 9999,
+                     timestamp: Date.now(),
         };
         // eslint-disable-next-line no-console
         console.log('[GNN Director] injectBreaking queued:', pendingBreaking.title);
@@ -966,7 +1304,7 @@ const GNNDirector = (() => {
     /** Loose comparison: case, punctuation and spacing are not the story. */
     function norm(t) {
         return String(t || '').toLowerCase()
-            .replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+        .replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
     /**
@@ -1081,16 +1419,24 @@ const GNNDirector = (() => {
     // headline — not buried in the body — and it will not fire twice inside
     // a few minutes however the wire reads.
     const BREAKING_WORDS =
-        /\b(breaking|emergency|catastroph\w*|evacuat\w*|disaster|massacre)\b/i;
+    /\b(breaking|emergency|catastroph\w*|evacuat\w*|disaster|massacre)\b/i;
     const BREAKING_COOLDOWN_MS = 6 * 60 * 1000;
-    let lastBreakingAt = 0;
+    // -Infinity, not 0. Measured against `performance.now()`, which starts
+    // at zero when the page loads, a 0 here meant the cooldown was already
+    // running at boot: no breaking story could fire in the first six
+    // minutes of any session — including Orion Mode's.
+    let lastBreakingAt = -Infinity;
 
     function isBreaking(item) {
-        if (!item) return false;
+        if (!item || item.lore) return false;
         const now = performance.now();
+        // The cooldown rate-limits *headline matches* — a feed with three
+        // "emergency" stories in a row should not trip the klaxon three
+        // times. A story injected as breaking on purpose (Orion Mode, a
+        // forced test) is not a match to be rate-limited.
+        if (item.breaking) { lastBreakingAt = now; return true; }
         if (now - lastBreakingAt < BREAKING_COOLDOWN_MS) return false;
-        const flagged = item.breaking || BREAKING_WORDS.test(item.title || '');
-        if (!flagged) return false;
+        if (!BREAKING_WORDS.test(item.title || '')) return false;
         lastBreakingAt = now;
         return true;
     }
@@ -1098,6 +1444,8 @@ const GNNDirector = (() => {
     // ---------------------------------------------------------
     // Segments
     // ---------------------------------------------------------
+
+    let boothIdentFired = false;
 
     /**
      * The booth ident — the station's fixed opening announcement, read by
@@ -1136,6 +1484,12 @@ const GNNDirector = (() => {
      * Returns the estimated duration in ms.
      */
     function boothIdent() {
+        if (boothIdentFired) {
+            console.warn('[GNN Director] boothIdent called twice; '
+            + 'second call ignored');
+            return 0;
+        }
+        boothIdentFired = true;
         GNNAudio.play('intro_sfx_01', { gain: 0.55 });
         return say(BOOTH_IDENT_LINE, {
             voice: 'vox_unit',
@@ -1178,9 +1532,43 @@ const GNNDirector = (() => {
      * new show a fresh fifteen minutes and its own one correspondent slot.
      */
     function beginColdOpen(now) {
+        const prevBlock = blockIndex;
+        showLengthMs = SHOW_MS;
+        if (URL_FLAGS.forcedBlock) {
+            const idx = SHOW_SCHEDULE.findIndex(
+                (s) => s.id === URL_FLAGS.forcedBlock);
+            if (idx >= 0) blockIndex = idx;
+        } else if (URL_FLAGS.disableClock) {
+            // Clock off: walk the shows in order, as the station used to.
+            if (firstColdOpenDone && !incomingBlockSet) {
+                blockIndex = (blockIndex + 1) % SHOW_SCHEDULE.length;
+            }
+        } else {
+            // Every cold open reads the grid. A show runs to the end of its
+            // quarter-hour slot, so the channel stays on the clock: a late
+            // boot gets a short first show, an overrun a slightly short
+            // next one. A show that closed early (the wire ran dry) is not
+            // re-opened in the same slot — the next slot's show starts early.
+            const d = new Date();
+            let slot = slotAt(d);
+            let left = msLeftInSlot(d);
+            if (!incomingBlockSet) {
+                if (firstColdOpenDone && blockIndexForSlot(slot) === prevBlock) {
+                    slot += 1;
+                    left += SLOT_MS;
+                }
+                blockIndex = blockIndexForSlot(slot);
+            }
+            // Never shorter than three minutes: a cold open, a few stories
+            // and a close need that long to read as a show at all.
+            showLengthMs = Math.max(3 * 60 * 1000, left);
+        }
+        incomingBlockSet = false;
+        firstColdOpenDone = true;
         activateShowQueue();
         // eslint-disable-next-line no-console
-        console.log('[GNN Director] cold open started (block ' + blockIndex + ')');
+        console.log('[GNN Director] cold open started (block ' + blockIndex
+        + ', ' + getShowInfo().id + ')');
         setState(S.COLD_OPEN, now);
 
         // The top of the hour, as far as the show is concerned. Every
@@ -1189,10 +1577,6 @@ const GNNDirector = (() => {
         // `beginBanter` does too.
         showStartedAt = now;
         correspondentUsed = false;
-        // A new block starts with a clean DRY counter. Without this, a
-        // block that closes early on a starved queue passes the counter
-        // on to the next block, and the next block is closed on its very
-        // first empty tick — one bad wire poisons the rest of the night.
         dryTicks = 0;
 
         // Move to this block's set, backdrop and seated pair in one call.
@@ -1203,32 +1587,35 @@ const GNNDirector = (() => {
             GNNRenderer.setShowBlock(blockIndex);
         }
 
-        // The new lead anchor reads the sign-on, so the station speaks with
-        // that character's voice rather than whatever was left over from
-        // the previous block. Same pattern the initial boot uses in
-        // main.js's init() — set voice, then queue the line that uses it.
-        //
-        // `GNNScript.desk()` reads the renderer's *current* seated pair,
-        // which is why this must come after the setShowBlock call above.
         const seats = GNNScript.desk();
         const lead = seats[0];
         if (lead && lead.voice) GNNTTS.setVoice(lead.voice);
 
+        // A theme per show. Every cold open used to play the same track
+        // (beds[8]) — with 96 shows a day, one sting all day long. Each of
+        // the 24 shows now opens on its own track from both games' 57,
+        // spread by a step coprime with the track count so no two shows
+        // share one; the same show always opens on the same theme.
         const beds = GNNAssets.musicTracks();
         if (beds.length) {
-            GNNAudio.playMusic(beds[8 % beds.length].id,
-                { gain: 0.55, loop: false, fadeIn: 0.4 });
+            const showIdx = Math.max(0, SHOW_SCHEDULE.findIndex((x) => x.id === getShowInfo().id));
+            GNNAudio.playMusic(beds[(showIdx * 7 + 3) % beds.length].id,
+                               { gain: 0.55, loop: false, fadeIn: 0.4 });
         }
 
         const showInfo = getShowInfo();
-        const rundownLines = (typeof GNNScript !== 'undefined' && GNNScript.rundownOpen)
-            ? GNNScript.rundownOpen(queue, showInfo) : null;
+        // The lore show does not tease the real-news queue: its rundown is
+        // bulletins, and promising three real headlines before reading none
+        // of them is its own kind of mixing.
+        const rundownLines = (!isLoreShow() && typeof GNNScript !== 'undefined'
+            && GNNScript.rundownOpen)
+        ? GNNScript.rundownOpen(queue, showInfo) : null;
         if (rundownLines && rundownLines.length) {
             pinnedRundown = (rundownLines.teasedStories && rundownLines.teasedStories.length)
-                ? rundownLines.teasedStories.slice()
-                : null;
+            ? rundownLines.teasedStories.slice()
+            : null;
             const totalMs = queueTaggedLines(rundownLines, { kind: 'headline' });
-            holdUntil = now + Math.max(3800, totalMs + 800);
+            holdUntil = now + Math.max(SPOKEN_FLOOR_MS, 1200);
         } else {
             pinnedRundown = null;
             const open = GNNScript.showOpen(showInfo);
@@ -1240,6 +1627,7 @@ const GNNDirector = (() => {
             });
             holdUntil = now + Math.max(3200, openMs + 900);
         }
+        prefetchUpcomingStory();
     }
 
     function beginRead(now, item) {
@@ -1283,22 +1671,23 @@ const GNNDirector = (() => {
         }
 
         const text = GNNTTS.trimForSynthesis
-            ? GNNTTS.trimForSynthesis(rawText)
-            : rawText;
+        ? GNNTTS.trimForSynthesis(rawText)
+        : rawText;
         readEstimate = GNNTTS.estimateMs(text);
 
         const caption = {
             kind: breaking ? 'breaking' : 'headline',
             cue: breaking ? '⚡ BREAKING TRANSMISSION' : 'SECTOR DESK',
             chyron: breaking ? 'BREAKING — ' + GNNScript.chyron(item)
-                : GNNScript.chyron(item),
+            : GNNScript.chyron(item),
         };
 
+        // No cue on an ordinary story. One was always called here, but no
+        // effect had the `blip` role until the MoO2 sounds were merged, and
+        // then every story started with a click (owner: "annoying").
         if (breaking) {
             GNNAudio.playKlaxon();
             GNNGlitch.flagBreaking(now);
-        } else {
-            GNNAudio.playRole('blip', { gain: 0.4 });
         }
 
         GNNCutsceneManager.prefetch(item);
@@ -1312,8 +1701,7 @@ const GNNDirector = (() => {
         // of a second to a second and a half depending on length, and the
         // director waits on it, so without this every story starts with a
         // pause that scales with how long it is.
-        const upcoming = queue[0];
-        if (upcoming && GNNTTS.prefetch) GNNTTS.prefetch(storyText(upcoming));
+        prefetchUpcomingStory();
         setState(S.READ, now);
         if (onStory) onStory(item);
     }
@@ -1336,7 +1724,7 @@ const GNNDirector = (() => {
      * that character's own voice and the animating plate follows.
      *
      * Queue all the lines at once. The pump plays them one at a time in
-     * order, with the 420 ms beat of air between them. The old per-line
+     * order, with `LINE_GAP_MS` of air between them. The old per-line
      * `setTimeout` approach was a workaround from before the queue
      * existed — it left stale lines in the pipeline whenever the beat was
      * cancelled mid-flight, and its token guard only checked the token
@@ -1350,7 +1738,8 @@ const GNNDirector = (() => {
         banterStreak++;
         setState(S.BANTER, now);
         const total = queueTaggedLines(lines);
-        holdUntil = now + total + 1200;
+        prefetchUpcomingStory();
+        holdUntil = now + SPOKEN_FLOOR_MS;
         return true;
     }
 
@@ -1374,7 +1763,8 @@ const GNNDirector = (() => {
         banterStreak++;
         setState(S.BANTER, now);
         const total = queueTaggedLines(lines);
-        holdUntil = now + total + 1000;
+        prefetchUpcomingStory();
+        holdUntil = now + SPOKEN_FLOOR_MS;
         return true;
     }
 
@@ -1403,26 +1793,22 @@ const GNNDirector = (() => {
     function buildDebateLines(host, guestA, guestB) {
         const lines = [];
         const line = (who, kind, fallback) =>
-            GNNCast.line(kind, who.id) || fallback;
+        GNNCast.line(kind, who.id) || fallback;
 
-        // Moderator opens. The `asks` bank is framed at a correspondent,
-        // which is the right register for putting a question to a guest.
         lines.push({
             who: host,
             text: line(host, 'asks',
-                'Let us start with the position each of you is taking.'),
+                       'Let us start with the position each of you is taking.'),
         });
-        // Guest A states a position.
         lines.push({
             who: guestA,
             text: line(guestA, 'openers',
-                'I will start with what the record actually shows.'),
+                       'I will start with what the record actually shows.'),
         });
-        // Guest B's immediate rebuttal.
         lines.push({
             who: guestB,
             text: line(guestB, 'reactions',
-                'That is a selective reading of the same record.'),
+                       'That is a selective reading of the same record.'),
         });
 
         // A direct exchange if the pair have a relationship. The table is
@@ -1432,7 +1818,7 @@ const GNNDirector = (() => {
         // so a line from A aimed at B is different from one from B aimed
         // at A, and either can be the one that exists.
         const rel = GNNCast.exchange(guestA.id, guestB.id)
-            || GNNCast.exchange(guestB.id, guestA.id);
+        || GNNCast.exchange(guestB.id, guestA.id);
         if (rel) {
             lines.push({ who: guestA, text: rel.jab });
             lines.push({ who: guestB, text: rel.reply });
@@ -1442,30 +1828,26 @@ const GNNDirector = (() => {
             }
         }
 
-        // Second round. The moderator probes, both guests take another
-        // pass. The order is B-then-A so the last word is with the guest
-        // who did not speak immediately before the moderator's question.
         lines.push({
             who: host,
             text: line(host, 'followups',
-                'Both of you are using the same evidence for opposite conclusions.'),
+                       'Both of you are using the same evidence for opposite conclusions.'),
         });
         lines.push({
             who: guestB,
             text: line(guestB, 'openers',
-                'The evidence is what it is. The question is what it licenses.'),
+                       'The evidence is what it is. The question is what it licenses.'),
         });
         lines.push({
             who: guestA,
             text: line(guestA, 'reactions',
-                'That is the same argument with a different label on it.'),
+                       'That is the same argument with a different label on it.'),
         });
 
-        // Moderator closes the segment.
         lines.push({
             who: host,
             text: line(host, 'closers',
-                'That is where we leave it. We will revisit when the next filing lands.'),
+                       'That is where we leave it. We will revisit when the next filing lands.'),
         });
 
         return lines;
@@ -1509,7 +1891,7 @@ const GNNDirector = (() => {
         // than discovering it after the image loads have already run.
         const away = GNNCast.all().filter(
             (p) => !seated.has(p.id) && !p.machine
-                && CORRESPONDENT_READY.has(p.id));
+            && CORRESPONDENT_READY.has(p.id));
         if (away.length < 2) return false;
 
         // Two guests, picked at random. Fisher-Yates on a copy so the
@@ -1534,7 +1916,7 @@ const GNNDirector = (() => {
         try {
             const opened = await GNNCutsceneManager.openDebate(
                 guestA.id, guestB.id, kind, performance.now(),
-                guestA.name.toUpperCase(), guestB.name.toUpperCase());
+                                                               guestA.name.toUpperCase(), guestB.name.toUpperCase());
             if (!opened) return false;
 
             // Queue all lines synchronously now the monitors are open.
@@ -1548,18 +1930,15 @@ const GNNDirector = (() => {
                 // the same as a field correspondent in a two-way. The
                 // moderator reads at the standard anchor pitch.
                 pitch: (id) => guestIds.has(id) ? -1 : -3,
-                drivesDesk: (id) => !guestIds.has(id),
+                                           drivesDesk: (id) => !guestIds.has(id),
             });
 
-            // Drop both monitors when the beat ends, not on a fixed
-            // timer. The ceiling scales with the beat length so a longer
-            // debate is not cut short by a hardcoded timeout.
             drainSpeech(total * 3 + 20000).then(() => {
                 if (GNNCutsceneManager.isTwoWay()) GNNCutsceneManager.endCutaway();
             });
 
-            holdUntil = now + total + 1200;
-            return true;
+                holdUntil = now + SPOKEN_FLOOR_MS;
+                return true;
         } finally {
             twoWayArming = false;
         }
@@ -1622,23 +2001,13 @@ const GNNDirector = (() => {
         const correspondentId = tw.correspondent.id;
         const kind = current ? GNNCutsceneManager.routeFor(current) : null;
 
-        // Reserve the BANTER slot before the await. `beginBanter` has
-        // already set state and bumped banterStreak synchronously, so the
-        // only thing this flag adds is the guarantee that the BANTER case
-        // in `update()` will not fall through to a HOLD while the monitor
-        // is still opening.
         twoWayArming = true;
         try {
             const opened = await GNNCutsceneManager.openTwoWay(
                 tw.correspondent.id, kind, performance.now(),
-                tw.correspondent.name.toUpperCase());
+                                                               tw.correspondent.name.toUpperCase());
 
-            if (!opened) {
-                // No plate for this correspondent on disk, or a break is
-                // active. Do not queue the lines — the caller falls
-                // through to a normal banter beat instead.
-                return false;
-            }
+            if (!opened) return false;
 
             // The monitor is up. Queue the lines now — every part of this
             // runs synchronously before the next frame.
@@ -1646,20 +2015,17 @@ const GNNDirector = (() => {
                 // The correspondent's lines sit a little lower in pitch — a
                 // field reporter through a monitor, not an anchor at the desk.
                 pitch: (id) => id === correspondentId ? -1 : -3,
-                // Only the anchor's lines turn the desk; the correspondent's
-                // do not, because they are not at the desk to turn.
-                drivesDesk: (id) => id !== correspondentId,
+                                           // Only the anchor's lines turn the desk; the correspondent's
+                                           // do not, because they are not at the desk to turn.
+                                           drivesDesk: (id) => id !== correspondentId,
             });
 
-            // Drop the monitor once the exchange is over, not on a timer.
-            // Ceiling scales with the beat length so a long panel is not cut
-            // short by a hardcoded timeout.
             drainSpeech(total * 3 + 20000).then(() => {
                 if (GNNCutsceneManager.isTwoWay()) GNNCutsceneManager.endCutaway();
             });
 
-            holdUntil = now + total + 1200;
-            return true;
+                holdUntil = now + SPOKEN_FLOOR_MS;
+                return true;
         } finally {
             twoWayArming = false;
         }
@@ -1719,33 +2085,18 @@ const GNNDirector = (() => {
                 correspondentUsed = true;
                 return;
             }
-            // No two away guests with plates, or the monitors failed to
-            // open. Refetch the clock — the await above is a window the
-            // frame loop ran in — and fall through to the normal beat.
-            // `beginDebate`'s `finally` has cleared `twoWayArming`, so
-            // the frame loop is free to advance the state if this
-            // fall-through does not land within a tick.
             now = performance.now();
         }
 
         const elapsed = now - showStartedAt;
-        const secondHalf = elapsed >= SHOW_MS * 0.5;
+        const secondHalf = elapsed >= showLengthMs * 0.5;
         // The panel is the show's reserved interview slot, so it is only
         // forced — a random draw in the first half still gets whatever
         // shape the roll produces.
         const forcePanel = !correspondentUsed && secondHalf;
         const rollForTwoWay = !correspondentUsed
-            && (secondHalf || Math.random() < PACE.twoWayShare);
+        && (secondHalf || Math.random() < PACE.twoWayShare);
         if (rollForTwoWay) {
-            // Reserve BANTER *before* the async two-way opens.
-            //
-            // `openTwoWay` awaits image loads; in the meantime the
-            // director's HOLD case would see `!speaking` and fall through
-            // to `nextStory()`, so the two-way played over the top of the
-            // story it was meant to replace. This state set is synchronous
-            // — the flag `twoWayArming` inside `beginTwoWay` closes the
-            // rest of the window, and the BANTER case in `update()`
-            // checks it.
             setState(S.BANTER, now);
             banterStreak++;
             const opts = forcePanel ? { shape: 'panel' } : {};
@@ -1753,16 +2104,6 @@ const GNNDirector = (() => {
                 correspondentUsed = true;
                 return;
             }
-            // No away-correspondent to call, or the correspondent's plate
-            // failed to load. Fall through to the exchange and plain-banter
-            // paths. BANTER state was already set above, which is harmless
-            // — `beginExchange`, `beginStructuredBeat` and `beginPlainBanter`
-            // all set it again for the same reason.
-            //
-            // Refetch the clock: the await above is a window the frame loop
-            // ran in, and every fall-through path uses `now` to compute its
-            // hold window. Using the stale value would shorten the beat by
-            // however long the two-way's image loads took.
             now = performance.now();
         }
         if (Math.random() < PACE.exchangeShare) {
@@ -1776,16 +2117,16 @@ const GNNDirector = (() => {
     }
 
     function beginPlainBanter(now) {
-        const wire = Math.random() < PACE.wireShare;
+        // Sector-wire bulletins only inside the lore show. After a real
+        // story they read as part of the news.
+        const wire = isLoreShow() && Math.random() < PACE.wireShare;
         const who = speaker();
         const line = wire ? GNNScript.sectorWire(current)
-            : GNNScript.banter(current, who);
+        : GNNScript.banter(current, who);
         if (!line) { beginHold(now, PACE.holdAfterBanter, S.READ); return; }
         banterStreak++;
         const est = say(line, {
             pitch: wire ? -6 : -3,
-            // Tagged with the chair, since plain banter is a single-voice
-            // aside from whoever is currently reading.
             speakerId: who ? who.id : null,
             caption: {
                 kind: wire ? 'wire' : 'banter',
@@ -1803,6 +2144,7 @@ const GNNDirector = (() => {
             speakerId: who ? who.id : null,
             caption: { kind: 'banter', cue: '' }
         });
+        prefetchUpcomingStory();
         setState(S.TOSS, now);
     }
 
@@ -1816,11 +2158,14 @@ const GNNDirector = (() => {
             chyron: 'GALACTIC NEWS NETWORK', durationMs: est,
         });
         GNNAudio.play('intro_sfx_01', { gain: 0.45 });
+        prefetchUpcomingStory();
         setState(S.IDENT, now);
     }
 
     async function beginBreak(now) {
-        if (breakArming) return;
+        // A forced break while one is on screen would start a second
+        // continuation, and both would bring the desk back.
+        if (breakArming || GNNCutsceneManager.isBreakActive()) return;
         // eslint-disable-next-line no-console
         console.log('[GNN Director] commercial break started');
         sinceBreak = 0;
@@ -1831,6 +2176,11 @@ const GNNDirector = (() => {
         // air underneath the commercial.
         breakArming = true;
         cancelSpeech();
+        // Assemble while the anchor throws to the break, not after: loading
+        // a dozen plates behind a silent studio was up to three seconds of
+        // dead air between the throw and the first spot.
+        const prepared = GNNCutsceneManager.prepareBreak
+            ? GNNCutsceneManager.prepareBreak().catch(() => null) : null;
         // Thrown to the break by whoever has the chair, rather than cutting
         // from a story straight into an advert.
         const toss = GNNScript.intoBreak();
@@ -1845,7 +2195,7 @@ const GNNDirector = (() => {
         GNNCutsceneManager.endCutaway();
         let total = 0;
         try {
-            total = await GNNCutsceneManager.startCommercialBreak(now);
+            total = await GNNCutsceneManager.startCommercialBreak(now, { prepared });
         } finally {
             breakArming = false;
         }
@@ -1854,9 +2204,29 @@ const GNNDirector = (() => {
         // assembly promise resolves when the break is *built*, not when it
         // has finished playing, so coming back on it put the anchor's
         // voice over the final advert.
-        for (let i = 0; i < 400 && GNNCutsceneManager.isBreakActive(); i++) {
+        const breakTimeout = Math.max(total * 2.5 + 30000, 180000);
+        const breakStart = performance.now();
+        while (GNNCutsceneManager.isBreakActive()) {
+            if (performance.now() - breakStart > breakTimeout) {
+                console.warn('[GNN Director] Commercial break exceeded watchdog limit, aborting break');
+                GNNCutsceneManager.abortBreak();
+                break;
+            }
             await new Promise((r) => setTimeout(r, 150));
         }
+        // Skip during the break aborts it and goes straight to the next
+        // story. This continuation wakes on that abort and must not read
+        // "we now return you…" over the story the viewer skipped to.
+        if (state !== S.BREAK) return;
+
+        // Wait until commercial announcer audio is completely finished before anchor returns live
+        const speechTimeout = performance.now() + 8000;
+        while (typeof GNNTTS !== 'undefined' && GNNTTS.isSpeaking && GNNTTS.isSpeaking() && performance.now() < speechTimeout) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        await new Promise((r) => setTimeout(r, 100));
+        if (state !== S.BREAK) return;
+
         // The return from break, once, here.
         //
         // This used to fire twice: `update()`'s S.BREAK case played one line
@@ -1999,22 +2369,21 @@ const GNNDirector = (() => {
                                     + Math.round(BUMPER_HANDOFF_TIMEOUT_MS / 1000)
                                     + 's — running cold open directly');
                                 coldOpenPending = false;
-                                coldOpenPendingSince = 0;
-                                holdNext = null;
-                                beginColdOpen(now);
-                            }
-                            // Otherwise: bumper is running, wait.
-                        } else if (blockIndex > 0
+                            coldOpenPendingSince = 0;
+                            holdNext = null;
+                            beginColdOpen(now);
+                                }
+                        // Otherwise: bumper is running, wait.
+                        } else if (firstColdOpenDone
                             && typeof window !== 'undefined'
                             && window.GNNBumper && window.GNNBumper.play) {
+                            blockIndex = nextBlockIndex();
+                            incomingBlockSet = true;
                             coldOpenPending = true;
                             coldOpenPendingSince = now;
-                            // eslint-disable-next-line no-console
-                            console.log('[GNN Director] handing cold open to bumper');
+                            console.log('[GNN Director] handing cold open to bumper for incoming show (block '
+                                + blockIndex + ', ' + getShowInfo().id + ')');
                             window.GNNBumper.play();
-                            // holdNext stays S.COLD_OPEN. The bumper
-                            // calls handoffColdOpen() when it has
-                            // finished.
                         } else {
                             holdNext = null;
                             beginColdOpen(now);
@@ -2043,7 +2412,7 @@ const GNNDirector = (() => {
                 if (twoWayArming) break;
                 if (!speaking && !GNNTextEngine.isTyping()) {
                     if (banterStreak < 2 && Math.random() < PACE.doubleBanterChance) {
-                        beginHold(now, [600, 1400], S.BANTER);
+                        beginHold(now, PACE.holdAfterBanter, S.BANTER);
                     } else if (Math.random() < PACE.tossChance) {
                         beginHold(now, PACE.holdAfterBanter, S.TOSS);
                     } else {
@@ -2058,13 +2427,6 @@ const GNNDirector = (() => {
                     beginHold(now, PACE.breathAfterToss, S.READ);
                 }
                 break;
-
-            // No S.BREAK case. `beginBreak()` owns the return — it is the
-            // function that put the break on air, and it is the one that
-            // knows when the last advert has finished playing. When the
-            // case was here, both it and the continuation played a
-            // back-live line and the viewer heard the same announcement
-            // twice. The state still exists; nothing runs while it is set.
 
             case S.DRY: {
                 // Cap the number of consecutive DRY ticks. Without this a
@@ -2093,24 +2455,18 @@ const GNNDirector = (() => {
                     break;
                 }
                 if (queue.length) { nextStory(now); break; }
-                // The show should still end on time even if the wire has
-                // gone quiet. Airtime does not pause because the feed did,
-                // and a channel that sat on a HOLD card for six minutes
-                // past the end of the block would be a channel that
-                // forgot to sign off. Same check as `decideAfterRead`,
-                // reading the same two values.
-                if (now - showStartedAt >= SHOW_MS
+                if (now - showStartedAt >= showLengthMs
                     && (storiesRead >= MIN_STORIES_PER_SHOW || queue.length === 0)) {
                     beginShowClose(now);
-                    break;
-                }
-                // A queue that is empty is not the same as a wire that has
-                // nothing on it. Try the held buckets before giving up to
-                // the DRY loop — `drainHeld` was already called by
-                // `nextStory`, so reaching here means the buckets are empty
-                // too. Fall through to DRY.
-                if (!speaking && now >= holdUntil) beginDry(now);
                 break;
+                    }
+                    // A queue that is empty is not the same as a wire that has
+                    // nothing on it. Try the held buckets before giving up to
+                    // the DRY loop — `drainHeld` was already called by
+                    // `nextStory`, so reaching here means the buckets are empty
+                    // too. Fall through to DRY.
+                    if (!speaking && now >= holdUntil) beginDry(now);
+                    break;
             }
 
             default:
@@ -2132,16 +2488,6 @@ const GNNDirector = (() => {
      */
     function beginShowClose(now) {
         const line = GNNScript.showClose();
-        // The sign-off is always the lead. `showClose()` names them by
-        // name in the text, so the voice must be theirs too — using
-        // `speaker()` here read the chair, and when the chair happened to
-        // be the co-anchor the station heard Varr introduce herself as
-        // Commander Hale.
-        //
-        // The same rule applies across a block boundary: read `desk()`
-        // *before* advancing the block index, so the sign-off uses the
-        // outgoing lead's voice, not the incoming one's. The order of these
-        // two statements is the whole of the correctness here.
         const seats = GNNScript.desk();
         const lead = seats[0];
         const est = say(line, {
@@ -2155,21 +2501,8 @@ const GNNDirector = (() => {
 
         storiesRead = 0;
 
-        // Advance to the next block. The swap itself happens in
-        // `beginColdOpen`, which runs after this hold resolves — see the
-        // comment there for why the order (swap, then read the desk, then
-        // set the voice, then speak) matters.
-        //
-        // A plain increment, not a modulo. `GNNRenderer.setShowBlock()`
-        // wraps internally with `((n % count) + count) % count`, so the
-        // counter can grow past the number of blocks without the renderer
-        // caring. A `% 10` here would be a second, independent count of
-        // how many blocks exist — and the day an eleventh set is added to
-        // `main.js`'s `SET_FILES`, the two counts would disagree and the
-        // rotation would land one block out of step with the seated pair.
-        blockIndex++;
-
-        beginHold(now, [est + 600, est + 1200], S.COLD_OPEN);
+        // The hold also waits for the line to finish, so no estimate here.
+        beginHold(now, [600, 1200], S.COLD_OPEN);
     }
 
     /**
@@ -2185,7 +2518,7 @@ const GNNDirector = (() => {
      */
     function decideAfterRead(now) {
         const elapsed = now - showStartedAt;
-        if (elapsed >= SHOW_MS && (storiesRead >= MIN_STORIES_PER_SHOW || queue.length === 0)) {
+        if (elapsed >= showLengthMs && (storiesRead >= MIN_STORIES_PER_SHOW || queue.length === 0)) {
             beginShowClose(now);
         } else if (sinceBreak >= nextBreakAt) {
             beginHold(now, PACE.holdBeforeBreak, S.BREAK);
@@ -2201,6 +2534,10 @@ const GNNDirector = (() => {
     }
 
     function nextStory(now) {
+        if (isLoreShow()) {
+            const lore = loreItem();
+            if (lore) { beginRead(now, lore); return; }
+        }
         if (typeof GNNFeedManager !== 'undefined' && queue.length < 3) {
             GNNFeedManager.replenishQueue();
         }
@@ -2226,7 +2563,11 @@ const GNNDirector = (() => {
 
     function skip() {
         const now = performance.now();
-        if (breakArming) return;
+        // Not while a break is being assembled, and not during a show
+        // bumper: by then `blockIndex` and the studio are already the
+        // incoming show's, so a skip read the outgoing show's stories on the
+        // new set and the next cold open skipped the incoming show.
+        if (breakArming || coldOpenPending) return;
         cancelSpeech();
         GNNCutsceneManager.endCutaway();
         if (state === S.BREAK) { GNNCutsceneManager.abortBreak(); }
@@ -2291,37 +2632,44 @@ const GNNDirector = (() => {
                 if (activeQueueShowId) counts[activeQueueShowId] = (counts[activeQueueShowId] || 0) + queue.length;
                 return counts;
             })(), breakArming,
-            sinceBreak, nextBreakAt, sinceIdent, nextIdentAt,
-            speaking, current: current ? current.title : null,
-            block: blockIndex,
-            // Show-scoped state, for the telemetry line. `showLeftMs` is
-            // what the readout uses to show how much show is left, and
-            // `correspondentUsed` is what tells a watching developer
-            // whether the two-way has fired yet.
-            showElapsedMs: elapsed,
-            showLeftMs: Math.max(0, SHOW_MS - elapsed),
-            correspondentUsed,
-            activeQueueShowId,
-            // Whether the director is currently waiting on the bumper's
-            // handoff. Exposed for the telemetry line so a stuck bumper is
-            // visible at a glance.
-            coldOpenPending,
-            // Held-bucket counts, for anyone watching the filter from the
-            // telemetry line. Empty object when nothing is held.
-            held: (() => {
-                const out = {};
-                for (const cat of Object.keys(heldByCategory)) {
-                    if (heldByCategory[cat].length) out[cat] = heldByCategory[cat].length;
-                }
-                return out;
-            })(),
+                     sinceBreak, nextBreakAt, sinceIdent, nextIdentAt,
+                     speaking, current: current ? current.title : null,
+                     block: blockIndex,
+                     // Show-scoped state, for the telemetry line. `showLeftMs` is
+                     // what the readout uses to show how much show is left, and
+                     // `correspondentUsed` is what tells a watching developer
+                     // whether the two-way has fired yet.
+                     showElapsedMs: elapsed,
+                     showLeftMs: Math.max(0, showLengthMs - elapsed),
+                     correspondentUsed,
+                     activeQueueShowId,
+                     // Whether the director is currently waiting on the bumper's
+                     // handoff. Exposed for the telemetry line so a stuck bumper is
+                     // visible at a glance.
+                     coldOpenPending,
+                     // Held-bucket counts, for anyone watching the filter from the
+                     // telemetry line. Empty object when nothing is held.
+                     held: (() => {
+                         const out = {};
+                         for (const cat of Object.keys(heldByCategory)) {
+                             if (heldByCategory[cat].length) out[cat] = heldByCategory[cat].length;
+                         }
+                         return out;
+                     })(),
         };
     }
+
+    // Wall-clock gating, at boot.
+    blockIndex = initialBlockIndex();
 
     return {
         STATES: S, PACE,
         update, enqueueAll, injectBreaking, skip, pause, resume, forceBreak,
         interject,
+        /** For review tools: end the current show now (close, bumper, next). */
+        forceShowClose: () => beginShowClose(performance.now()),
+        /** Show ids in block order — what `blockIndex` indexes. */
+        scheduleIds: () => SHOW_SCHEDULE.map((x) => x.id),
         /**
          * The booth ident — see the function of the same name above.
          * Called from main.js's runBootSequence so the station's fixed
@@ -2342,77 +2690,80 @@ const GNNDirector = (() => {
         handoffColdOpen,
         /** Which seat is reading the story, for the rundown's own use. */
         activeSeat: () => seatIndex,
-        /**
-         * Which seat is speaking *this line*, or -1 when the speaker is
-         * not at the desk.
-         *
-         * The renderer's hero/speaking swap and the text engine's bubble
-         * position both read this.
-         *
-         * Three cases:
-         *
-         *   - A specific speaker is set (an exchange, a two-way, a
-         *     debate): their seat, or -1 when they are not seated.
-         *   - No specific speaker, but the line drives the desk (a normal
-         *     anchor read, plain banter, a toss, a commercial throw): the
-         *     chair.
-         *   - No specific speaker, and the line does NOT drive the desk
-         *     (the booth ident, a correspondent's answering line, either
-         *     debate guest): -1. The caption draws centred and no anchor
-         *     is shown as the speaker, because no anchor is the speaker.
-         */
-        activeSeatForLine: () => {
-            if (!speaking) return seatIndex;
-            if (currentLineSpeaker) {
-                if (typeof GNNRenderer === 'undefined' || !GNNRenderer.seatedIds) return -1;
-                const ids = GNNRenderer.seatedIds();
-                return ids.indexOf(currentLineSpeaker.id);
-            }
-            // No specific speaker. The drivesDesk flag tells us whether
-            // the voice belongs to somebody at the desk. If it does not,
-            // there is no active seat.
-            if (!currentLineDrivesDesk) return -1;
-            return seatIndex;
-        },
-        speaker,
-        /**
-         * Whether the voice currently on the wire belongs to someone at
-         * the desk. The animator reads this — see `js/main.js` — so that a
-         * correspondent appearing in the monitor does not move the mouth
-         * of the anchor watching them, and so that neither debate guest
-         * turns the moderator's head.
-         */
-        speakerIsSeated: () => currentLineDrivesDesk,
-        isRunning: () => running,
-        getState: () => state,
-        getShowInfo,
-        getCurrent: () => current,
-        getQueue: () => queue,
-        getShowQueues: () => Object.fromEntries(Object.entries(showQueues).map(([id, items]) => [id, items.length])),
-        /** Which show's queue is live. Diagnostics only. */
-        getActiveQueueShowId: () => activeQueueShowId,
-        targetShowFor,
-        isSpeaking: () => speaking,
-        report,
-        /**
-         * Stories held because the current desk does not cover their
-         * category. Released back into the queue by `drainHeld` when the
-         * desk would otherwise go to DRY — so a Markets desk with nothing
-         * but World stories on the wire reads the World stories rather
-         * than repeating "standing by" at the viewer.
-         */
-        heldFor: (category) => (heldByCategory[category] || []).slice(),
-        /** How many stories are held, per category. Diagnostics only. */
-        heldCounts: () => {
-            const out = {};
-            for (const cat of Object.keys(heldByCategory)) {
-                out[cat] = heldByCategory[cat].length;
-            }
-            return out;
-        },
-        /** Release held stories back into the queue. Exported for tests. */
-        drainHeld,
-        set onStateChange(fn) { onStateChange = fn; },
-        set onStory(fn) { onStory = fn; },
+                     /**
+                      * Which seat is speaking *this line*, or -1 when the speaker is
+                      * not at the desk.
+                      *
+                      * The renderer's hero/speaking swap and the text engine's bubble
+                      * position both read this.
+                      *
+                      * Three cases:
+                      *
+                      *   - A specific speaker is set (an exchange, a two-way, a
+                      *     debate): their seat, or -1 when they are not seated.
+                      *   - No specific speaker, but the line drives the desk (a normal
+                      *     anchor read, plain banter, a toss, a commercial throw): the
+                      *     chair.
+                      *   - No specific speaker, and the line does NOT drive the desk
+                      *     (the booth ident, a correspondent's answering line, either
+                      *     debate guest): -1. The caption draws centred and no anchor
+                      *     is shown as the speaker, because no anchor is the speaker.
+                      */
+                     activeSeatForLine: () => {
+                         if (!speaking) return seatIndex;
+                         if (currentLineSpeaker) {
+                             if (typeof GNNRenderer === 'undefined' || !GNNRenderer.seatedIds) return -1;
+                             const ids = GNNRenderer.seatedIds();
+                             return ids.indexOf(currentLineSpeaker.id);
+                         }
+                         // No specific speaker. The drivesDesk flag tells us whether
+                         // the voice belongs to somebody at the desk. If it does not,
+                         // there is no active seat.
+                         if (!currentLineDrivesDesk) return -1;
+                         return seatIndex;
+                     },
+                     speaker,
+                     /**
+                      * Whether the voice currently on the wire belongs to someone at
+                      * the desk. The animator reads this — see `js/main.js` — so that a
+                      * correspondent appearing in the monitor does not move the mouth
+                      * of the anchor watching them, and so that neither debate guest
+                      * turns the moderator's head.
+                      */
+                     speakerIsSeated: () => currentLineDrivesDesk,
+                     isRunning: () => running,
+                     getState: () => state,
+                     getShowInfo,
+                     getCurrent: () => current,
+                     getQueue: () => queue,
+                     getShowQueues: () => Object.fromEntries(Object.entries(showQueues).map(([id, items]) => [id, items.length])),
+                     /** Which show's queue is live. Diagnostics only. */
+                     getActiveQueueShowId: () => activeQueueShowId,
+                     targetShowFor,
+                     isSpeaking: () => speaking,
+                     report,
+                     hourToBlock: (h) => blockIndexForHour(h),
+                     slotToBlock: (n) => blockIndexForSlot(n),
+                     daySlots: () => DAY_SLOTS.slice(),
+                     /**
+                      * Stories held because the current desk does not cover their
+                      * category. Released back into the queue by `drainHeld` when the
+                      * desk would otherwise go to DRY — so a Markets desk with nothing
+                      * but World stories on the wire reads the World stories rather
+                      * than repeating "standing by" at the viewer.
+                      */
+                     heldFor: (category) => (heldByCategory[category] || []).slice(),
+                     /** How many stories are held, per category. Diagnostics only. */
+                     heldCounts: () => {
+                         const out = {};
+                         for (const cat of Object.keys(heldByCategory)) {
+                             out[cat] = heldByCategory[cat].length;
+                         }
+                         return out;
+                     },
+                     /** Release held stories back into the queue. Exported for tests. */
+                     drainHeld,
+                     set onStateChange(fn) { onStateChange = fn; },
+                     set onStory(fn) { onStory = fn; },
     };
 })();

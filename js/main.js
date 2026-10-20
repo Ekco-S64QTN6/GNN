@@ -9,7 +9,13 @@
     'use strict';
 
     const ASSET_DIR = 'assets';
-    const RENDER_FPS = 20;
+    // 20 on air. `?fps=30` (or 60) for recording — the trailer tool asks
+    // for 30 so its footage is not stepped at the broadcast's frame rate.
+    const RENDER_FPS = (() => {
+        const m = String((typeof window !== 'undefined' && window.location && window.location.search) || '')
+            .match(/[?&]fps=(30|60)\b/);
+        return m ? Number(m[1]) : 20;
+    })();
     const FRAME_MS = 1000 / RENDER_FPS;
 
     // ---------------------------------------------------------
@@ -44,17 +50,24 @@
     // The mapping is a design choice, not a code constraint. Edit the
     // filenames here to change which card a show opens on; the code
     // reads the value and never assumes what it points at.
-    // Five shows have titlecards on disk. The other five do not, and
-    // reference no card — `bootCardsForBlock()` returns slate-only for a
-    // block with no entry here, so those shows open on the station slate
-    // and go straight to the studio. Add an entry to give a show its own
-    // card; the value is the filename inside `assets/generated/titlecards/`.
+    // Every show has a card. A block with no entry here, or whose file is
+    // missing, opens on the station slate instead — `bootCardsForBlock()`
+    // falls back rather than failing. The value is a filename inside
+    // `assets/generated/titlecards/`.
     const SHOW_CARDS = {
         morning_watch: 'main_desk.png',
         economy: 'market_desk.png',
         crossfire: 'the_spotlight.png',
         cybernetics: 'tech_desk.png',
         trade_minerals: 'fleet_briefing.png',
+        // Composed by tools/compose_titlecards.py from the show's own studio
+        // as the renderer draws it, with a branded bar. Re-run that tool
+        // after changing a show's set or pair.
+        machine_intel: 'machine_intel.png',
+        diplomacy: 'diplomacy.png',
+        evening_rim: 'evening_rim.png',
+        anomaly: 'anomaly.png',
+        archives: 'archives.png',
     };
 
     // Boot track — the full-length music bed that covers the initial
@@ -249,6 +262,33 @@
     const telemetryToggle = $('telemetry-toggle');
     const assetReadout = $('asset-readout');
     const secretLog = $('secret-log');
+    const secretBoard = $('secret-board');
+    const secretBoardTitle = $('secret-board-title');
+
+    /** Every secret: found ones by name, the rest as a blank and a hint. */
+    function renderSecretBoard() {
+        if (!secretBoard || typeof GNNGlitch === 'undefined' || !GNNGlitch.secretsBoard) return;
+        const board = GNNGlitch.secretsBoard();
+        const found = board.filter((x) => x.found).length;
+        if (secretBoardTitle) {
+            secretBoardTitle.textContent = 'Secrets — ' + found + ' of ' + board.length + ' found';
+        }
+        secretBoard.innerHTML = '';
+        for (const x of board) {
+            const li = document.createElement('li');
+            if (x.found) {
+                li.className = 'found';
+                li.textContent = x.title;
+            } else {
+                li.textContent = '\u2592\u2592\u2592\u2592\u2592\u2592';
+                const hint = document.createElement('span');
+                hint.className = 'hint';
+                hint.textContent = x.hint;
+                li.appendChild(hint);
+            }
+            secretBoard.appendChild(li);
+        }
+    }
     const telemetry = $('telemetry');
 
     let lastRender = 0;
@@ -333,7 +373,7 @@
             { sid: 'psilon', voice: 'bm_fable' },
             { sid: 'sakkra', voice: 'bm_daniel' },
             { sid: 'mrrshan', voice: 'bm_george' },
-            { sid: 'alkari', voice: 'bf_emma' },
+            { sid: 'alkari', voice: 'am_puck' },
             { sid: 'darlok', voice: 'vox_unit' },
             { sid: 'meklar', voice: 'vox_unit' },
             { sid: 'silicoid', voice: 'bf_isabella' },
@@ -371,14 +411,16 @@
         const robotCfg = ROSTER.find((r) => r.sid === 'robot');
         const robot = robotCfg ? await loadAnchorSet(robotCfg) : null;
 
-        // One pair per show block, in SHOW_SCHEDULE order. Left-hand id
-        // sits on the left of the desk.
+        // FALLBACK ONLY. Each show's pair comes from
+        // assets/generated/show-config.json, by show id (below); this table
+        // is used only for a show the config leaves out or names an anchor
+        // that did not load. Left-hand id sits on the left of the desk.
         //
-        // Blocks 0, 1, 2, 3 and 5 open on a titlecard, so their pairs
-        // must match that card exactly — the slate shows the two
-        // characters, then the studio fades in to the same two
-        // characters in the same seats. Blocks 4, 6, 7, 8 and 9 have no
-        // card, so their pairs are free.
+        // A show's pair must match its title card — the card shows the two
+        // characters, then the studio fades in to the same two in the same
+        // seats. Five cards are generated art; the other five are composed
+        // from the running studio by tools/compose_titlecards.py, so after
+        // changing one of those pairs, re-run that tool.
         //
         // Every id here must be a species with a `_desk_hero.png` in
         // `assets/generated/anchors/`. That includes `robot` now — see
@@ -407,9 +449,59 @@
         ];
 
         const anchorById = new Map(anchorList.map((a) => [a.sid, a]));
-        const anchorPairs = SHOW_PAIRS
+        let anchorPairs = SHOW_PAIRS
             .map((pair) => pair.map((sid) => anchorById.get(sid)).filter(Boolean))
             .filter((pair) => pair.length > 0);
+
+        // Each show's set and pair, by id, from show-config.json.
+        //
+        // The renderer swaps all three by *block index*, and they used to be
+        // three arrays here lined up only by position with the schedule —
+        // which they were not. Four shows aired on another show's set:
+        // Anomaly: Deep Dark at the weather desk, the Evening Rim Report on
+        // the anomaly set, Colonial Mining & Trade on the sports set, the
+        // Machine Intelligence Log on the spotlight set. A set that failed
+        // to load would also have shifted every later show by one. And
+        // show-config.json — what tools/show-editor.html edits — was read
+        // by nothing, so editing a show changed nothing on air.
+        //
+        // Now each block's entry is looked up by its own id. Anything the
+        // config leaves out, or names but cannot be loaded, falls back to
+        // the old positional entry rather than leaving the slot empty.
+        try {
+            const cfg = await fetch(`${GEN}/show-config.json`).then((r) => r.json());
+            const ids = (typeof GNNDirector !== 'undefined' && GNNDirector.scheduleIds)
+                ? GNNDirector.scheduleIds() : (cfg.shows || []).map((x) => x.id);
+            const byShow = new Map((cfg.shows || []).map((x) => [x.id, x]));
+            // Title cards too: a show added to the config gets its card
+            // without a code change. Missing files are skipped at boot.
+            for (const x of cfg.shows || []) {
+                if (x.titlecard) SHOW_CARDS[x.id] = x.titlecard;
+            }
+            // Promos name a show's anchors and air its card.
+            if (GNNScript.setShows) GNNScript.setShows(cfg.shows || []);
+            const setByName = new Map(sets.map((x) => [x.name, x]));
+            // Backdrops are deliberately *not* taken from the config: it
+            // names two, and the window rotates through all of layout.json's
+            // sixteen. Fewer views would be a step towards repetition.
+            const blockSets = [], blockPairs = [];
+            ids.forEach((id, i) => {
+                const show = byShow.get(id) || {};
+                blockSets.push(setByName.get(show.set) || sets[i % Math.max(1, sets.length)]);
+                const pair = (show.pair || []).map((sid) => anchorById.get(sid)).filter(Boolean);
+                blockPairs.push(pair.length === 2 ? pair
+                    : anchorPairs[i % Math.max(1, anchorPairs.length)]);
+            });
+            if (blockSets.every(Boolean)) {
+                sets.splice(0, sets.length, ...blockSets);
+            }
+            if (blockPairs.every((p) => p && p.length)) anchorPairs = blockPairs;
+            log('assets', 'show-config applied: ' + ids.map((id, i) =>
+                id + '=' + (sets[i] ? sets[i].name.replace('_wide_empty.png', '') : '?')).join(' '));
+        } catch (err) {
+            log('assets', 'show-config unavailable, using positional sets: '
+                + (err && err.message ? err.message : err));
+        }
 
         if (!anchorPairs.length && anchorList.length) {
             anchorPairs.push(anchorList.slice(0, 2));
@@ -479,7 +571,7 @@
 
         const story = GNNDirector.getCurrent();
         const icon = story
-            ? GNNIconManager.matchIcon(story.title, story.description)
+            ? GNNIconManager.matchIcon(story.title, story.description, { lore: !!story.lore })
             : null;
 
         GNNRenderer.renderFrame(now, frames, icon);
@@ -570,7 +662,7 @@
             voiceSelect.value = GNNTTS.getVoice();
             voiceSelect.addEventListener('change', () => {
                 console.log('[GNN UI] Voice selected =', voiceSelect.value);
-                GNNTTS.setVoice(voiceSelect.value);
+                GNNTTS.setVoice(voiceSelect.value, { restart: true });
             });
         }
 
@@ -592,6 +684,7 @@
             console.log('[GNN UI] Settings opened');
             settingsPanel.classList.remove('hidden');
             renderFeedList();
+            renderSecretBoard();
         });
         btnCloseSettings.addEventListener('click', () => {
             console.log('[GNN UI] Settings closed');
@@ -716,6 +809,11 @@
             // starts reading the story, not when an RSS item is merely fetched
             // or queued. This guarantees a reported headline cannot return on
             // another show or after a page reload.
+            // Lore bulletins are not news and are not in the ledger. Marking
+            // them warned on every one, and would have filled the shared
+            // ledger with in-universe stories if the feed manager had ever
+            // accepted them.
+            if (item && item.lore) return;
             const showId = GNNDirector.getShowInfo().id;
             // eslint-disable-next-line no-console
             console.log(`[GNN Ledger] onStory fired: "${item.title}" (show=${showId})`);
@@ -758,6 +856,7 @@
         };
 
         GNNGlitch.onSecret = (id, line) => {
+            renderSecretBoard();
             if (secretLog) {
                 const li = document.createElement('li');
                 li.textContent = line;
@@ -781,13 +880,31 @@
     // =========================================================
 
     function wireSettingsKey() {
-        window.addEventListener('keydown', (e) => {
-            if (e.key !== 's' && e.key !== 'S' && e.key !== 'Escape') return;
+        // `s` opens settings, but the station also listens for typed words
+        // (species names, call signs — see the glitch engine), and most of
+        // them contain an `s`. So `s` toggles only when it is pressed on
+        // its own: no letter in the half-second before it, and none in the
+        // half-second after. A word being typed cancels the toggle. Escape
+        // still toggles at once.
+        const ALONE_MS = 500;
+        let lastLetterAt = 0;
+        let pending = null;
+        const toggle = () => {
             const panel = $('settings-panel');
-            if (!panel) return;
+            if (panel) panel.classList.toggle('hidden');
+            renderSecretBoard();
+        };
+        window.addEventListener('keydown', (e) => {
             const t = e.target && e.target.tagName;
             if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') return;
-            panel.classList.toggle('hidden');
+            if (e.key === 'Escape') { toggle(); return; }
+            const letter = /^[a-z0-9]$/i.test(e.key);
+            const now = performance.now();
+            if (pending && letter) { clearTimeout(pending); pending = null; }
+            if ((e.key === 's' || e.key === 'S') && now - lastLetterAt > ALONE_MS) {
+                pending = setTimeout(() => { pending = null; toggle(); }, ALONE_MS);
+            }
+            if (letter) lastLetterAt = now;
         });
     }
 
@@ -835,6 +952,15 @@
         const blockInfo = (typeof GNNDirector !== 'undefined'
             && GNNDirector.getShowInfo) ? GNNDirector.getShowInfo() : null;
         const sequence = await resolveBootSequence(bootCardsForBlock(blockInfo));
+
+        // Seat that show's set and pair now, under the card. The renderer
+        // starts on block 0 — Galactic Morning Watch — and only the first
+        // cold open, after the fade, moved it to the show on the clock: every
+        // boot showed Hale and Varr for a moment first (owner).
+        if (blockInfo && typeof blockInfo.blockIndex === 'number'
+            && typeof GNNRenderer !== 'undefined' && GNNRenderer.setShowBlock) {
+            GNNRenderer.setShowBlock(blockInfo.blockIndex);
+        }
 
         if (card) {
             if (sequence.length) card.src = sequence[0];

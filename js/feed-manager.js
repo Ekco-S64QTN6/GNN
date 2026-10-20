@@ -51,10 +51,19 @@ const GNNFeedManager = (() => {
         { url: 'https://news.un.org/feed/subscribe/en/news/all/rss.xml', cat: 'diplomacy' },
         { url: 'https://feeds.bbci.co.uk/news/politics/rss.xml', cat: 'diplomacy' },
 
+        // --- Weather desk: Sector Weather Watch and Solar Wind Overnight ---
+        // The two weather shows read stories the weather regex catches and
+        // fell back to science and space; these give them a beat of their
+        // own. Both checked live before adding: real weather news (fires,
+        // floods, storms) and storm-tracking forecasts. GDACS was tried and
+        // left out — its items read as machine alerts on air.
+        { url: 'https://www.theguardian.com/world/extreme-weather/rss', cat: 'weather' },
+        { url: 'https://www.severe-weather.eu/feed/', cat: 'weather' },
+
         // --- Late Night Anomaly Log: odd science, deep space, the weird ---
         { url: 'https://www.sciencedaily.com/rss/strange_offbeat.xml', cat: 'anomaly' },
         { url: 'https://phys.org/rss-feed/', cat: 'anomaly' },
-        { url: 'https://www.livescience.com/feeds/all', cat: 'anomaly' },
+        { url: 'https://www.livescience.com/feeds.xml', cat: 'anomaly' },
         { url: 'https://feeds.arstechnica.com/arstechnica/science', cat: 'science' },
         { url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', cat: 'science' },
         { url: 'https://www.nature.com/nature.rss', cat: 'science' },
@@ -198,15 +207,29 @@ const GNNFeedManager = (() => {
             .replace(/\bDuration:\s*\d{1,2}:\d{2}(:\d{2})?/gi, '')
             .replace(/\bImage source,?\s*/gi, '')
             .replace(/\bGetty Images\b/gi, '')
+            // Newsletter plugs inside the Guardian's summaries, which arrive
+            // glued to the story: "Sign up for the US Breaking News email",
+            // "Get our breaking news email, free app or daily news podcast".
+            // The anchors were reading them out as part of the news.
+            .replace(/\b(?:Sign up for|Get our|Subscribe to)\b[^.!?]{0,80}?\b(?:news email|newsletter|email)(?:,\s*free app\s*(?:or|and)\s*daily news podcast)?/gi, ' ')
+            .replace(/Continue reading\.*/gi, '')
+            .replace(/\s{2,}/g, ' ')
             .trim();
         if (/^comments?$/i.test(cleaned)) return '';
         return cleaned;
     }
 
+    // Product reviews and buying guides from the tech feeds: "These 12
+    // automatic cat feeders were the best we tested", "Ember's new mug makes
+    // my nightly tea ritual…". Not news; the anchors were reading them out.
+    // Title only — a story's description can mention testing legitimately.
+    const SHOPPING_TITLE = /\b(?:best\b.{0,50}\b(?:we(?:'|’)?ve tested|we tested|to buy|you can buy|of 20\d\d|for 20\d\d|right now)|we tested|tested and reviewed|buying guide|gift guide|gift ideas|deals?\s+(?:on|for)\b|is on sale|on sale now|price drop|lowest price|our favou?rite|makes my\b|review:)/i;
+
     /** Check if story is a valid news headline (reject ads/promos) */
     function isValidStory(title, desc) {
         if (!title || title.length < 15) return false;
         if (NON_STORY_TITLE.test(title)) return false;
+        if (SHOPPING_TITLE.test(title)) return false;
         const text = `${title} ${desc}`.toUpperCase();
         if (AD_KEYWORDS.some(kw => text.includes(kw))) return false;
         return true;
@@ -233,9 +256,22 @@ const GNNFeedManager = (() => {
         } catch (_) { return String(link).split('#')[0].trim().toLowerCase(); }
     }
 
+    // Every new story is compared with every ledger record from the last 45
+    // days, and each comparison used to re-tokenise both titles: at 20,000
+    // records a 20-story poll cost about two seconds on the frame loop.
+    // Tokens are memoised per title; the cache is dropped when it outgrows
+    // any plausible ledger.
+    const tokenCache = new Map();
     function headlineTokens(value) {
-        return new Set(titleKey(value).split(' ').filter((w) =>
-            w.length >= 4 && !LEDGER_STOPWORDS.has(w)));
+        const key = String(value || '');
+        let tokens = tokenCache.get(key);
+        if (!tokens) {
+            if (tokenCache.size > 60000) tokenCache.clear();
+            tokens = new Set(titleKey(key).split(' ').filter((w) =>
+                w.length >= 4 && !LEDGER_STOPWORDS.has(w)));
+            tokenCache.set(key, tokens);
+        }
+        return tokens;
     }
 
     function headlineSimilarity(a, b) {
@@ -396,6 +432,12 @@ const GNNFeedManager = (() => {
         const link = canonicalLink(item.link);
         if (!key) return null;
         if (newsLedger.has(key)) return newsLedger.get(key);
+        // A source that names each item itself (NOAA: product and issue time)
+        // is matched by that name only. Every NOAA item shares one link and
+        // the quarter-day reports share most of their words, so the link and
+        // fuzzy tests below filed each new one as a repeat of the first — one
+        // space weather story had ever aired.
+        if (item.exactKey) return null;
         // Alias keys cover alternate headlines that were already matched to a
         // canonical story in an earlier poll/session.
         for (const record of newsLedger.values()) {
@@ -643,8 +685,13 @@ const GNNFeedManager = (() => {
                 ? truncateSentenceCleanly(rawDesc, 280) : '';
             if (!isValidStory(title, desc)) continue;
 
-            const linkNode = item.getElementsByTagName('link')[0]
-                || item.getElementsByTagNameNS('http://www.w3.org/2005/Atom', 'link')[0];
+            // An Atom entry may carry several links (alternate, replies,
+            // enclosure) in any order. The ledger matches stories by link, so
+            // take the article itself: rel="alternate", or a link with no rel.
+            const links = [...item.getElementsByTagName('link'),
+                ...item.getElementsByTagNameNS('http://www.w3.org/2005/Atom', 'link')];
+            const linkNode = links.find((l) => !l.getAttribute('rel')
+                || l.getAttribute('rel') === 'alternate') || links[0];
             const link = linkNode
                 ? (linkNode.getAttribute('href') || linkNode.textContent || '').trim() : '';
             const pubDate = textOf(item, ['pubDate', 'published', 'updated', 'date']);
@@ -714,11 +761,13 @@ const GNNFeedManager = (() => {
         return { added: newItems.length, duplicates: droppedCount };
     }
 
-    async function fetchLocalNewsItems() {
+    // `endpoint`: the local digest by default; '/api/spaceweather' gives the
+    // NOAA alerts the server turns into stories, same shape.
+    async function fetchLocalNewsItems(endpoint = '/api/localnews') {
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
         const timeout = controller ? setTimeout(() => controller.abort(), 8000) : null;
         try {
-            const response = await fetch('/api/localnews', controller ? { signal: controller.signal } : undefined);
+            const response = await fetch(endpoint, controller ? { signal: controller.signal } : undefined);
             if (!response.ok) {
                 console.warn(`[GNN Feed] Local digest request failed: HTTP ${response.status}`);
                 return { source: 'local', items: [] };
@@ -733,7 +782,8 @@ const GNNFeedManager = (() => {
                 localItems.push({
                     title: localTitle.toUpperCase(),
                     titleRaw: localTitle,
-                    titleKey: titleKey(localTitle),
+                    titleKey: it.key ? titleKey(it.key) : titleKey(localTitle),
+                    exactKey: !!it.key,
                     description: localDesc,
                     icon: GNNIconManager.matchIcon(localTitle, localDesc),
                     link: it.link || '',
@@ -795,6 +845,9 @@ const GNNFeedManager = (() => {
             const localTask = (async () => {
                 const local = await fetchLocalNewsItems();
                 if (local.items.length) ingestFetchedItems(local.items, 'local digest');
+                // Real space weather for the weather desk (server caches it).
+                const sw = await fetchLocalNewsItems('/api/spaceweather');
+                if (sw.items.length) ingestFetchedItems(sw.items, 'space weather');
                 return local.items.length;
             })();
 

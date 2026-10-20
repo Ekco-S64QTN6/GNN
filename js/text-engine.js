@@ -117,9 +117,28 @@ const GNNTextEngine = (() => {
      * public entry point is `present()`, which defers to this until the
      * voice is ready to arrive with the text.
      */
+    // `?prompter=instant`: every caption appears whole the moment its line
+    // goes on air, instead of typing along with the voice. For recordings —
+    // the trailer tool — where a half-typed line reads as a mistake in a
+    // still frame. Never set on air.
+    const INSTANT = typeof window !== 'undefined' && window.location
+        && /[?&]prompter=instant\b/.test(String(window.location.search || ''));
+
+    // Who the caption's words belong to, taken as the caption is applied —
+    // that is, as its own line's audio starts. The label used to be read at
+    // draw time from whoever was speaking then, so a line with no caption of
+    // its own (the second line of a cold-open exchange) put its speaker's
+    // name over the previous speaker's words: "UNIT 7" over "I am Oth".
+    // A speaker not at the desk (a correspondent in the monitor) leaves it
+    // null: the station colour, and the cue for a label.
+    let captionWho = null;
+
     function applyPresent(text, opts = {}) {
+        const D = typeof GNNDirector !== 'undefined' ? GNNDirector : null;
+        const seat = D && D.activeSeatForLine ? D.activeSeatForLine() : -1;
+        captionWho = seat >= 0 && D && D.speaker ? D.speaker() : null;
         fullText = String(text || '').replace(/\s+/g, ' ').trim();
-        visible = opts.instant ? fullText.length : 0;
+        visible = (opts.instant || INSTANT) ? fullText.length : 0;
         holding = false;
         kind = opts.kind || 'headline';
         chyron = opts.chyron !== undefined ? opts.chyron : chyron;
@@ -270,43 +289,6 @@ const GNNTextEngine = (() => {
     // Rendering
     // ---------------------------------------------------------
 
-    /**
-     * Where the speaker's face is, and in whose colour.
-     *
-     * Still used for the accent stripe and the label colour, so you can
-     * still tell who is talking at a glance even though the box no longer
-     * sits over their head. The tail that pointed at them is gone.
-     *
-     * `seat: -1` means the line's speaker is not at the desk — a
-     * correspondent in the monitor. The colour falls back to the station
-     * accent and the label reads the cue rather than the (unknown) face.
-     */
-    function speakerAnchor(ctx) {
-        const w = ctx.canvas.width;
-        const h = ctx.canvas.height;
-        const mid = {
-            x: Math.round(w * 0.5), y: Math.round(h * 0.42),
-            colour: null, seat: -1
-        };
-        if (typeof GNNRenderer === 'undefined' || !GNNRenderer.hitRegions) return mid;
-        let faces;
-        try { faces = GNNRenderer.hitRegions().faces; } catch (err) { return mid; }
-        if (!faces || !faces.length) return mid;
-        const chair = (typeof GNNDirector !== 'undefined'
-            && GNNDirector.activeSeatForLine)
-            ? GNNDirector.activeSeatForLine() : 0;
-        if (chair < 0) return mid;
-        const f = faces[chair] || faces[0];
-        const who = (typeof GNNDirector !== 'undefined' && GNNDirector.speaker)
-            ? GNNDirector.speaker() : null;
-        return {
-            x: Math.round(f.x + f.w / 2),
-            y: Math.round(f.y),
-            colour: who && who.colour ? who.colour : null,
-            seat: chair,
-        };
-    }
-
     /** Resolve the caption's pixel rect against the canvas it is drawn on. */
     function layout(ctx) {
         const w = ctx.canvas.width;
@@ -371,8 +353,7 @@ const GNNTextEngine = (() => {
 
         // Colour still follows the speaker when there is one, so you can
         // tell who is talking at a glance. The station keeps its own.
-        const spk = speakerAnchor(ctx);
-        const accent = (spk.colour && spk.seat >= 0) ? spk.colour : '#6fc3df';
+        const accent = (captionWho && captionWho.colour) ? captionWho.colour : '#6fc3df';
 
         ctx.fillStyle = 'rgba(4,12,20,0.88)';
         ctx.fillRect(BOX.x, BOX.y, BOX.w, BOX.h);
@@ -385,8 +366,7 @@ const GNNTextEngine = (() => {
         // The label is who is talking. "SECTOR DESK" told the viewer
         // nothing; the anchor's name tells them everything, and it is the
         // only label the cast has ever needed.
-        const who = (spk.seat >= 0 && typeof GNNDirector !== 'undefined'
-            && GNNDirector.speaker) ? GNNDirector.speaker() : null;
+        const who = captionWho;
         const label = who && who.name ? who.name.toUpperCase() : cue;
         if (label) {
             ctx.font = `${Math.max(7, Math.round(FONT_SIZE * 0.6))}px "Press Start 2P", monospace`;
@@ -467,6 +447,8 @@ const GNNTextEngine = (() => {
         isTyping: () => !!fullText && visible < fullText.length,
         isHolding: () => holding,
         getText: () => fullText,
+        /** For review tools: whose words the caption is showing, or null. */
+        captionSpeaker: () => (captionWho ? captionWho.name : null),
         getKind: () => kind,
         setChyron: (v) => { chyron = v; },
         setKind: (k) => { kind = k; },

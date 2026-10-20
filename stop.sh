@@ -13,6 +13,7 @@ cd "$(dirname "$0")"
 PORT="${GNN_PORT:-8080}"
 CDP_PORT="${GNN_CDP_PORT:-9333}"
 PIDFILE=".gnn-server.pid"
+[ "$PORT" != 8080 ] && PIDFILE=".gnn-server-$PORT.pid"   # see server.py
 stopped=0
 
 wait_gone() {           # wait_gone <pid> <seconds>

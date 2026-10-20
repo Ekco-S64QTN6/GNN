@@ -9,6 +9,7 @@ cd "$(dirname "$0")"
 
 PORT="${GNN_PORT:-8080}"
 PIDFILE=".gnn-server.pid"
+[ "$PORT" != 8080 ] && PIDFILE=".gnn-server-$PORT.pid"   # see server.py
 LOG="gnn-server.log"
 
 if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then

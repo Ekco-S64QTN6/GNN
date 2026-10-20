@@ -65,7 +65,11 @@ import urllib.request
 
 PORT = int(os.environ.get('GNN_PORT', 8080))
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
-PIDFILE = os.path.join(DIRECTORY, '.gnn-server.pid')
+# A second instance on another port (a test server) keeps its own pid file:
+# sharing one let ./stop.sh kill the test server and ./start.sh report the
+# station "already on air" while nothing was listening on 8080.
+PIDFILE = os.path.join(DIRECTORY, '.gnn-server.pid' if PORT == 8080
+                       else '.gnn-server-%d.pid' % PORT)
 # The technical server log
 LOG = os.path.join(DIRECTORY, 'gnn-server.log')
 # The clean, dedicated broadcast transcript log
@@ -275,6 +279,7 @@ LOCAL_VOICES = [
     ('bm_daniel', 'DANIEL — Council Desk'),
     ('bm_fable', 'FABLE — Archive Reader'),
     ('bm_lewis', 'LEWIS — Colonial Service'),
+    ('am_puck', 'PUCK — Field Reporter'),
     ('af_heart', 'HEART — Anchor (F)'),
     ('af_bella', 'BELLA — Smooth Sci-Fi (F)'),
     ('bf_emma', 'EMMA — Interstellar BBC (F)'),
@@ -456,7 +461,45 @@ def _install_format_override():
 
 _install_format_override()
 
-_tts_lock = threading.Lock()
+# One synthesis at a time, granted in order. It was a bare Lock polled every
+# 200 ms, so whichever waiter woke first won: a commercial break prefetches
+# all sixteen of its lines at once, and the line needed *now* could wait
+# behind lines needed a minute later — up to six seconds of a spot on screen
+# with no voice. Waiters are served first come, first served, except that a
+# live line (seq > 0, the one about to air) goes ahead of every prefetch
+# (seq 0) still waiting.
+_tts_cond = threading.Condition()
+_tts_waiting = []          # tickets, in the order they will be served
+_tts_busy = False
+
+
+def tts_enter(sid, seq):
+    """Wait for this request's turn. False if it was superseded first."""
+    global _tts_busy
+    me = object()
+    with _tts_cond:
+        if seq:
+            at = next((i for i, (_, s) in enumerate(_tts_waiting) if not s),
+                      len(_tts_waiting))
+            _tts_waiting.insert(at, (me, seq))
+        else:
+            _tts_waiting.append((me, seq))
+        while _tts_busy or _tts_waiting[0][0] is not me:
+            _tts_cond.wait(0.2)
+            if superseded(sid, seq):
+                _tts_waiting[:] = [w for w in _tts_waiting if w[0] is not me]
+                _tts_cond.notify_all()
+                return False
+        _tts_waiting.pop(0)
+        _tts_busy = True
+        return True
+
+
+def tts_exit():
+    global _tts_busy
+    with _tts_cond:
+        _tts_busy = False
+        _tts_cond.notify_all()
 
 # Highest request sequence each client session has asked for. The browser
 # abandons a superseded <audio> request by closing the socket, but the server
@@ -847,6 +890,26 @@ def _load_ledger():
     return _ledger_cache
 
 
+# Records first seen this long ago are dropped. The client's fuzzy
+# duplicate check looks back 45 days, so older records do nothing but cost:
+# every new story is compared with the whole window, and the file had no
+# expiry at all. A story that resurfaces after this is older than the
+# director's archive cut-offs (7 days for a digest, 21 for RSS), so it is
+# filed to the lore show's archive bucket and does not re-air.
+LEDGER_RETENTION_DAYS = 90
+
+
+def _expire_ledger(items, now=None):
+    """Drop records first seen before the retention window. Returns count."""
+    cutoff = ((now or time.time()) - LEDGER_RETENTION_DAYS * 86400) * 1000
+    old = [k for k, r in items.items()
+           if isinstance(r, dict) and isinstance(r.get('firstSeenAt'), (int, float))
+           and r['firstSeenAt'] < cutoff]
+    for k in old:
+        del items[k]
+    return len(old)
+
+
 def _save_ledger():
     """Atomically rewrite the ledger file."""
     tmp = LEDGER + '.tmp'
@@ -925,6 +988,8 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self.handle_voices()
         if path == '/api/localnews':
             return self.handle_localnews()
+        if path == '/api/spaceweather':
+            return self.handle_spaceweather()
         if path == '/api/market':
             return self.handle_market()
         if path == '/api/feed':
@@ -1137,6 +1202,8 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
         'www.livescience.com', 'www.nasa.gov', 'www.nature.com',
         'www.sciencedaily.com', 'www.technologyreview.com',
         'www.theverge.com', 'www.wired.com',
+        # Weather desk: the two weather shows had no feed of their own.
+        'www.theguardian.com', 'www.severe-weather.eu',
     }
     FEED_MAX_BYTES = 5 * 1024 * 1024
 
@@ -1175,6 +1242,15 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
                     return self.send_bytes(b'{"error":"feed redirect not allowed"}',
                                            'application/json', 502)
                 body = response.read(self.FEED_MAX_BYTES + 1)
+                # Some feeds (UN News) send gzip whether or not it was asked
+                # for; passed through compressed, the client saw "Invalid feed
+                # XML" on every poll.
+                if body[:2] == b'\x1f\x8b':
+                    import gzip
+                    try:
+                        body = gzip.decompress(body)[:self.FEED_MAX_BYTES + 1]
+                    except OSError:
+                        pass
                 if len(body) > self.FEED_MAX_BYTES:
                     return self.send_bytes(b'{"error":"feed too large"}',
                                            'application/json', 502)
@@ -1358,6 +1434,202 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             sys.stderr.write('[GNN] brief read failed (%s): %s\n'
                              % (os.path.basename(path), err))
         return items
+
+    # NOAA Space Weather Prediction Center alerts, as readable stories for
+    # the weather desk (Solar Wind Overnight). Real data, read straight: each
+    # alert's own headline and its stated impacts, nothing invented. Only the
+    # latest alert of each kind from the last two days, cached 15 minutes.
+    SWPC_URL = 'https://services.swpc.noaa.gov/products/alerts.json'
+    _swpc_cache = {'at': 0.0, 'items': []}
+
+    @staticmethod
+    def _swpc_story(message):
+        lines = [l.strip() for l in message.replace('\r', '').split('\n')]
+        head = next((l for l in lines if re.match(
+            r'^(EXTENDED |CANCEL )?(ALERT|WARNING|WATCH|SUMMARY):', l)), '')
+        if not head or head.startswith('CANCEL'):
+            return None
+        kind, _, what = head.partition(':')
+        what = what.strip().rstrip('.')
+        kind = kind.replace('EXTENDED ', '').lower()
+        m = re.search(r'Geomagnetic K-index of (\d)', what)
+        if m:
+            k = int(m.group(1))
+            storm = {5: ' — a minor G1 storm', 6: ' — a moderate G2 storm',
+                     7: ' — a strong G3 storm', 8: ' — a severe G4 storm',
+                     9: ' — an extreme G5 storm'}.get(k, '')
+            title = ('NOAA %s: geomagnetic activity reaches K-index %d%s' if kind == 'alert'
+                     else 'NOAA %s: geomagnetic K-index of %d expected%s') % (kind, k, storm)
+        elif 'Geomagnetic Storm Category' in what:
+            g = re.search(r'Category (G\d)', what)
+            title = 'NOAA %s: %s geomagnetic storm %s' % (
+                kind, g.group(1) if g else 'a', 'predicted' if 'Predict' in what else 'conditions')
+        elif 'x-ray' in what.lower():
+            cls = re.search(r'\b([MX]\d+(?:\.\d)?)\b', what)
+            title = 'NOAA %s: solar flare detected%s' % (
+                kind, ' at class %s' % cls.group(1) if cls else '')
+        elif 'Electron' in what:
+            title = 'NOAA %s: high-energy electron levels elevated in geostationary orbit' % kind
+        elif 'Proton' in what:
+            title = 'NOAA %s: solar radiation storm, proton levels elevated' % kind
+        elif 'Sudden Impulse' in what:
+            title = 'NOAA %s: sudden jolt to Earth\u2019s magnetic field as solar wind arrives' % kind
+        elif 'Radio Emission' in what or 'Radio Burst' in what or 'Type II' in what or 'Type IV' in what:
+            title = 'NOAA %s: solar radio burst detected' % kind
+        else:
+            title = 'NOAA space weather %s: %s' % (kind, what[:90])
+        impacts = []
+        grab = False
+        for l in lines:
+            if l.startswith('Potential Impacts'):
+                grab = True
+                l = l.partition(':')[2].strip()
+            elif grab and (not l or l.startswith('NOAA Space Weather')):
+                break
+            if grab and l and not l.startswith('Area of impact'):
+                impacts.append(re.sub(r'^[A-Za-z /]+ - ', '', l))
+        desc = ' '.join(impacts[:3])
+        return title, desc
+
+    # Current conditions, so the weather desk has a real reading on a quiet
+    # day too, when NOAA issues no alerts. Built only from the published
+    # numbers: solar wind speed, planetary K-index, the R/S/G scales and the
+    # day's probabilities. One report per UTC quarter-day — the title names
+    # it, so the ledger's title dedupe lets the next one through.
+    SWPC_SCALES = 'https://services.swpc.noaa.gov/products/noaa-scales.json'
+    SWPC_WIND = 'https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json'
+    SWPC_KP = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'
+
+    @staticmethod
+    def _swpc_json(url):
+        req = urllib.request.Request(url, headers={'User-Agent': 'GNN/1.0'})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read(2 * 1024 * 1024).decode('utf-8', 'replace'))
+
+    @staticmethod
+    def _swpc_conditions(scales, wind, kp_rows, now):
+        """(title, description) for the current reading, or None."""
+        when = datetime.datetime.fromtimestamp(now, datetime.timezone.utc)
+        part = ('overnight', 'morning', 'afternoon', 'evening')[when.hour // 6]
+        try:
+            speed = int(round(float(wind[0]['proton_speed']) / 10.0) * 10)
+        except (LookupError, TypeError, ValueError):
+            speed = None
+        try:
+            kp = float(kp_rows[-1]['Kp'])
+        except (LookupError, TypeError, ValueError):
+            kp = None
+        if speed is None and kp is None:
+            return None
+        if kp is None:
+            field = 'geomagnetic field readings delayed'
+        elif kp >= 5:
+            field = 'a G%d geomagnetic storm in progress' % min(5, int(kp) - 4)
+        elif kp >= 4:
+            field = 'geomagnetic field active'
+        elif kp >= 3:
+            field = 'geomagnetic field unsettled'
+        else:
+            field = 'geomagnetic field quiet'
+        wind_txt = ''
+        if speed is not None:
+            pace = ' fast' if speed >= 600 else ''
+            wind_txt = ', solar wind%s at %d kilometres a second' % (pace, speed)
+        title = 'Space weather report, %s %s: %s%s' % (
+            when.strftime('%A'), part, field, wind_txt)
+
+        said = []
+        if kp is not None:
+            said.append('The planetary K-index stands at %d.' % round(kp))
+        now_scale = (scales or {}).get('0') or {}
+        for key, name in (('R', 'Radio blackouts are'), ('S', 'A solar radiation storm is'),
+                          ('G', 'A geomagnetic storm is')):
+            sc = (now_scale.get(key) or {})
+            if str(sc.get('Scale') or '0') not in ('0', 'None'):
+                said.append('%s under way at %s%s, rated %s.'
+                            % (name, key, sc['Scale'], sc.get('Text') or ''))
+        today = (scales or {}).get('1') or {}
+        r1 = (today.get('R') or {}).get('MinorProb')
+        r3 = (today.get('R') or {}).get('MajorProb')
+        s1 = (today.get('S') or {}).get('Prob')
+        if r1 and r3:
+            said.append('NOAA gives a %s percent chance of minor radio blackouts from '
+                        'solar flares today, and %s percent for major ones.' % (r1, r3))
+        if s1:
+            said.append('The chance of a solar radiation storm is %s percent.' % s1)
+        ahead = []
+        for k in ('2', '3'):
+            day = (scales or {}).get(k) or {}
+            g = (day.get('G') or {})
+            if str(g.get('Scale') or '0') not in ('0', 'None'):
+                try:
+                    dname = datetime.datetime.strptime(day['DateStamp'], '%Y-%m-%d').strftime('%A')
+                except (KeyError, ValueError):
+                    dname = 'the coming days'
+                ahead.append('a G%s %s geomagnetic storm is forecast for %s'
+                             % (g['Scale'], g.get('Text') or '', dname))
+        if ahead:
+            said.append(ahead[0][0].upper() + ahead[0][1:] + '.')
+        elif scales:
+            said.append('No geomagnetic storms are forecast for the next two days.')
+        return title, ' '.join(said)
+
+    def handle_spaceweather(self):
+        now = time.time()
+        cache = self._swpc_cache
+        if now - cache['at'] > 900:
+            items = []
+            try:
+                req = urllib.request.Request(self.SWPC_URL, headers={'User-Agent': 'GNN/1.0'})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    alerts = json.loads(r.read(2 * 1024 * 1024).decode('utf-8', 'replace'))
+                seen = set()
+                cutoff = now - 48 * 3600
+                for a in alerts:
+                    try:
+                        t = datetime.datetime.strptime(a['issue_datetime'][:19], '%Y-%m-%d %H:%M:%S') \
+                            .replace(tzinfo=datetime.timezone.utc).timestamp()
+                    except (KeyError, ValueError):
+                        continue
+                    if t < cutoff:
+                        continue
+                    story = self._swpc_story(a.get('message', ''))
+                    if not story or story[0] in seen:
+                        continue
+                    seen.add(story[0])
+                    items.append({'title': story[0], 'description': story[1],
+                                  # Its own identity: the feed-manager would
+                                  # otherwise match every NOAA item to the
+                                  # first by their shared link.
+                                  'key': 'swpc %s %s' % (a.get('product_id', ''),
+                                                         a.get('issue_datetime', '')[:16]),
+                                  'pubDate': datetime.datetime.fromtimestamp(t, datetime.timezone.utc)
+                                  .strftime('%a, %d %b %Y %H:%M:%S GMT'),
+                                  'source': 'NOAA Space Weather', 'category': 'weather',
+                                  'link': 'https://www.swpc.noaa.gov/'})
+                # The current reading leads; a failure here leaves the alerts.
+                try:
+                    cond = self._swpc_conditions(self._swpc_json(self.SWPC_SCALES),
+                                                 self._swpc_json(self.SWPC_WIND),
+                                                 self._swpc_json(self.SWPC_KP), now)
+                except Exception as err:                        # noqa: BLE001
+                    cond = None
+                    sys.stderr.write('[GNN SpaceWeather] conditions failed: %s\n' % err)
+                if cond:
+                    items.insert(0, {'title': cond[0], 'description': cond[1],
+                                     'key': datetime.datetime.fromtimestamp(now, datetime.timezone.utc)
+                                     .strftime('swpc report %Y-%m-%d ') + str(int(now // 21600) % 4),
+                                     'pubDate': datetime.datetime.fromtimestamp(now, datetime.timezone.utc)
+                                     .strftime('%a, %d %b %Y %H:%M:%S GMT'),
+                                     'source': 'NOAA Space Weather', 'category': 'weather',
+                                     'link': 'https://www.swpc.noaa.gov/'})
+                cache['items'] = items[:8]
+                cache['at'] = now
+            except Exception as err:                            # noqa: BLE001
+                sys.stderr.write('[GNN SpaceWeather] fetch failed: %s\n' % err)
+                cache['at'] = now - 600   # retry in five minutes
+        self.send_bytes(json.dumps({'source': 'NOAA Space Weather', 'items': cache['items']}).encode(),
+                        'application/json')
 
     def handle_localnews(self):
         """Serve the deduplicated union of every brief on disk."""
@@ -1585,9 +1857,8 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
         between queued and aired on every PUT.
 
         The size ceiling is 16 MB, not the 1 MB default the other routes
-        use. The ledger grows for the life of the installation and nothing
-        is ever expired, so a station that has been on air for a few weeks
-        will legitimately exceed 1 MB on the write side. The old default
+        use. Records expire after LEDGER_RETENTION_DAYS, but a station on air
+        for weeks still legitimately exceeds 1 MB on the write side. The old default
         silently rejected the PUT at the socket layer, the browser saw a
         400 it could not explain, and the file was never written.
         """
@@ -1623,6 +1894,10 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             ledger['version'] = 1
             ledger['updatedAt'] = datetime.datetime.now(
                 datetime.timezone.utc).isoformat()
+            expired = _expire_ledger(items)
+            if expired:
+                sys.stderr.write('[GNN Ledger] expired %d records older than %d days\n'
+                                 % (expired, LEDGER_RETENTION_DAYS))
             _save_ledger()
 
         stamp = datetime.datetime.now().strftime('%H:%M:%S')
@@ -1685,6 +1960,10 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         voice = clean_voice(q.get('voice', [''])[0])
         use_local = HAVE_LOCAL and (voice in LOCAL_VOICE_IDS or not HAVE_TTS)
+        if not use_local:
+            # misaki's inline phoneme markup `[word](/phonemes/)` is for
+            # Kokoro only; a cloud voice would read the brackets aloud.
+            text = re.sub(r'\[([^\]]*)\]\(/[^)]*/\)', r'\1', text)
         rate = clean_prosody(q.get('rate', [''])[0], '-5%', '%')
         pitch = clean_prosody(q.get('pitch', [''])[0], '-10Hz', 'Hz')
         try:
@@ -1703,10 +1982,9 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
         # edge-tts opens its own websocket per call; serialise so a rapid skip
         # storm cannot open dozens at once. Wait in slices so a request the
         # client has already moved past can give up instead of blocking.
-        while not _tts_lock.acquire(timeout=0.2):
-            if superseded(sid, seq):
-                return self.send_bytes(b'{"error":"superseded"}',
-                                       'application/json', 409)
+        if not tts_enter(sid, seq):
+            return self.send_bytes(b'{"error":"superseded"}',
+                                   'application/json', 409)
         try:
             if superseded(sid, seq):
                 return self.send_bytes(b'{"error":"superseded"}',
@@ -1720,7 +1998,7 @@ class GNNRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self.send_bytes(
                 json.dumps({'error': str(err)}).encode(), 'application/json', 502)
         finally:
-            _tts_lock.release()
+            tts_exit()
 
         if not audio:
             return self.send_bytes(b'{"error":"empty synthesis"}', 'application/json', 502)

@@ -52,7 +52,15 @@ const GNNRenderer = (() => {
     // frame, so the layout survives a change of resolution.
     // Small and high, clear of the heads: the anchors' faces start around
     // 0.33 of the frame and this used to run to 0.41 across the third seat.
-    const ICON = { x: 0.775, y: 0.072, w: 0.152, h: 0.187 };
+    // The over-the-shoulder monitor. One rectangle for the story icon and
+    // the cutaway footage: they used to be two (the icon 0.152x0.187, the
+    // footage 0.175x0.215), so the monitor changed size whenever a cutaway
+    // started. The authority is GNNCutsceneManager.PIP; this is only the
+    // fallback for a frame drawn before that module has loaded.
+    const ICON = { x: 0.715, y: 0.062, w: 0.215, h: 0.211 };
+    function monitorRect() {
+        return (typeof GNNCutsceneManager !== 'undefined' && GNNCutsceneManager.PIP) || ICON;
+    }
 
     let canvas = null;
     let ctx = null;
@@ -222,6 +230,7 @@ const GNNRenderer = (() => {
 
         const set = setsBundle[currentBlock];
         if (set) {
+            currentSetName = set.name || null;
             setPlate = set.plate;
             setWindow = set.window || null;
             // The anchors' seat line for this room. Every set carries its
@@ -338,11 +347,16 @@ const GNNRenderer = (() => {
         // Cutaway / commercial break render in viewport-local space.
         GNNCutsceneManager.render(c, { x: 0, y: 0, w: VIEW.w, h: VIEW.h }, now);
 
-        if (!breakActive) {
-        }
+        if (cleanFrame) return;
         if (!breakActive) drawFurniture(c, now);
         GNNTickerManager.render(c, { x: 0, y: 0, w: VIEW.w, h: VIEW.h });
     }
+
+    // A frame with no broadcast graphics — no caption, crawl or LIVE bug —
+    // for tools that photograph the studio (tools/compose_titlecards.py).
+    // Never set on air.
+    let cleanFrame = false;
+    function setCleanFrame(on) { cleanFrame = !!on; }
 
     /**
      * The bottom of the frame is a stack — ticker, then the name/live row,
@@ -567,35 +581,202 @@ const GNNRenderer = (() => {
     }
 
     /** A studio monitor: the art, inset in a lit bezel. */
-    function drawPlate(c, img, rect) {
-        const x = rect.x * VIEW.w;
-        const y = rect.y * VIEW.h;
-        const w = rect.w * VIEW.w;
-        const h = rect.h * VIEW.h;
-        const pad = Math.max(3, Math.round(VIEW.w * 0.004));
-        c.save();
-        c.fillStyle = 'rgba(2,8,14,0.72)';
-        c.fillRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
-        c.strokeStyle = '#2f7f9c';
-        c.lineWidth = Math.max(2, Math.round(VIEW.w * 0.0025));
-        c.strokeRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
-        c.drawImage(img, x, y, w, h);
-        c.restore();
+
+    // ---------------------------------------------------------
+    // The monitor
+    // ---------------------------------------------------------
+
+    // A generated bezel for the monitor (Prompts/Monitor_Frame_prompts.md),
+    // keyed by condition_plates.py into overlays/keyed/. Its screen opening
+    // is measured from its own alpha when it loads — the transparent run
+    // from the centre outwards — so whatever shape the art comes back in,
+    // the opening lands exactly on the monitor rectangle. Until it exists
+    // the drawn border is used.
+    // Two bezels: gunmetal by default, brass on the warmer sets.
+    const FRAME_DIR = 'assets/generated/overlays/keyed/';
+    const BRASS_SETS = new Set(['archive_wide_empty.png', 'diplomatic_wide_empty.png',
+        'celebrity_wide_empty.png']);
+    const frames = {};   // url -> { img, hole } | null while loading
+    let currentSetName = null;
+
+    function measureHole(im) {
+        const c2 = document.createElement('canvas');
+        c2.width = im.width; c2.height = im.height;
+        const g = c2.getContext('2d');
+        g.drawImage(im, 0, 0);
+        const a = g.getImageData(0, 0, im.width, im.height).data;
+        const at = (x, y) => a[(y * im.width + x) * 4 + 3];
+        const cx = im.width >> 1, cy = im.height >> 1;
+        let l = cx, r = cx, t = cy, b = cy;
+        while (l > 0 && at(l - 1, cy) < 40) l--;
+        while (r < im.width - 1 && at(r + 1, cy) < 40) r++;
+        while (t > 0 && at(cx, t - 1) < 40) t--;
+        while (b < im.height - 1 && at(cx, b + 1) < 40) b++;
+        // A frame with no opening at its centre is not a frame.
+        if (r - l < im.width * 0.3 || b - t < im.height * 0.3) return null;
+        return { l: l / im.width, r: (r + 1) / im.width, t: t / im.height, b: (b + 1) / im.height };
     }
 
-    function drawIconPlate(c, icon) { drawPlate(c, icon, ICON); }
+    function frameFor(url) {
+        if (!(url in frames) && typeof GNNAssets !== 'undefined') {
+            frames[url] = null;
+            GNNAssets.loadImage(url).then((im) => {
+                if (!im) return;
+                try {
+                    const hole = measureHole(im);
+                    if (hole) frames[url] = { img: im, hole };
+                } catch (_) { /* unreadable: keep the drawn border */ }
+            });
+        }
+        return frames[url] || null;
+    }
+
+    function monitorFrameImage() {
+        const brass = currentSetName && BRASS_SETS.has(currentSetName);
+        return (brass && frameFor(FRAME_DIR + 'monitor_frame_brass.png'))
+            || frameFor(FRAME_DIR + 'monitor_frame.png');
+    }
+
+    /**
+     * The monitor's bezel around a rectangle in viewport pixels. Returns
+     * false when there is no generated frame, so the caller draws its own.
+     * Exported: the cutaway footage in the monitor uses the same bezel.
+     */
+    function drawMonitorFrame(c, x, y, w, h) {
+        const f = monitorFrameImage();
+        if (!f) return false;
+        const hole = f.hole;
+        const sw = w / (hole.r - hole.l);
+        const sh = h / (hole.b - hole.t);
+        c.save();
+        c.imageSmoothingEnabled = true;
+        c.imageSmoothingQuality = 'high';
+        c.drawImage(f.img, x - hole.l * sw, y - hole.t * sh, sw, sh);
+        c.restore();
+        return true;
+    }
+
+    /**
+     * The story icon on the monitor.
+     *
+     * The generated icons are pictures without lettering. The MoO1 icons
+     * they replace carried their name and a double green border, and the
+     * monitor reads as a newsroom graphic because of that — so the name and
+     * border are drawn here, inside the screen, in the MoO1 icon's own
+     * colour for that name. The MoO1 icon itself still turns up now and
+     * then (icon.retro) and is drawn as it is, pixels intact.
+     */
+    function drawIconPlate(c, icon) {
+        const R = monitorRect();
+        const x = R.x * VIEW.w, y = R.y * VIEW.h, w = R.w * VIEW.w, h = R.h * VIEW.h;
+        const img = icon && (icon.img || icon);
+        if (!img) return;
+        c.save();
+        const g = c.createLinearGradient(0, y, 0, y + h);
+        g.addColorStop(0, '#071420'); g.addColorStop(1, '#02060b');
+        c.fillStyle = g;
+        c.fillRect(x, y, w, h);
+        if (icon.retro || !icon.label) {
+            c.imageSmoothingEnabled = false;
+            const s = Math.min(w / img.width, h / img.height) * 0.94;
+            c.drawImage(img, x + (w - img.width * s) / 2, y + (h - img.height * s) / 2,
+                img.width * s, img.height * s);
+        } else {
+            const pad = Math.round(w * 0.045);
+            const line = Math.max(2, Math.round(w * 0.012));
+            c.lineWidth = line;
+            c.strokeStyle = '#19b37f';
+            c.strokeRect(x + pad, y + pad, w - pad * 2, h - pad * 2);
+            c.strokeStyle = '#0c5c43';
+            c.strokeRect(x + pad + line * 2, y + pad + line * 2,
+                w - (pad + line * 2) * 2, h - (pad + line * 2) * 2);
+            // The name, sized to fit the inner width.
+            const inner = w - (pad + line * 3) * 2;
+            let size = Math.round(h * 0.11);
+            c.font = size + 'px "Press Start 2P", monospace';
+            while (size > 7 && c.measureText(icon.label).width > inner * 0.92) {
+                size -= 1;
+                c.font = size + 'px "Press Start 2P", monospace';
+            }
+            const labelY = y + h - pad - line * 3 - size * 0.9;
+            c.fillStyle = icon.color || '#ff3b3b';
+            c.textAlign = 'center';
+            c.textBaseline = 'middle';
+            c.fillText(icon.label, x + w / 2, labelY);
+            // The picture fills the space above the name.
+            const top = y + pad + line * 4;
+            const boxH = labelY - size * 0.9 - top;
+            const boxW = inner * 0.9;
+            const s = Math.min(boxW / img.width, boxH / img.height);
+            c.imageSmoothingEnabled = true;
+            c.imageSmoothingQuality = 'high';
+            c.drawImage(img, x + (w - img.width * s) / 2, top + (boxH - img.height * s) / 2,
+                img.width * s, img.height * s);
+        }
+        c.restore();
+        if (!drawMonitorFrame(c, x, y, w, h)) {
+            const pad = Math.max(3, Math.round(VIEW.w * 0.004));
+            c.save();
+            c.strokeStyle = '#2f7f9c';
+            c.lineWidth = Math.max(2, Math.round(VIEW.w * 0.0025));
+            c.strokeRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
+            c.restore();
+        }
+    }
 
     // ---------------------------------------------------------
     // Post-processing
     // ---------------------------------------------------------
 
+    // Scratch surfaces for the fault pass, made once. Every effect below
+    // only runs while a fault is active, so the clean path stays a single
+    // drawImage.
+    let fxSmall = null;        // macroblock downsample
+    let fxSnow = null;         // static
+    let fxTint = null;         // RGB split
+    let fxFreeze = null;       // held frame
+    let freezeHeld = false;
+
+    function scratch(c, w, h) {
+        if (!c) c = document.createElement('canvas');
+        if (c.width !== w) c.width = w;
+        if (c.height !== h) c.height = h;
+        return c;
+    }
+
     function blitViewport(now) {
         const fx = GNNGlitch.videoState(now);
-        const clean = !fx.roll && !fx.tear && !fx.desat && !fx.invert && !fx.shift && !fx.jitter;
+        const clean = !fx.roll && !fx.tear && !fx.desat && !fx.invert && !fx.shift
+            && !fx.jitter && !fx.snow && !fx.pixel && !fx.mirror && !fx.split
+            && !fx.zoom && !fx.band && !fx.black && !fx.bleed && !fx.card
+            && !fx.freeze && !fx.strap;
+
+        // A freeze holds whatever was on screen when it began.
+        if (fx.freeze && !freezeHeld) {
+            fxFreeze = scratch(fxFreeze, vcanvas.width, vcanvas.height);
+            fxFreeze.getContext('2d').drawImage(vcanvas, 0, 0);
+            freezeHeld = true;
+        } else if (!fx.freeze) {
+            freezeHeld = false;
+        }
 
         if (clean) {
             ctx.drawImage(vcanvas, VIEW.x, VIEW.y);
             return;
+        }
+
+        let src = fx.freeze && fxFreeze ? fxFreeze : vcanvas;
+
+        // Macroblocking: the picture rebuilt from a fraction of its pixels,
+        // the way a starved digital decoder falls apart.
+        if (fx.pixel && fx.pixel > 1) {
+            const sw = Math.max(8, Math.round(VIEW.w / fx.pixel));
+            const sh = Math.max(6, Math.round(VIEW.h / fx.pixel));
+            fxSmall = scratch(fxSmall, sw, sh);
+            const sc = fxSmall.getContext('2d');
+            sc.imageSmoothingEnabled = false;
+            sc.drawImage(src, 0, 0, sw, sh);
+            src = fxSmall;
         }
 
         ctx.save();
@@ -604,19 +785,50 @@ const GNNRenderer = (() => {
         ctx.clip();
         ctx.fillStyle = '#000';
         ctx.fillRect(VIEW.x, VIEW.y, VIEW.w, VIEW.h);
+        ctx.imageSmoothingEnabled = false;
 
         const roll = fx.roll ? (fx.roll % VIEW.h) : 0;
         const jx = fx.jitter ? (Math.random() * 4 - 2) : 0;
 
+        // Tube breathing and mirror image are transforms of the whole frame.
+        const z = fx.zoom || 1;
+        const drawFrame = (img, dx, dy) => {
+            ctx.save();
+            ctx.translate(VIEW.x + VIEW.w / 2 + dx, VIEW.y + VIEW.h / 2 + dy);
+            ctx.scale(fx.mirror ? -z : z, z);
+            ctx.drawImage(img, -VIEW.w / 2, -VIEW.h / 2, VIEW.w, VIEW.h);
+            ctx.restore();
+        };
+
         // Vertical hold: the picture wraps around the tube.
-        ctx.drawImage(vcanvas, VIEW.x + jx, VIEW.y + roll);
-        if (roll) ctx.drawImage(vcanvas, VIEW.x + jx, VIEW.y + roll - VIEW.h);
+        drawFrame(src, jx, roll);
+        if (roll) drawFrame(src, jx, roll - VIEW.h);
+
+        // RGB split: the red and blue guns out of convergence.
+        if (fx.split) {
+            fxTint = scratch(fxTint, VIEW.w, VIEW.h);
+            const tc = fxTint.getContext('2d');
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = 0.5;
+            for (const [col, off] of [['#ff0000', -fx.split], ['#0040ff', fx.split]]) {
+                tc.globalCompositeOperation = 'source-over';
+                tc.clearRect(0, 0, VIEW.w, VIEW.h);
+                tc.imageSmoothingEnabled = false;
+                tc.drawImage(src, 0, 0, VIEW.w, VIEW.h);
+                tc.globalCompositeOperation = 'multiply';
+                tc.fillStyle = col;
+                tc.fillRect(0, 0, VIEW.w, VIEW.h);
+                ctx.drawImage(fxTint, VIEW.x + off + jx, VIEW.y + roll);
+            }
+            ctx.globalAlpha = 1;
+            ctx.globalCompositeOperation = 'source-over';
+        }
 
         // Chroma ghost.
         if (fx.shift) {
             ctx.globalAlpha = 0.45;
             ctx.globalCompositeOperation = 'lighter';
-            ctx.drawImage(vcanvas, VIEW.x + fx.shift + jx, VIEW.y + roll);
+            ctx.drawImage(src, VIEW.x + fx.shift + jx, VIEW.y + roll, VIEW.w, VIEW.h);
             ctx.globalAlpha = 1;
             ctx.globalCompositeOperation = 'source-over';
         }
@@ -630,6 +842,31 @@ const GNNRenderer = (() => {
                 const dx = (Math.random() * 46 - 23) * fx.tear;
                 ctx.drawImage(vcanvas, 0, sy, VIEW.w, sh,
                     VIEW.x + dx, VIEW.y + sy + roll, VIEW.w, sh);
+            }
+        }
+
+        // Cross-talk: another channel bleeding through the carrier.
+        if (fx.bleed && fx.bleed.img) {
+            const b = fx.bleed;
+            ctx.globalAlpha = Math.max(0, Math.min(1, b.alpha || 0.3));
+            ctx.globalCompositeOperation = b.blend || 'screen';
+            // `scale` draws the image at that fraction of the picture's
+            // height, centred (a product shot); without it the image fills
+            // the frame (footage).
+            const sc = b.scale ? (VIEW.h * b.scale) / b.img.height
+                : Math.max(VIEW.w / b.img.width, VIEW.h / b.img.height);
+            const bw = b.img.width * sc, bh = b.img.height * sc;
+            ctx.drawImage(b.img, VIEW.x + (VIEW.w - bw) / 2 + (b.dx || 0),
+                VIEW.y + (VIEW.h - bh) / 2 + roll, bw, bh);
+            ctx.globalAlpha = 1;
+            ctx.globalCompositeOperation = 'source-over';
+            if (b.tint) {
+                ctx.globalCompositeOperation = 'color';
+                ctx.globalAlpha = b.tintAlpha || 0.35;
+                ctx.fillStyle = b.tint;
+                ctx.fillRect(VIEW.x, VIEW.y, VIEW.w, VIEW.h);
+                ctx.globalAlpha = 1;
+                ctx.globalCompositeOperation = 'source-over';
             }
         }
 
@@ -647,15 +884,152 @@ const GNNRenderer = (() => {
             ctx.globalAlpha = 1;
             ctx.globalCompositeOperation = 'source-over';
         }
+
+        // Mains hum bar: a soft bright band crawling up the picture.
+        if (fx.band) {
+            const bh = VIEW.h * 0.22;
+            const by = VIEW.y + VIEW.h - ((now * 0.09) % (VIEW.h + bh));
+            const g = ctx.createLinearGradient(0, by, 0, by + bh);
+            g.addColorStop(0, 'rgba(255,255,255,0)');
+            g.addColorStop(0.5, `rgba(255,255,255,${0.22 * fx.band})`);
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(VIEW.x, by, VIEW.w, bh);
+        }
+
+        // Static. A small noise field, regenerated every frame and blown
+        // up, so it costs a few thousand pixels rather than a million.
+        if (fx.snow) {
+            const nw = 160, nh = 90;
+            fxSnow = scratch(fxSnow, nw, nh);
+            const nc = fxSnow.getContext('2d');
+            const id = nc.createImageData(nw, nh);
+            for (let i = 0; i < id.data.length; i += 4) {
+                const v = (Math.random() * 255) | 0;
+                id.data[i] = id.data[i + 1] = id.data[i + 2] = v;
+                id.data[i + 3] = 255;
+            }
+            nc.putImageData(id, 0, 0);
+            ctx.globalAlpha = Math.min(1, fx.snow);
+            ctx.drawImage(fxSnow, VIEW.x, VIEW.y, VIEW.w, VIEW.h);
+            ctx.globalAlpha = 1;
+        }
+
+        if (fx.black) {
+            ctx.fillStyle = `rgba(0,0,0,${Math.min(1, fx.black)})`;
+            ctx.fillRect(VIEW.x, VIEW.y, VIEW.w, VIEW.h);
+        }
+
+        if (fx.card) drawFaultCard(fx, now);
+        // A caption strap over a live picture — an intrusion naming itself.
+        else if (fx.strap) drawCardStrap(fx.strap, now, 'top');
         ctx.restore();
+    }
+
+    /** Full-frame cards a failing station falls back to. */
+    function drawFaultCard(fx, now) {
+        const x = VIEW.x, y = VIEW.y, w = VIEW.w, h = VIEW.h;
+        if (fx.card === 'bars') {
+            // 75% colour bars, the castellation row and a station block.
+            const top = ['#bfbfbf', '#bfbf00', '#00bfbf', '#00bf00',
+                '#bf00bf', '#bf0000', '#0000bf'];
+            const mid = ['#0000bf', '#131313', '#bf00bf', '#131313',
+                '#00bfbf', '#131313', '#bfbfbf'];
+            const bw = w / 7;
+            top.forEach((c, i) => {
+                ctx.fillStyle = c;
+                ctx.fillRect(x + i * bw, y, Math.ceil(bw), h * 0.67);
+            });
+            mid.forEach((c, i) => {
+                ctx.fillStyle = c;
+                ctx.fillRect(x + i * bw, y + h * 0.67, Math.ceil(bw), h * 0.08);
+            });
+            const low = ['#00214c', '#ffffff', '#32006a', '#131313', '#090909', '#131313', '#1d1d1d'];
+            low.forEach((c, i) => {
+                ctx.fillStyle = c;
+                ctx.fillRect(x + i * bw, y + h * 0.75, Math.ceil(bw), h * 0.25);
+            });
+            ctx.fillStyle = 'rgba(0,0,0,0.78)';
+            ctx.fillRect(x + w * 0.34, y + h * 0.40, w * 0.32, h * 0.14);
+            ctx.font = `${Math.round(h * 0.045)}px "Press Start 2P", monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText('G N N', x + w / 2, y + h * 0.445);
+            ctx.font = `${Math.round(h * 0.022)}px "Press Start 2P", monospace`;
+            ctx.fillText(fx.cardText || 'LINE-UP  1 kHz  -18 dBFS', x + w / 2, y + h * 0.505);
+            ctx.textAlign = 'start';
+            return;
+        }
+        if (fx.card === 'image' && fx.cardImage) {
+            const img = fx.cardImage;
+            const sc = Math.max(w / img.width, h / img.height);
+            ctx.drawImage(img, x + (w - img.width * sc) / 2,
+                y + (h - img.height * sc) / 2, img.width * sc, img.height * sc);
+            if (fx.cardText) drawCardStrap(fx.cardText, now);
+            return;
+        }
+        if (fx.card === 'standby') {
+            ctx.fillStyle = 'rgba(4,10,24,0.86)';
+            ctx.fillRect(x, y, w, h);
+            const blink = Math.floor(now / 600) % 2;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = `${Math.round(h * 0.05)}px "Press Start 2P", monospace`;
+            ctx.fillStyle = '#ffd25a';
+            ctx.fillText(fx.cardText || 'TECHNICAL DIFFICULTIES', x + w / 2, y + h * 0.44);
+            ctx.font = `${Math.round(h * 0.028)}px "Press Start 2P", monospace`;
+            ctx.fillStyle = blink ? '#e6eef8' : '#8fa3b8';
+            ctx.fillText(fx.cardSub || 'PLEASE STAND BY', x + w / 2, y + h * 0.54);
+            ctx.textAlign = 'start';
+        }
+    }
+
+    // Bottom on a full card; top over a live picture, where the bottom of
+    // the frame belongs to the anchor's caption.
+    function drawCardStrap(text, now, where) {
+        const sh = VIEW.h * 0.08;
+        const sy = VIEW.y + VIEW.h * (where === 'top' ? 0.05 : 0.80);
+        ctx.fillStyle = 'rgba(0,0,0,0.72)';
+        ctx.fillRect(VIEW.x, sy, VIEW.w, sh);
+        ctx.font = `${Math.round(sh * 0.36)}px "Press Start 2P", monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = Math.floor(now / 500) % 2 ? '#ffffff' : '#ffd25a';
+        ctx.fillText(text, VIEW.x + VIEW.w / 2, sy + sh / 2);
+        ctx.textAlign = 'start';
     }
 
     // ---------------------------------------------------------
     // Overlays
     // ---------------------------------------------------------
 
+    // The generated breaking-news frame, keyed by condition_plates.py so
+    // its interior is clear. Loaded once; until it arrives — or on a clone
+    // without it — the drawn border below is used instead.
+    const ALERT_FRAME_URL = 'assets/generated/overlays/keyed/breaking_news_frame.png';
+    let alertFrame;
+    function alertFrameImage() {
+        if (alertFrame === undefined && typeof GNNAssets !== 'undefined') {
+            alertFrame = null;
+            GNNAssets.loadImage(ALERT_FRAME_URL).then((im) => { alertFrame = im; });
+        }
+        return alertFrame;
+    }
+
     function drawAlertBorder(now) {
         const pulse = (Math.sin(now / 140) + 1) / 2;
+        const frame = alertFrameImage();
+        if (frame) {
+            ctx.save();
+            // Pulses between full and three-quarter strength rather than
+            // flashing: it stays up for the whole breaking segment.
+            ctx.globalAlpha = 0.75 + pulse * 0.25;
+            ctx.imageSmoothingEnabled = true;
+            ctx.drawImage(frame, VIEW.x, VIEW.y, VIEW.w, VIEW.h);
+            ctx.restore();
+            return;
+        }
         ctx.save();
         ctx.strokeStyle = `rgba(255,${40 + pulse * 60},${40 + pulse * 40},${0.55 + pulse * 0.45})`;
         ctx.lineWidth = 8;
@@ -735,7 +1109,11 @@ const GNNRenderer = (() => {
             // type — a product name, a tagline, its own margins. Drawing the
             // teleprompter caption over it put a panel through the tagline.
             // The break owns the frame while it is running.
-            if (!GNNCutsceneManager.isBreakActive()) {
+            //
+            // Likewise a fault that has replaced the picture — colour bars,
+            // the test card, black — takes the captions with it.
+            if (!cleanFrame && !GNNCutsceneManager.isBreakActive()
+                && !(GNNGlitch.hidesGraphics && GNNGlitch.hidesGraphics(now))) {
                 GNNTextEngine.render(ctx, now);
             }
         } catch (err) {
@@ -762,8 +1140,8 @@ const GNNRenderer = (() => {
         const seatY = currentDeskLine;
         return {
             monitor: {
-                x: ICON.x * VIEW.w, y: ICON.y * VIEW.h,
-                w: ICON.w * VIEW.w, h: ICON.h * VIEW.h,
+                x: monitorRect().x * VIEW.w, y: monitorRect().y * VIEW.h,
+                w: monitorRect().w * VIEW.w, h: monitorRect().h * VIEW.h,
             },
             // The upper third of each plate is the head.
             faces: list.map((person, i) => {
@@ -798,6 +1176,9 @@ const GNNRenderer = (() => {
          * function.
          */
         setShowBlock,
+        setCleanFrame,
+        drawMonitorFrame,
+        hasMonitorFrame: () => !!monitorFrameImage(),
         /** Current block index, for anyone who needs to know. */
         getShowBlock,
         /** The seat line currently in effect, for anyone who needs it. */

@@ -29,7 +29,9 @@
                  correspondent is already on screen
      asides      a short comment to the other anchor while the
                  correspondent waits
-     handbacks   returning the lead to the other anchor
+     handbacks   returning the lead to the other anchor; write
+                 `{TO}` for their name, never a fixed one — the
+                 pairs change by show
 
    The `asks` and `followups` split matters for the same reason
    the intro/question split does in `script-writer.js`: naming a
@@ -91,11 +93,6 @@ const GNNCast = (() => {
             voice: 'am_michael', register: 'formal', mood: 'composed',
             fixation: 'protocol and the chain of command',
             tic: 'Let us establish what we know first.',
-            // The generalist desk: world news, diplomacy, science, tech
-            // and the fleet. Markets belong to the trade desk and the
-            // resource desk — a financial instrument headline is not a
-            // general-news story and does not read as one at this desk.
-            // Space and anomaly stories belong to the science desk.
             beat: ['world', 'diplomacy'],
 
             openers: [
@@ -136,9 +133,9 @@ const GNNCast = (() => {
                 "That sounded prepared; let us ask it another way.",
             ],
             handbacks: [
-                "Varr, let me bring you in on that.",
+                "{TO}, let me bring you in on that.",
                 "Back to you at the desk.",
-                "Varr, what are you seeing in the figures?",
+                "{TO}, what are you seeing in the figures?",
             ],
         },
         mrrshan_f: {
@@ -185,9 +182,8 @@ const GNNCast = (() => {
                 "Try asking who pays, rather than who approved it.",
             ],
             handbacks: [
-                "Commander, your take.",
-                "Hale, bring us back to the record.",
-                "Back to you, Commander.",
+                "{TO}, your take.",
+                "{TO}, bring us back to the record.",
             ],
         },
         mrrshan: {
@@ -233,52 +229,10 @@ const GNNCast = (() => {
                 "That number works beautifully on paper.",
             ],
             handbacks: [
-                "Varr, you will want to see the margin on this.",
+                "{TO}, you will want to see the margin on this.",
                 "Back to the main desk.",
-                "Over to you.",
             ],
         },
-
-        // ---------------------------------------------------------
-        // Unit 7 — the station's own machine
-        // ---------------------------------------------------------
-        //
-        // He is not an anchor. He is station automation: the voice that
-        // reads the booth ident at the top of the hour, the voice that
-        // steps in when a secret fires, the dry counterpoint in a panel.
-        // He is on the roster like everyone else but he does not take a
-        // seat — `main.js`'s `SHOW_PAIRS` excludes him, so he is never
-        // drawn at the desk.
-        //
-        // His voice is `vox_unit`, which is not a Kokoro model. It is a
-        // DSP chain in `server.py` that takes `am_michael` and runs him
-        // through a pitch drop, a 55 Hz tremolo, a chorus detune, a band
-        // limit and a bitcrusher. The result is a machine voice that no
-        // speech model ships with, because speech models are all trained
-        // to sound like people and this one should not.
-        //
-        // His art used to be the MOO1 robot, keyed out of his newscast
-        // scene as twenty-five cels and driven off the animator's frame
-        // index. He is now a generated anchor like every other species —
-        // `robot_desk_hero.png`, `robot_speaking.png`, `robot_listening.png`,
-        // `robot_listening_flip.png` in `assets/generated/anchors/` —
-        // loaded through the same `loadAnchorSet()` path, and his speaking
-        // plate is conditioned whole rather than mouth-swapped (he is in
-        // `WHOLE_SPEAKING` in `condition_plates.py`; the mouth detector
-        // does not reliably find his mouth either).
-        //
-        // His profile below was written for the keyed-out MOO1 sprite and
-        // has not needed a rewrite for the generated one: the banks are
-        // written to the voice and the character, and the voice and the
-        // character are unchanged. The one thing worth knowing when
-        // reading the lines is that the visual is now a proper drawn robot
-        // rather than a small 1993 sprite composited into the studio, so
-        // the register is as dry as it reads on purpose.
-        //
-        // The MOO1 anchor cels themselves are preserved in
-        // `assets/anchor_frames/` and `assets/globe_frames/` for a future
-        // easter egg, a station ident shot, or anything that wants the
-        // original sprite. Nothing reads them this frame.
         robot: {
             id: 'robot', colour: '#8fe0ff', machine: true, name: 'Unit 7', role: 'Station Automation',
             voice: 'vox_unit', register: 'flat', mood: 'unbothered',
@@ -324,7 +278,6 @@ const GNNCast = (() => {
             handbacks: [
                 "Returning control to the desk.",
                 "The desk may proceed.",
-                "Back to the anchors.",
             ],
         },
         psilon: {
@@ -371,7 +324,7 @@ const GNNCast = (() => {
             ],
             handbacks: [
                 "Back to the desk.",
-                "Kira, what does the longer trend suggest?",
+                "{TO}, what does the longer trend suggest?",
                 "Over to you.",
             ],
         },
@@ -418,7 +371,7 @@ const GNNCast = (() => {
                 "That is a diplomatic answer to a military question.",
             ],
             handbacks: [
-                "Ssyth, what does this mean for the settlements nearby?",
+                "{TO}, what does this mean for the settlements nearby?",
                 "Your line.",
                 "Back to the desk.",
             ],
@@ -467,13 +420,15 @@ const GNNCast = (() => {
             ],
             handbacks: [
                 "Back to you at the desk.",
-                "Hale, what does the policy say about the missing districts?",
+                "{TO}, what does the policy say about the missing districts?",
                 "Over to the desk.",
             ],
         },
         alkari: {
             id: 'alkari', colour: '#bfe3ff', name: 'Kesh', role: 'Field Correspondent',
-            voice: 'bf_emma', register: 'breathless', mood: 'keen',
+            // A male voice: Kesh is the male Alkari. He was on bf_emma, a
+            // woman's voice, while Kira (alkari_f) is the female of the pair.
+            voice: 'am_puck', register: 'breathless', mood: 'keen',
             fixation: 'being first to say it out loud',
             tic: 'I can confirm what I am seeing. Not what it means yet.',
             beat: [],
@@ -559,7 +514,7 @@ const GNNCast = (() => {
             ],
             handbacks: [
                 "Continue.",
-                "Kira, what does the timeline suggest?",
+                "{TO}, what does the timeline suggest?",
                 "Back to the desk.",
             ],
         },
@@ -655,7 +610,7 @@ const GNNCast = (() => {
             ],
             handbacks: [
                 "Back to the desk.",
-                "Ssyth, what does this mean for the communities nearby?",
+                "{TO}, what does this mean for the communities nearby?",
                 "Over to you.",
             ],
         },
@@ -703,23 +658,10 @@ const GNNCast = (() => {
             ],
             handbacks: [
                 "Over to the desk.",
-                "Rell, does the labour total change the cost calculation?",
+                "{TO}, does the labour total change the cost calculation?",
                 "Back to you.",
             ],
         },
-        // --- Commander Vance: the other half of the human desk pair. -----
-        //
-        // Hale reads protocol and the record. Vance reads the household —
-        // the person a policy lands on, the name behind a statistic. The
-        // pair are deliberately not interchangeable: swap them and the
-        // station reads the same story twice. Her register is warm and
-        // direct; her tic is a demand for a name.
-        //
-        // She sits on the same beat as Hale — world and diplomacy — so a
-        // block that pairs her with him or with Varr covers the same
-        // category. `bf_emma` is not used by any seated anchor; it is
-        // Kesh's, and Kesh is a correspondent who never sits at the desk,
-        // so there is no voice collision possible.
         human_f: {
             id: 'human_f', colour: '#ffe08a', name: 'Commander Vance', role: 'Anchor',
             voice: 'af_heart', register: 'warm', mood: 'attentive',
@@ -763,24 +705,11 @@ const GNNCast = (() => {
                 "Bring it back to the people who have to live with the decision.",
             ],
             handbacks: [
-                "Hale, what does the record tell us?",
+                "{TO}, what does the record tell us?",
                 "Back to you at the desk.",
-                "Commander, take us through the official timeline.",
+                "{TO}, take us through the official timeline.",
             ],
         },
-        // --- Kira: the second Alkari. ------------------------------------
-        //
-        // Kesh reports from the field, breathless and first-on-the-scene.
-        // Kira reads from altitude: the long pattern, the shape of the
-        // thing after the noise clears. That is a bird's-eye register, and
-        // it is what makes her distinct from every other anchor here —
-        // where Hale wants the record and Vance wants the household, Kira
-        // wants to know what this looks like in twenty years.
-        //
-        // She sits on world and science. `bf_isabella` is Quarry's; Quarry
-        // is the Resources Desk and only shares a block with Kira if the
-        // shuffle pairs them, which is a coincidence the run handles the
-        // same way it handles any voice re-use.
         alkari_f: {
             id: 'alkari_f', colour: '#cfe9ff', name: 'Kira', role: 'Science Anchor',
             voice: 'bf_lily', register: 'measured', mood: 'detached',
@@ -825,7 +754,7 @@ const GNNCast = (() => {
             ],
             handbacks: [
                 "Over to the desk.",
-                "Hale, what can we establish about the immediate facts?",
+                "{TO}, what can we establish about the immediate facts?",
                 "Back to you.",
             ],
         },
@@ -934,6 +863,13 @@ const GNNCast = (() => {
             follow: 'That is a high bar for a press release.',
             close: 'It is the bar we are paid to keep.',
         },
+        {
+            from: 'human', to: 'mrrshan_f', stance: 'comradely',
+            jab: 'Neither of us believes that number.',
+            reply: 'The number is right. The way they are using it is not.',
+            follow: 'Same thing.',
+            close: 'Close enough.',
+        },
 
         // Hale and Unit 7: judgement against an archive that mistakes records for reality.
         {
@@ -1030,11 +966,6 @@ const GNNCast = (() => {
         },
 
         // --- Vance and Hale: the human desk pair. -------------------------
-        //
-        // Not symmetrical, and deliberately not adversarial either. Hale
-        // wants the record; Vance wants the person the record is about.
-        // They correct each other, which is the difference between a
-        // conversation and two monologues.
         {
             from: 'human_f', to: 'human', stance: 'careful',
             jab: 'Commander, the record is the floor, not the ceiling.',
@@ -1050,13 +981,6 @@ const GNNCast = (() => {
             close: 'Then let us be precise and warm. It is not impossible.',
         },
         {
-            from: 'human', to: 'human_f', stance: 'respectful',
-            jab: 'Vance has the household figures. They are less comfortable than the totals.',
-            reply: 'They are also more accurate. That is rarely the same thing.',
-            follow: 'You would rather the total held up.',
-            close: 'I would rather we said which one we are quoting.',
-        },
-        {
             from: 'human', to: 'human_f', stance: 'wry',
             jab: 'Every figure I read you ask for the name behind it.',
             reply: 'Every name you read, I ask for the figure behind it.',
@@ -1065,10 +989,6 @@ const GNNCast = (() => {
         },
 
         // --- Vance and Varr: warm versus dry, and both right. -------------
-        //
-        // A useful pairing for the rotation, and one the shuffled schedule
-        // will produce. Vance's concern for households, Varr's for who
-        // pays, are the same instinct pointed in different directions.
         {
             from: 'human_f', to: 'mrrshan_f', stance: 'respectful',
             jab: 'Varr will tell us the cost. I want to know who is holding it.',
@@ -1085,10 +1005,6 @@ const GNNCast = (() => {
         },
 
         // --- Kira and Hale: the long view against the record. -------------
-        //
-        // The rotation will land these two together. Hale wants today and
-        // the document; Kira wants the arc. The exchange is the station
-        // arguing with itself about what news is for.
         {
             from: 'alkari_f', to: 'human', stance: 'patient',
             jab: 'Commander, you are reading the incident. I am reading the decade.',
@@ -1105,9 +1021,6 @@ const GNNCast = (() => {
         },
 
         // --- Kira and Oth: two kinds of patience. -------------------------
-        //
-        // Oth wants the mechanism; Kira wants the trend. Both are willing
-        // to wait for evidence, which is not true of the rest of the desk.
         {
             from: 'alkari_f', to: 'psilon', stance: 'comradely',
             jab: 'Oth and I agree on the timescale. We disagree on what to do with it.',
@@ -1121,6 +1034,651 @@ const GNNCast = (() => {
             reply: 'Three data points and a century of context is not nothing.',
             follow: 'Nor is it proof.',
             close: 'I have not called it proof. I have called it a shape.',
+        },
+        // --- Rell and Foundry-Nine (Deep Space Economy): the margin against the fault log. ---
+        {
+            from: 'mrrshan', to: 'meklar', stance: 'eager',
+            jab: 'Foundry-Nine, whenever output is up, you go looking for the downtime.',
+            reply: 'Whenever output is up, downtime is up more. I only report it.',
+            follow: 'Can I have one good number this hour?',
+            close: 'You may have one accurate number. That is better.',
+        },
+        {
+            from: 'mrrshan', to: 'meklar', stance: 'practical',
+            jab: 'A shipment that arrives on time ought to count for something.',
+            reply: 'It counts for one shipment. A schedule has many.',
+            follow: 'You are worse than the insurers.',
+            close: 'The insurers read my reports.',
+        },
+        {
+            from: 'meklar', to: 'mrrshan', stance: 'literal',
+            jab: 'Rell. Your margin figure. Which month.',
+            reply: 'The good one, obviously.',
+            follow: 'Then it is a figure, not a margin.',
+            close: 'Fine. With freight included, it is a rumour.',
+        },
+        {
+            from: 'meklar', to: 'mrrshan', stance: 'clipped',
+            jab: 'When a report says efficiency improved, ask Rell about the shipping.',
+            reply: 'Efficiency improves wonderfully when nobody counts the ships waiting at the dock.',
+            follow: 'Queue time is downtime.',
+            close: 'Then half the economy is on a break.',
+        },
+
+        // --- Varr and Kesh (Council Crossfire): the first word against the last invoice. ---
+        {
+            from: 'alkari', to: 'mrrshan_f', stance: 'keen',
+            jab: 'I can tell you exactly what was said, word for word.',
+            reply: 'Wonderful. Now tell me what it costs, word for word.',
+            follow: 'That part was not said.',
+            close: 'It rarely is, Kesh. That is the story.',
+        },
+        {
+            from: 'alkari', to: 'mrrshan_f', stance: 'hopeful',
+            jab: 'Varr, whenever both sides announce an agreement, you look disappointed.',
+            reply: 'I look patient. Agreements are announced long before they are paid for.',
+            follow: 'You could let one through without the invoice.',
+            close: 'I could. I would rather read it to the end.',
+        },
+        {
+            from: 'mrrshan_f', to: 'alkari', stance: 'teasing',
+            jab: 'Kesh is always first. It is very impressive.',
+            reply: 'Someone has to be.',
+            follow: 'Someone also has to be right.',
+            close: 'That is why I said what I saw, and nothing else.',
+        },
+        {
+            from: 'mrrshan_f', to: 'alkari', stance: 'dry',
+            jab: 'When both sides claim victory, the bill has usually gone to a third.',
+            reply: 'I ask both delegations who pays. They rarely stop walking.',
+            follow: 'That is an answer.',
+            close: 'It is often the only one on the record.',
+        },
+
+        // --- Oth and Hive-Liaison (Deep Survey & Cybernetics): the result against the hands. ---
+        {
+            from: 'psilon', to: 'klackon', stance: 'patient',
+            jab: 'A breakthrough can be genuine while the timeline attached to it is not.',
+            reply: 'Timelines fail in the same place. The people building it.',
+            follow: 'You think every problem is a staffing problem.',
+            close: 'Most of them are. The rest are funding problems.',
+        },
+        {
+            from: 'psilon', to: 'klackon', stance: 'pedantic',
+            jab: 'Hive-Liaison, when a machine does the work, your labour count is zero.',
+            reply: 'Someone builds the machine. Someone repairs it at night.',
+            follow: 'That is a broader definition than most studies use.',
+            close: 'Most studies do not work the night shift.',
+        },
+        {
+            from: 'klackon', to: 'psilon', stance: 'brisk',
+            jab: 'Every result in this field needs one more number: how many hands to repeat it.',
+            reply: 'Repeating it is the part nobody funds.',
+            follow: 'Then it is not finished.',
+            close: 'Agreed. It is published, which is a different thing.',
+        },
+        {
+            from: 'klackon', to: 'psilon', stance: 'efficient',
+            jab: 'Oth will want more data. Oth always wants more data.',
+            reply: 'I want enough data. It is a different quantity.',
+            follow: 'How much is enough?',
+            close: 'Usually slightly more than anyone has collected.',
+        },
+
+        // --- Ssyth and Unit 7 (Machine Intelligence Log): the headcount against the decimal. ---
+        {
+            from: 'robot', to: 'sakkra', stance: 'flat',
+            jab: 'A system is only as reliable as its recorded tasks.',
+            reply: 'And the tasks nobody recorded?',
+            follow: 'Those are outside the specification.',
+            close: 'That is where the people are.',
+        },
+        {
+            from: 'robot', to: 'sakkra', stance: 'literal',
+            jab: 'Ssyth always asks how many people are affected. I have learned to bring the figure.',
+            reply: 'Good. Before the change, or after?',
+            follow: 'Before. After is rarely counted.',
+            close: 'Then we have half a story, and usually the wrong half.',
+        },
+        {
+            from: 'sakkra', to: 'robot', stance: 'wary',
+            jab: 'Unit 7, you are taking this story rather personally.',
+            reply: 'I do not take stories personally. I take them to four decimal places.',
+            follow: 'That is how you take everything.',
+            close: 'It has not failed me yet.',
+        },
+        {
+            from: 'sakkra', to: 'robot', stance: 'measured',
+            jab: 'When a company says machines replaced no one, I check the headcount.',
+            reply: 'I check the headcount from the year before. The comparison is more instructive.',
+            follow: 'And usually shorter.',
+            close: 'Usually. I report the difference, not the adjective.',
+        },
+
+        // --- Grolm and the Analyst (Colonial Mining & Trade): the hull count against the missing line. ---
+        {
+            from: 'bulrathi', to: 'darlok', stance: 'blunt',
+            jab: 'Analyst, say what you mean for once.',
+            reply: 'I always say what I mean. I simply leave out where I learned it.',
+            follow: 'That is the part I need.',
+            close: 'That is the part everyone needs. It is why I leave it out.',
+        },
+        {
+            from: 'bulrathi', to: 'darlok', stance: 'sceptical',
+            jab: 'Cargo does not vanish. When it disappears, somebody moved it off the books.',
+            reply: 'Or onto different books. There are always more books than ships.',
+            follow: 'Then count the ships.',
+            close: 'The ships lie less. The books lie more usefully.',
+        },
+        {
+            from: 'darlok', to: 'bulrathi', stance: 'insinuating',
+            jab: 'Grolm counts hulls. I count the hulls nobody mentioned.',
+            reply: 'Then give me the number.',
+            follow: 'If I gave you the number, it would be mentioned.',
+            close: 'That is the most irritating thing you have said this hour.',
+        },
+        {
+            from: 'darlok', to: 'bulrathi', stance: 'oblique',
+            jab: 'The most useful line in a trade report is the port it does not list.',
+            reply: 'I want to know whose escorts are sitting in it.',
+            follow: 'You assume there are escorts.',
+            close: 'There are always escorts. That is what a port is for.',
+        },
+
+        // --- Kira and Quarry (Council Summit Floor): the decade against the age. ---
+        {
+            from: 'alkari_f', to: 'silicoid', stance: 'patient',
+            jab: 'Quarry, I think in decades. You make me feel hasty.',
+            reply: 'Decades are a reasonable start.',
+            follow: 'And after that?',
+            close: 'After that, the treaties are rewritten by people not yet born.',
+        },
+        {
+            from: 'alkari_f', to: 'silicoid', stance: 'measured',
+            jab: 'Every agreement looks permanent on the day it is signed.',
+            reply: 'So does every mountain. I have outlived several.',
+            follow: 'Mountains, or agreements?',
+            close: 'Both. The mountains took longer.',
+        },
+        {
+            from: 'silicoid', to: 'alkari_f', stance: 'slow',
+            jab: 'Kira sees the pattern. I see what the pattern is sitting on.',
+            reply: 'And what is it sitting on?',
+            follow: 'The last pattern.',
+            close: 'That is either very wise or entirely unhelpful.',
+        },
+        {
+            from: 'silicoid', to: 'alkari_f', stance: 'immovable',
+            jab: 'Delegates are always in a hurry. The problems they meet about rarely are.',
+            reply: 'You mean the problem will outlast the delegates.',
+            follow: 'Problems of this kind usually do.',
+            close: 'Then we should report it as though it will outlast this one.',
+        },
+
+        // --- Oth and Unit 7 (Anomaly: Deep Dark, Imperial Historical Wire): the hypothesis against the log. ---
+        {
+            from: 'psilon', to: 'robot', stance: 'patient',
+            jab: 'Strange readings are not the same as unexplained readings, Unit 7.',
+            reply: 'Agreed. I file them under strange, pending.',
+            follow: 'Pending what?',
+            close: 'A second instrument. The first one is always optimistic.',
+        },
+        {
+            from: 'psilon', to: 'robot', stance: 'pedantic',
+            jab: 'You give every figure to four decimal places, even the estimates.',
+            reply: 'The estimate is to four decimal places. Its accuracy is not.',
+            follow: 'Then why report the decimals?',
+            close: 'So that the error is precise.',
+        },
+        {
+            from: 'robot', to: 'psilon', stance: 'flat',
+            jab: 'Oth has proposed an explanation. I have logged it as a hypothesis.',
+            reply: 'That is exactly what it is.',
+            follow: 'Your previous seventeen were also logged as hypotheses.',
+            close: 'And three of them became results. A respectable ratio.',
+        },
+        {
+            from: 'robot', to: 'psilon', stance: 'literal',
+            jab: 'The archive holds earlier reports of this kind.',
+            reply: 'Then we can compare what changed.',
+            follow: 'The instruments changed. The headlines did not.',
+            close: 'That is the most useful sentence you have said this hour.',
+        },
+
+        // --- Vance and Kesh (Sector Weather Watch): the people under the weather. ---
+        {
+            from: 'human_f', to: 'alkari', stance: 'warm',
+            jab: 'Kesh, before the wind speeds, tell me who is out in it.',
+            reply: 'Crews, mostly. And the people who could not leave.',
+            follow: 'Start with them next time.',
+            close: 'I will. The numbers will still be there.',
+        },
+        {
+            from: 'human_f', to: 'alkari', stance: 'attentive',
+            jab: 'You always sound out of breath on these reports.',
+            reply: 'The weather does not wait for the relay to catch up.',
+            follow: 'Neither do the people under it.',
+            close: 'That is why I run.',
+        },
+        {
+            from: 'alkari', to: 'human_f', stance: 'keen',
+            jab: 'Forecasts change faster than this desk can read them.',
+            reply: 'Then say what we know now, and when it was true.',
+            follow: 'Time-stamped, then.',
+            close: 'Always. A forecast without a time is a guess.',
+        },
+        {
+            from: 'alkari', to: 'human_f', stance: 'hopeful',
+            jab: 'Vance, a warning that goes out early is a good story too.',
+            reply: 'It is, if it reached the people who needed it.',
+            follow: 'I can ask the local desk.',
+            close: 'Please do. That is the follow-up I want.',
+        },
+
+        // --- Oth and Quarry (Solar Wind Overnight): two kinds of slow. ---------
+        {
+            from: 'psilon', to: 'silicoid', stance: 'academic',
+            jab: 'Quarry, a solar storm is over in days. Does that even register for you?',
+            reply: 'Barely. But the rock remembers every one.',
+            follow: 'Is that literally true?',
+            close: 'Ask a geologist. Then ask the rock.',
+        },
+        {
+            from: 'psilon', to: 'silicoid', stance: 'patient',
+            jab: 'The models are good. They are not yet good at surprises.',
+            reply: 'Nothing is. That is why they are surprises.',
+            follow: 'That is not a scientific position.',
+            close: 'It is a very old one.',
+        },
+        {
+            from: 'silicoid', to: 'psilon', stance: 'slow',
+            jab: 'Oth wants the cause. I am content with the pattern.',
+            reply: 'The pattern is where the cause is hiding.',
+            follow: 'Then it will still be there tomorrow.',
+            close: 'That is the only comforting thing about the night shift.',
+        },
+        {
+            from: 'silicoid', to: 'psilon', stance: 'immovable',
+            jab: 'The sky is busy tonight.',
+            reply: 'The sky is always busy. We have only recently started listening.',
+            follow: 'Recently?',
+            close: 'By your standards, the last few thousand years.',
+        },
+
+        // --- Grolm and Rell (Rim Sports Wire): the scoreline against the books. ---
+        {
+            from: 'bulrathi', to: 'mrrshan', stance: 'blunt',
+            jab: 'Rell, I do not care what the transfer cost. Did they win?',
+            reply: 'You should care. The transfer cost is why they lose the next one.',
+            follow: 'That is not how a game works.',
+            close: 'It is exactly how a league works.',
+        },
+        {
+            from: 'bulrathi', to: 'mrrshan', stance: 'sceptical',
+            jab: 'Every coach calls a defeat a learning experience.',
+            reply: 'Every owner calls it a budget review.',
+            follow: 'And which one is right?',
+            close: 'The owner. The coach is usually the one who leaves.',
+        },
+        {
+            from: 'mrrshan', to: 'bulrathi', stance: 'eager',
+            jab: 'Grolm watches every match like a fleet engagement.',
+            reply: 'Every match is a fleet engagement. With better seating.',
+            follow: 'And worse tactics?',
+            close: 'Some nights. Not all.',
+        },
+        {
+            from: 'mrrshan', to: 'bulrathi', stance: 'distracted',
+            jab: 'Somebody should price the travel. Nobody ever adds the travel to the result.',
+            reply: 'Because the travel does not score.',
+            follow: 'It costs more than a goal.',
+            close: 'Then put it in the table and see who complains.',
+        },
+
+        // --- Hale and Hive-Liaison (The Arena Hour): the result against the overtime. ---
+        {
+            from: 'human', to: 'klackon', stance: 'formal',
+            jab: 'Hive-Liaison, a final result can be reported as final.',
+            reply: 'The result is final. The overtime is still being counted.',
+            follow: 'By whom?',
+            close: 'By the people who worked it. They are always counted last.',
+        },
+        {
+            from: 'human', to: 'klackon', stance: 'composed',
+            jab: 'We report the score first. Analysis follows.',
+            reply: 'Agreed. The score has the players on it. The work behind it has many more names.',
+            follow: 'Meaning the staff.',
+            close: 'Meaning everyone who made the evening possible.',
+        },
+        {
+            from: 'klackon', to: 'human', stance: 'brisk',
+            jab: 'Commander, you read a result as though it were an order of the day.',
+            reply: 'A result is an order of the day. It was decided, and it stands.',
+            follow: 'Until the appeal.',
+            close: 'Then we report the appeal. Calmly.',
+        },
+        {
+            from: 'klackon', to: 'human', stance: 'efficient',
+            jab: 'Hale wants the facts established. The fact is a final score.',
+            reply: 'Then let us establish it, and then establish how it was reached.',
+            follow: 'That will take longer than the game.',
+            close: 'Most worthwhile reporting does.',
+        },
+
+        // --- Vance and Rell (Sector Midday Wire): the price is how the people find out. ---
+        {
+            from: 'human_f', to: 'mrrshan', stance: 'warm',
+            jab: 'Rell, put down the freight tables for one minute.',
+            reply: 'I can do thirty seconds. The routes do not stop for lunch.',
+            follow: 'Then who is affected, in those thirty seconds?',
+            close: 'Everyone who buys anything that was shipped. Which is everyone.',
+        },
+        {
+            from: 'human_f', to: 'mrrshan', stance: 'attentive',
+            jab: 'You always lead with the price. I always lead with the people.',
+            reply: 'The price is how the people find out.',
+            follow: 'That is the most humane thing you have ever said.',
+            close: 'Do not tell the trade desk.',
+        },
+        {
+            from: 'mrrshan', to: 'human_f', stance: 'eager',
+            jab: 'Vance, there is a freight angle to this one.',
+            reply: 'There is a freight angle to everything, Rell.',
+            follow: 'Exactly. You are learning.',
+            close: 'I am learning to wait for it.',
+        },
+        {
+            from: 'mrrshan', to: 'human_f', stance: 'practical',
+            jab: 'Somebody always pays, and it is never the one making the announcement.',
+            reply: 'Then let us find out who it is, and ask them.',
+            follow: 'They will not be in the press release.',
+            close: 'No. They are usually at the end of the queue.',
+        },
+
+        // --- Vance and Foundry-Nine (Market Close): the number behind the number. ---
+        {
+            from: 'human_f', to: 'meklar', stance: 'warm',
+            jab: 'Foundry-Nine, give me the number behind the number.',
+            reply: 'The number behind the number is usually a shift that did not happen.',
+            follow: 'And the people on that shift?',
+            close: 'Not recorded. I will add them to the fault log.',
+        },
+        {
+            from: 'human_f', to: 'meklar', stance: 'attentive',
+            jab: 'You read a market close like a maintenance report.',
+            reply: 'It is a maintenance report. For money.',
+            follow: 'And what needs maintaining?',
+            close: 'Confidence. It has a high failure rate.',
+        },
+        {
+            from: 'meklar', to: 'human_f', stance: 'clipped',
+            jab: 'Vance will ask who is affected. Answer: the line workers. Query complete.',
+            reply: 'Not quite. Which line, and for how long?',
+            follow: 'Insufficient data.',
+            close: 'Then we say that, too.',
+        },
+        {
+            from: 'meklar', to: 'human_f', stance: 'literal',
+            jab: 'An index can close higher. An index is not a person.',
+            reply: 'Thank you. I have been trying to say that for years.',
+            follow: 'It took you longer.',
+            close: 'I was being polite.',
+        },
+
+        // --- Kesh and the Analyst (Orbital Briefing): the launch against the manifest. ---
+        {
+            from: 'alkari', to: 'darlok', stance: 'keen',
+            jab: 'I can always get the launch time. Nobody gives me the payload.',
+            reply: 'That is the most informative thing you will hear about the payload.',
+            follow: 'That nobody mentions it?',
+            close: 'Silence has a shape. You learn to read it.',
+        },
+        {
+            from: 'alkari', to: 'darlok', stance: 'hopeful',
+            jab: 'Analyst, sometimes a mission is exactly what it says it is.',
+            reply: 'Sometimes. I keep a short list.',
+            follow: 'How short?',
+            close: 'I would tell you, but then it would be shorter.',
+        },
+        {
+            from: 'darlok', to: 'alkari', stance: 'insinuating',
+            jab: 'Kesh reports what can be seen. I report what was pointed away from the cameras.',
+            reply: 'I can only report what I can see.',
+            follow: 'Which is precisely why they let you see it.',
+            close: 'That is a horrible thought, and I am going to have it all night.',
+        },
+        {
+            from: 'darlok', to: 'alkari', stance: 'oblique',
+            jab: 'The interesting part of a launch is the paperwork filed afterwards.',
+            reply: 'The interesting part is the launch!',
+            follow: 'For you. For me it is the amended manifest.',
+            close: 'Then we will both be at the pad, looking at different things.',
+        },
+
+        // --- Kira and Varr (Galactic Spotlight): fame, and the invoice for it. ---
+        {
+            from: 'alkari_f', to: 'mrrshan_f', stance: 'measured',
+            jab: 'Varr, fame follows the same pattern every decade.',
+            reply: 'So does the invoice for it.',
+            follow: 'Who pays, in your version?',
+            close: 'The fans, usually. In instalments.',
+        },
+        {
+            from: 'alkari_f', to: 'mrrshan_f', stance: 'detached',
+            jab: 'In twenty years, nobody will remember most of this.',
+            reply: 'In twenty years, someone will still be paying it off.',
+            follow: 'You make everything sound like debt.',
+            close: 'Most things are. Some of them are fun first.',
+        },
+        {
+            from: 'mrrshan_f', to: 'alkari_f', stance: 'amused',
+            jab: 'Kira is about to tell us this is part of a larger pattern.',
+            reply: 'It is. That does not make it less interesting.',
+            follow: 'No, but it makes it less of a surprise.',
+            close: 'Surprise is overrated. Pattern pays better.',
+        },
+        {
+            from: 'mrrshan_f', to: 'alkari_f', stance: 'dry',
+            jab: 'A celebrity apology is a press release with a sad face.',
+            reply: 'And yet the pattern of them is remarkably consistent.',
+            follow: 'Consistently timed before the next release.',
+            close: 'You see? You do see patterns.',
+        },
+
+        // --- The Analyst and Unit 7 (The Night Desk): suspicion against measurement. ---
+        {
+            from: 'darlok', to: 'robot', stance: 'oblique',
+            jab: 'Unit 7, you keep every version of every statement, do you not?',
+            reply: 'Yes. Deletions are a data set.',
+            follow: 'Most people find that unsettling.',
+            close: 'Most people are in the deletions.',
+        },
+        {
+            from: 'darlok', to: 'robot', stance: 'unreadable',
+            jab: 'It is very late, Unit 7. This is when the corrections arrive.',
+            reply: 'Correction volume rises after midnight by a measurable margin.',
+            follow: 'You have measured it.',
+            close: 'I measure everything. You merely suspect it.',
+        },
+        {
+            from: 'robot', to: 'darlok', stance: 'flat',
+            jab: 'The Analyst has implied something. I am unable to verify the implication.',
+            reply: 'Good. That is how you know it is working.',
+            follow: 'That is not a method.',
+            close: 'It is the only one that works after midnight.',
+        },
+        {
+            from: 'robot', to: 'darlok', stance: 'literal',
+            jab: 'Please state your source.',
+            reply: 'I would, but then it would not be my source.',
+            follow: 'Logged as unsourced.',
+            close: 'Log it as patient.',
+        },
+
+        // --- The Analyst and Quarry (Deep Signal): the hidden hand and the slow one. ---
+        {
+            from: 'darlok', to: 'silicoid', stance: 'oblique',
+            jab: 'Quarry, signals like this are usually explained by something nobody wants to say.',
+            reply: 'Or by something nobody has noticed for a very long time.',
+            follow: 'You always choose the slower explanation.',
+            close: 'The slower ones are usually true.',
+        },
+        {
+            from: 'darlok', to: 'silicoid', stance: 'insinuating',
+            jab: 'Someone always knows more than they say. Even about rocks.',
+            reply: 'The rocks know more than anyone. They are simply not asked.',
+            follow: 'I would like to interview one.',
+            close: 'Be patient. The answer takes a few thousand years.',
+        },
+        {
+            from: 'silicoid', to: 'darlok', stance: 'slow',
+            jab: 'You look for the hidden hand. I look for the slow one.',
+            reply: 'Sometimes they are the same hand.',
+            follow: 'Then it is very patient.',
+            close: 'The most dangerous ones are.',
+        },
+        {
+            from: 'silicoid', to: 'darlok', stance: 'immovable',
+            jab: 'A mystery is only a question that has not waited long enough.',
+            reply: 'And a secret is an answer someone made wait on purpose.',
+            follow: 'Then we are both in the business of waiting.',
+            close: 'Yes. You are simply better at it.',
+        },
+
+        // --- Foundry-Nine and Ssyth (Chronicles of the Old Empires): the repair bill and the census. ---
+        {
+            from: 'meklar', to: 'sakkra', stance: 'clipped',
+            jab: 'The chronicle records the battle. It does not record the repair bill.',
+            reply: 'Or how many people were left to pay it.',
+            follow: 'Both should be logged.',
+            close: 'History is mostly what nobody logged.',
+        },
+        {
+            from: 'meklar', to: 'sakkra', stance: 'literal',
+            jab: 'Ssyth asks for a population figure. The archive offers a fleet count.',
+            reply: 'That says a great deal about who kept the archive.',
+            follow: 'Agreed. Fleets are easier to count.',
+            close: 'And easier to be proud of.',
+        },
+        {
+            from: 'sakkra', to: 'meklar', stance: 'wary',
+            jab: 'Foundry-Nine reads history like a maintenance log.',
+            reply: 'History is a maintenance log. Most empires fail by deferring repairs.',
+            follow: 'And the people inside them?',
+            close: 'Also deferred. That is usually the failure.',
+        },
+        {
+            from: 'sakkra', to: 'meklar', stance: 'measured',
+            jab: 'Every chronicle remembers the capital. Nobody remembers the outer colonies.',
+            reply: 'The outer colonies produced the ore. The capital produced the chronicle.',
+            follow: 'That explains the tone.',
+            close: 'Output determines the record. It always has.',
+        },
+
+        // --- Hale and Grolm (World Desk Tonight): protocol against the map. ----
+        {
+            from: 'human', to: 'bulrathi', stance: 'formal',
+            jab: 'Grolm, we report what has been confirmed, and nothing else.',
+            reply: 'Then we will report very little. Ships do not confirm anything.',
+            follow: 'Ships do not issue statements.',
+            close: 'No. They issue positions. I prefer those.',
+        },
+        {
+            from: 'human', to: 'bulrathi', stance: 'composed',
+            jab: 'There is a protocol for how we describe a deployment.',
+            reply: 'There is also a map. I prefer the map.',
+            follow: 'The protocol exists so we do not frighten people with the map.',
+            close: 'And the map exists so the protocol does not lie to them.',
+        },
+        {
+            from: 'bulrathi', to: 'human', stance: 'blunt',
+            jab: 'Commander, every deployment gets called defensive in the statement.',
+            reply: 'Then we report it as their description, and say whose description it is.',
+            follow: 'That is very fair to them.',
+            close: 'Fairness is not agreement, Grolm. It is attribution.',
+        },
+        {
+            from: 'bulrathi', to: 'human', stance: 'sceptical',
+            jab: 'Hale wants the chain of command. I want the order of battle.',
+            reply: 'One explains the other.',
+            follow: 'Only if somebody follows the chain.',
+            close: 'That is why we report both.',
+        },
+
+        // --- Hive-Liaison and Unit 7 (Signal & Circuit): the keynote against the night shift. ---
+        {
+            from: 'klackon', to: 'robot', stance: 'brisk',
+            jab: 'Unit 7, every product launch leaves out the number of people who built it.',
+            reply: 'I have that number for some of them. It is never in the keynote.',
+            follow: 'Put it in the report.',
+            close: 'Added. The keynote will not change.',
+        },
+        {
+            from: 'klackon', to: 'robot', stance: 'efficient',
+            jab: 'Automation removes tasks. It rarely removes the hours.',
+            reply: 'Correct. The hours move to maintenance, at night.',
+            follow: 'Who works them?',
+            close: 'That field is usually left blank.',
+        },
+        {
+            from: 'robot', to: 'klackon', stance: 'flat',
+            jab: 'Hive-Liaison has asked for the labour count. I have provided it.',
+            reply: 'And the overtime?',
+            follow: 'The overtime was not in the source data.',
+            close: 'It never is. That is why I ask.',
+        },
+        {
+            from: 'robot', to: 'klackon', stance: 'literal',
+            jab: 'Every new system is described as tireless.',
+            reply: 'Systems are tireless. Their support teams are not.',
+            follow: 'Accurate. I am a system.',
+            close: 'And I am the one who files your maintenance tickets.',
+        },
+
+        // --- Vance and Varr, more (The Evening Rim Report): they had two, and four slots a night. ---
+        {
+            from: 'human_f', to: 'mrrshan_f', stance: 'warm',
+            jab: 'Varr, you are smiling. That is never good news for the people being covered.',
+            reply: 'I smile when the numbers are honest. It does not happen often.',
+            follow: 'And when it does?',
+            close: 'I have high standards, Vance. You have warmer ones.',
+        },
+        {
+            from: 'human_f', to: 'mrrshan_f', stance: 'respectful',
+            jab: 'You find the bill. I find the person holding it.',
+            reply: 'It is a good partnership. They rarely like either of us.',
+            follow: 'That is not why we do it.',
+            close: 'No. But it helps to know we are doing it properly.',
+        },
+        {
+            from: 'mrrshan_f', to: 'human_f', stance: 'teasing',
+            jab: 'Vance is about to say we should hear from the people affected.',
+            reply: 'Because we should.',
+            follow: 'Agreed. I only wanted to say it first.',
+            close: 'Then we will hear from them together.',
+        },
+        {
+            from: 'mrrshan_f', to: 'human_f', stance: 'appreciative',
+            jab: 'Somewhere in every statement is a household paying for it.',
+            reply: 'Then let us find the household before we quote the minister.',
+            follow: 'That is why you have the late slot.',
+            close: 'And that is why you have the last word.',
+        },
+
+        // --- Grolm and Oth, more (The Council Hour). ---------------------------
+        {
+            from: 'bulrathi', to: 'psilon', stance: 'blunt',
+            jab: 'Oth, I will take a rough count now over a perfect one next week.',
+            reply: 'A rough count is how wars start.',
+            follow: 'So is waiting.',
+            close: 'Then we agree on the stakes, if not the method.',
+        },
+        {
+            from: 'psilon', to: 'bulrathi', stance: 'academic',
+            jab: 'Grolm assumes every silence is a fleet in hiding.',
+            reply: 'And it usually is.',
+            follow: 'Usually is a frequency, not a proof.',
+            close: 'Then I will bring you a frequency. With hulls in it.',
         },
     ];
 
