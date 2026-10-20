@@ -887,6 +887,7 @@ def _load_ledger():
             _ledger_cache = data
     except (OSError, json.JSONDecodeError):
         _ledger_cache = {'version': 1, 'items': {}}
+    _expire_ledger(_ledger_cache.setdefault('items', {}))
     return _ledger_cache
 
 

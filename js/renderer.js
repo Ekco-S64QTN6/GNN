@@ -605,7 +605,17 @@ const GNNRenderer = (() => {
         const g = c2.getContext('2d');
         g.drawImage(im, 0, 0);
         const a = g.getImageData(0, 0, im.width, im.height).data;
-        const at = (x, y) => a[(y * im.width + x) * 4 + 3];
+        const at = (x, y) => {
+            let minA = 255;
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dy = -2; dy <= 2; dy++) {
+                    const nx = Math.max(0, Math.min(w - 1, x + dx));
+                    const ny = Math.max(0, Math.min(h - 1, y + dy));
+                    minA = Math.min(minA, data[(ny * w + nx) * 4 + 3]);
+                }
+            }
+            return minA;
+        };
         const cx = im.width >> 1, cy = im.height >> 1;
         let l = cx, r = cx, t = cy, b = cy;
         while (l > 0 && at(l - 1, cy) < 40) l--;

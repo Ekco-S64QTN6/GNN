@@ -1,114 +1,92 @@
-You are absolutely right. That report was written *before* we cracked the MoO2 extraction, fixed the `is_palette_holder` bug, and updated the deep dive documentation. 
+Here is the exact, up-to-date list of what remains open. You can save this as `OPEN_ITEMS.md` or paste it into your project management tool.
 
-Here is the **Updated and Corrected** version of the report. I have marked what we fixed, what remains open, and added the new discoveries we made over the last few days. 
-
-You can copy and paste this directly to ChatGPT for a second set of eyes.
+I have excluded everything you just fixed (TTS sequence, `scan_strays.py` imports, MoO2 functional colors, palette holders, trailer gitignore, and the `PROJECT.md` truncation).
 
 ***
 
-# GNN (Galactic News Network) — Updated System Audit & Verification Report
+```markdown
+# GNN — Open Items & Remaining Work
 
-**Date:** October 2026  
-**Auditors:** Gemini DeepMind Review Agent, DeepSeek, and User/Claude pair-programming.  
-**Scope:** Review of current state after the MoO2 asset pipeline overhaul, the Trailer pipeline implementation, and documentation updates.
+**Status as of October 2026 (Post-Merge)**
 
----
-
-## 1. Executive Summary
-
-The project has undergone a massive transformation since the initial audit. The most significant development is the **complete reverse-engineering and resolution of the MoO2 asset extraction bugs**, specifically the `0x0800` functional color format, multi-frame palette holders, and the OFFICER duplicate bug. The trailer generation pipeline is also now operational and rendering high-quality output.
-
-However, several P1/P2 code hygiene and documentation issues from the initial audit remain unaddressed and must be resolved before the next major feature push.
-
-### Core Health Matrix
-
-| Subsystem | Status | Notes |
-| :--- | :--- | :--- |
-| **MoO2 Asset Pipeline** | 🟢 **Fully Solved** | Functional colors (`0x0800`), multi-frame holders, and OFFICER duplicates are now handled perfectly. |
-| **MoO1 Asset Pipeline** | 🟢 Operational | Decoder matches spec. |
-| **Trailer Pipeline** | 🟢 Operational | Renders a 131MB, 138-second cut successfully. |
-| **Python Backend** | 🟢 Operational | Kokoro-82M CPU synthesis (567ms cold) runs flawlessly. |
-| **Frontend Engine** | 🟡 Caution | `measureHole()` is still fragile. `tts.js` prefetch bug is still present. |
-| **Documentation** | 🟡 Caution | `MOO2_GRAPHICS_DEEP_DIVE.md` is now excellent, but `tools/PROJECT.md` is likely still truncated. |
+This document tracks the remaining bugs, technical debt, and unimplemented features from the various system audits.
 
 ---
 
-## 2. What We Fixed (Resolved)
+## 🚨 P1: High Priority (Next Session)
 
-### ✅ The MoO2 `0x0800` Functional Color Trap (RESOLVED)
-*   **The Issue:** Explosions (items 9-67 in `CMBTSFX`) were extracting as black boxes or neon green blobs.
-*   **The Fix:** We discovered the pixel indices are an intensity mask (`F1`-`FF`), not colors. We implemented `render_functional_rgba()` in `extract_moo2.py`, which extracts the low nibble (`v & 0x0F`) and applies a synthetic fire heatmap. 
-*   **Result:** Explosions now perfectly match the original game's additive blending.
+### 1. `js/renderer.js` — Fragile `measureHole()` Probe
+- **The Issue:** The function to find the transparent window in the studio bezel probes the exact center pixel `(cx, cy)`. If a reticle, watermark, or compression artifact makes that single pixel opaque, the entire rendering falls back to a solid rectangle, breaking the window.
+- **The Fix:** Modify the `at(x, y)` function inside `measureHole()` to probe a 5x5 grid around the center and return the minimum alpha value.
 
-### ✅ Multi-Frame Palette Holders (RESOLVED)
-*   **The Issue:** Item 68 in `CMBTSFX` (a 2x1 image with 8 frames) was being skipped by `is_palette_holder()` because it required exactly 1 frame. This broke the colors for items 69+.
-*   **The Fix:** Removed the `nframes == 1` restriction in `extract_moo2.py`.
-*   **Result:** Palette holders with multiple frames are now correctly applied to the running palette state.
+### 2. Add Reference-Pixel Tests for MoO1 & MoO2
+- **The Issue:** The extraction code is structurally brilliant, but it is **evidentially unverified**. There are no unit tests that compare our RGBA output against a known-good community reference.
+- **The Fix:** Pick 5–10 items from `liblbx/moo2-data.txt` that have reference hashes. Add a test to `tools/tests/test_moo2_tools.py` that checks our extracted pixels against those known-good hashes.
 
-### ✅ `MOO2_GRAPHICS_DEEP_DIVE.md` Incorrect Algorithm (RESOLVED)
-*   **The Issue:** The doc described a linear 6-rule priority system, which did not match the code's additive-merge model.
-*   **The Fix:** The doc was completely rewritten to accurately describe the Base Selection + Additive Merge model, alongside the new binary proofs for `0x0800`, `0x1000`, and `0x0400` flags.
-
-### ✅ OFFICER Duplicate Corruption (RESOLVED)
-*   **The Issue:** Items 143-343 in `OFFICER.LBX` were corrupted duplicate portraits that broke the extractor.
-*   **The Fix:** Added a hard skip rule (`if name == 'OFFICER' and i >= 143: skipped += 1; continue`) in `extract_moo2.py`.
-
-### ✅ Trailer Pipeline & Gitignore (RESOLVED)
-*   **The Issue:** The new trailer build was generating large media files that would bloat the git repo.
-*   **The Fix:** Added `.gitkeep` files to `trailer/build/` and `trailer/out/`, and updated `.gitignore` to correctly ignore the media artifacts while tracking the folder structure.
+### 3. `tools/tests/` — Hardcoded Paths
+- **The Issue:** Over 25 test scripts hardcode `sys.path.insert(0, '/home/ekco/github/GNN/tools')`. This will fail on any other machine or CI environment.
+- **The Fix:** Replace the hardcoded strings with `os.path.dirname(os.path.abspath(__file__))` to dynamically resolve the root.
 
 ---
 
-## 3. Still Open (Needs Action)
+## ⚠️ P2: Medium Priority (Asset & Polish)
 
-### 🚨 Bug #1: `tools/PROJECT.md` Truncation (P0)
-*   **Status:** Unverified. 
-*   **Action:** Check the first line of `tools/PROJECT.md`. If it starts with `Some of these are **text archives**...`, it is still truncated. Restore lines 1-939 from commit `8cb098d`.
+### 4. Unconditioned Weather Cutaways
+- **The Issue:** `weather_map.png` and `weather_map_02.png` exist in `assets/generated/cutaways/` as raw 2+ MB files. They have not been conditioned to 256-color plates.
+- **The Fix:** Run `python3 tools/condition_plates.py` and wire the resulting assets into the `GENERATED` dictionary in `js/cutscene-manager.js`.
 
-### 🚨 Bug #2: `tools/scan_strays.py` Broken Imports (P1)
-*   **Status:** Unresolved.
-*   **Action:** Change imports in `scan_strays.py` from `GFX_HEADER` to `MOO1_HEADER` and `MOO2_HEADER` (and fix the hardcoded `0x10` to `0x0C`).
+### 5. Dead Code in `palette_map.json`
+- **The Issue:** `palette_map.json` contains `_item_palettes` overrides for `OFFICER` items 277–343. However, `extract_moo2.py` now skips extracting `OFFICER` items 143+ entirely because they are corrupted duplicates. These map entries are dead code.
+- **The Fix:** Remove the `OFFICER` entries from `_item_palettes` in `palette_map.json`, or add a comment noting they are unreachable.
 
-### 🚨 Bug #3: `js/tts.js` Prefetch Priority Loss (P1)
-*   **Status:** Unresolved.
-*   **Action:** In `js/tts.js`, change `const start = () =>` to `const start = (runSeq = 0) =>` and invoke `return q.start(seq);` when a live line is promoted from the prefetch cache.
+### 6. MoO2 Cinematics Are Decoded But Unread
+- **The Issue:** `extract_moo2_video.py` successfully decoded nine Smacker videos (intro, endings, planet destruction) into `assets/cutscenes/moo2_video/`. However, nothing in `js/` references them yet.
+- **The Fix:** Expose them via the asset registry as animated `single()` scenes, and route them through `js/cutscene-manager.js` for the `anomaly` or `fleet` blocks.
 
-### 🚨 Bug #4: Dead Code in `palette_map.json` (P2)
-*   **Status:** Unresolved.
-*   **Action:** `palette_map.json` still contains `_item_palettes` entries for `OFFICER` items 277+. Because `extract_moo2.py` skips 143+ entirely, these entries are dead code. Remove them or add a comment.
+### 7. Title-Card Prompts Are Incorrect
+- **The Issue:** The fallback for title cards is currently just a `_standing.png` per character over a set plate.
+- **The Fix:** Update the prompts in `assets/generated/Prompts/` for `titlecards/` to generate proper show bumpers.
 
-### 🚨 Bug #5: Unconditioned Weather Cutaways (P2)
-*   **Status:** Unresolved.
-*   **Action:** `weather_map.png` and `weather_map_02.png` exist in `assets/generated/cutaways/` but have not been run through `condition_plates.py`. Run the conditioner and wire them into `GENERATED` in `js/cutscene-manager.js`.
-
-### 🚨 Bug #6: `measureHole()` Fragile Pixel Probe (P2)
-*   **Status:** Unresolved.
-*   **Action:** In `js/renderer.js`, modify `measureHole()` to probe a 5x5 kernel around the center instead of a single pixel `(cx, cy)`.
-
-### 🚨 Bug #7: Hardcoded Paths in Test Suite (P2)
-*   **Status:** Unresolved.
-*   **Action:** Replace `/home/ekco/github/GNN` in `tools/tests/*.py` with dynamic `os.path.dirname` anchors.
+### 8. `assets/generated/icons/` Partially Populated
+- **The Issue:** The story icons are regenerating, but the folder is not fully populated yet.
+- **The Fix:** Run the generation and conditioning pipeline for the remaining icons.
 
 ---
 
-## 4. The Verification Gap
+## 🔧 P3: Low Priority (Hygiene & Edge Cases)
 
-While the MoO2 extraction code is now **structurally brilliant** (having solved the hardest undocumented problems in the format), it is still **evidentially unverified**. 
+### 9. `server.py` — Ledger Pruning on Boot
+- **The Issue:** `_expire_ledger()` is only called during a PUT request. A read-only server session will hold stale ledger records in memory indefinitely.
+- **The Fix:** Call `_expire_ledger()` inside `_load_ledger()` during server initialization.
 
-To claim 100% completion, we need reference hashes. 
-*   **Action:** Pick 5-10 items from `liblbx/moo2-data.txt` that have reference hashes. Add a test to `tools/tests/test_moo2_tools.py` that compares the RGBA output of our extractor against the known-good hashes. If they match, the extraction is mathematically proven.
+### 10. `js/feed-manager.js` — High Token Cache Ceiling
+- **The Issue:** `tokenCache` holds up to 60,000 entries before clearing. A 24/7 kiosk does not need this much GC pressure.
+- **The Fix:** Lower the ceiling to 3,000–5,000 entries.
+
+### 11. `feed-manager.js:calculateImportance()` Suspect Regex
+- **The Issue:** A reported issue suggests the regex used to calculate story importance might have a bug (reported, not yet confirmed against the file).
+- **The Fix:** Verify the regex against known headlines.
+
+### 12. `js/cast.js` — Robot Entry Review
+- **The Issue:** The `robot` entry in `cast.js` still reads as MoO1-lineage. It needs a review to decide if he stays seatable (`SHOW_PAIRS` block 4 seats `sakkra` + `robot`).
 
 ---
 
-## 5. Prioritized Roadmap
+## 🌐 Content & Lore Separation (Owner Request)
 
-*   [ ] **P0**: Verify/Restore `tools/PROJECT.md`.
-*   [ ] **P1**: Fix `scan_strays.py` imports.
-*   [ ] **P1**: Fix `tts.js` prefetch sequence bug.
-*   [ ] **P1**: Add `liblbx` reference hash tests.
-*   [ ] **P2**: Clean up dead OFFICER entries in `palette_map.json`.
-*   [ ] **P2**: Condition weather maps and wire into cutscenes.
-*   [ ] **P2**: Fix `measureHole()` in `renderer.js`.
-*   [ ] **P2**: Fix hardcoded paths in `tools/tests/`.
-*   [ ] **P3**: Prune ledger on boot in `server.py`.
-*   [ ] **P3**: Lower `tokenCache` in `feed-manager.js`.
+### 13. MoO1 Lore and Real News Still Mix
+- **The Issue:** `PACE.wireShare` interleaves sector bulletins with real stories, and the banter templates have not been audited for in-universe terms applied to real headlines.
+- **The Fix:** Separate the two completely. Commercials are in-universe by design and should remain untouched.
+
+### 14. Twelve Show Logos and Nothing Loads Them
+- **The Issue:** `assets/generated/logos/` holds one logo per show plus `galaxy_shop` and `main_desk`, but no code actually draws them.
+- **The Fix:** The network promos now name each show; add the logo to the promo card.
+
+### 15. Two COLONIES Items Decode Scrambled
+- **The Issue:** `COLONIES` `item_02` and `item_03` decode with a scattered-pixel sky.
+- **The Fix:** Keep them excluded via `COLONIES_SCRAMBLED` in `scene-compositor.js`, or attempt a new palette extraction.
+
+### 16. `capture_docs.py` Hangs on 429
+- **The Issue:** The script hangs when RSS feeds return a 429 (Too Many Requests), waiting for live states.
+- **The Fix:** Drive the director instead (enqueue, then force states).
+```

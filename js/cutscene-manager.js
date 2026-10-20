@@ -283,7 +283,8 @@ const GNNCutsceneManager = (() => {
         { kind: 'industry', words: ['factory', 'manufacturing', 'mining', 'chip', 'semiconductor', 'steel', 'energy', 'reactor', 'battery', 'supply chain', 'plant', 'refinery'] },
         { kind: 'interview', words: ['interview', 'said', 'told', 'statement', 'ceo', 'spokesperson', 'testimony', 'address', 'speech'] },
         { kind: 'tactical', words: ['military', 'defense', 'defence', 'missile', 'strike', 'troops', 'war', 'conflict', 'invasion', 'drone', 'navy', 'army'] },
-        { kind: 'deepfield', words: ['climate', 'ocean', 'ice', 'weather', 'environment', 'species', 'forest', 'earth'] },
+        { kind: 'weather', words: ['weather', 'storm', 'climate', 'forecast', 'hurricane', 'temperature'] },
+        { kind: 'deepfield', words: ['ocean', 'ice', 'environment', 'species', 'forest', 'earth'] },
     ];
 
     function hasWholeWord(text, word) {
@@ -343,6 +344,7 @@ const GNNCutsceneManager = (() => {
         outbreak: ['virus_outbreak', 'virus_outbreak_02'],
         industry: ['asteroid_mining', 'asteroid_mining_02',
             'station_trade', 'station_trade_02'],
+        weather: ['weather_map', 'weather_map_02'],
         deepfield: ['black_hole', 'black_hole_02',
             'space_vortex', 'space_vortex_02', 'space_vortex_03'],
         interview: ['council_summit', 'station_trade', 'station_trade_02',
@@ -758,10 +760,11 @@ const GNNCutsceneManager = (() => {
         industry: [{ role: 'servo', gain: 0.5 }, { role: 'rumble', gain: 0.4, delay: 0.4 }],
         interview: [{ role: 'chirp', gain: 0.4 }],
         tactical: [{ role: 'alarm', gain: 0.4 }, { role: 'blast', gain: 0.45, delay: 1.2 }],
+        weather: [{ role: 'sweep', gain: 0.4 }, { role: 'blip', gain: 0.3 }],
         deepfield: [{ role: 'drone', gain: 0.35 }],
         single: [{ role: 'servo', gain: 0.3 }],
         groundwar: [{ role: 'blast', gain: 0.45 }, { role: 'zap', gain: 0.35, delay: 0.7 },
-            { role: 'rumble', gain: 0.35, delay: 1.6 }, { role: 'blast', gain: 0.3, delay: 2.8 }],
+        { role: 'rumble', gain: 0.35, delay: 1.6 }, { role: 'blast', gain: 0.3, delay: 2.8 }],
     };
 
     // A plain shot — a still, a plate, a product — used to fire the same
@@ -2138,8 +2141,10 @@ const GNNCutsceneManager = (() => {
         // picked first; each spot then avoids the voice before it. Left
         // untagged, the ident read in whichever announcer was picked last,
         // which was often the first spot's too.
-        const beats = [{ kind: 'ident', text: GNNScript.ident(),
-                         voice: pickBreakVoice() }];
+        const beats = [{
+            kind: 'ident', text: GNNScript.ident(),
+            voice: pickBreakVoice()
+        }];
         for (const sc of spots) {
             const voice = pickBreakVoice();
             for (const b of sc.beats) {
@@ -2277,7 +2282,7 @@ const GNNCutsceneManager = (() => {
             const spoken = onBeat(shot.beat.text, shot);
             if (spoken && typeof spoken.then === 'function') {
                 spoken.then(() => { shot.voiceDone = true; })
-                      .catch(() => { shot.voiceDone = true; });
+                    .catch(() => { shot.voiceDone = true; });
             } else {
                 shot.voiceDone = true;
             }

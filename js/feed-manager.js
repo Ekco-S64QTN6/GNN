@@ -266,7 +266,7 @@ const GNNFeedManager = (() => {
         const key = String(value || '');
         let tokens = tokenCache.get(key);
         if (!tokens) {
-            if (tokenCache.size > 60000) tokenCache.clear();
+            if (tokenCache.size > 5000) tokenCache.clear();
             tokens = new Set(titleKey(key).split(' ').filter((w) =>
                 w.length >= 4 && !LEDGER_STOPWORDS.has(w)));
             tokenCache.set(key, tokens);
@@ -667,7 +667,7 @@ const GNNFeedManager = (() => {
         const doc = new DOMParser().parseFromString(xml, 'application/xml');
         if (doc.querySelector('parsererror')) throw new Error('Invalid feed XML');
         const nodes = [...doc.getElementsByTagName('item'),
-            ...doc.getElementsByTagNameNS('http://www.w3.org/2005/Atom', 'entry')];
+        ...doc.getElementsByTagNameNS('http://www.w3.org/2005/Atom', 'entry')];
         const textOf = (node, names) => {
             for (const name of names) {
                 const found = node.getElementsByTagName(name)[0]
@@ -689,7 +689,7 @@ const GNNFeedManager = (() => {
             // enclosure) in any order. The ledger matches stories by link, so
             // take the article itself: rel="alternate", or a link with no rel.
             const links = [...item.getElementsByTagName('link'),
-                ...item.getElementsByTagNameNS('http://www.w3.org/2005/Atom', 'link')];
+            ...item.getElementsByTagNameNS('http://www.w3.org/2005/Atom', 'link')];
             const linkNode = links.find((l) => !l.getAttribute('rel')
                 || l.getAttribute('rel') === 'alternate') || links[0];
             const link = linkNode
