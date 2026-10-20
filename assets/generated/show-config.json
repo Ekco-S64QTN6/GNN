@@ -64,7 +64,7 @@
       "genre": "ai",
       "set": "tech_wide_empty.png",
       "backdrop": "earth_globe_dawn.png",
-      "titlecard": null,
+      "titlecard": "machine_intel.png",
       "pair": [
         "sakkra",
         "robot"
@@ -81,7 +81,7 @@
       "titlecard": "fleet_briefing.png",
       "pair": [
         "bulrathi",
-        "meklar"
+        "darlok"
       ],
       "debate": false
     },
@@ -92,7 +92,7 @@
       "genre": "politics",
       "set": "diplomatic_wide_empty.png",
       "backdrop": "earth_globe_dawn.png",
-      "titlecard": null,
+      "titlecard": "diplomacy.png",
       "pair": [
         "alkari_f",
         "silicoid"
@@ -106,7 +106,7 @@
       "genre": "prime",
       "set": "celebrity_wide_empty.png",
       "backdrop": "orion_shipyard_night.png",
-      "titlecard": null,
+      "titlecard": "evening_rim.png",
       "pair": [
         "mrrshan_f",
         "human_f"
@@ -120,7 +120,7 @@
       "genre": "latenight",
       "set": "anomaly_wide_empty.png",
       "backdrop": "earth_globe_dawn.png",
-      "titlecard": null,
+      "titlecard": "anomaly.png",
       "pair": [
         "robot",
         "psilon"
@@ -134,9 +134,205 @@
       "genre": "archive",
       "set": "archive_wide_empty.png",
       "backdrop": "orion_shipyard_night.png",
-      "titlecard": null,
+      "titlecard": "archives.png",
       "pair": [
         "psilon",
+        "robot"
+      ],
+      "debate": false
+    },
+    {
+      "id": "sector_weather",
+      "title": "Sector Weather Watch",
+      "desk": "WEATHER DESK",
+      "genre": "weather",
+      "set": "weather_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "sector_weather.png",
+      "pair": [
+        "human_f",
+        "alkari"
+      ],
+      "debate": false
+    },
+    {
+      "id": "solar_wind",
+      "title": "Solar Wind Overnight",
+      "desk": "WEATHER DESK",
+      "genre": "weather",
+      "set": "weather_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "solar_wind.png",
+      "pair": [
+        "silicoid",
+        "psilon"
+      ],
+      "debate": false
+    },
+    {
+      "id": "rim_sports",
+      "title": "Rim Sports Wire",
+      "desk": "SPORTS DESK",
+      "genre": "sports",
+      "set": "sports_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "rim_sports.png",
+      "pair": [
+        "bulrathi",
+        "mrrshan"
+      ],
+      "debate": false
+    },
+    {
+      "id": "arena_hour",
+      "title": "The Arena Hour",
+      "desk": "SPORTS DESK",
+      "genre": "sports",
+      "set": "sports_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "arena_hour.png",
+      "pair": [
+        "klackon",
+        "human"
+      ],
+      "debate": false
+    },
+    {
+      "id": "midday_wire",
+      "title": "Sector Midday Wire",
+      "desk": "MAIN DESK",
+      "genre": "midday",
+      "set": "studio_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "midday_wire.png",
+      "pair": [
+        "human_f",
+        "mrrshan"
+      ],
+      "debate": false
+    },
+    {
+      "id": "market_close",
+      "title": "Market Close",
+      "desk": "TRADE DESK",
+      "genre": "business",
+      "set": "market_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "market_close.png",
+      "pair": [
+        "meklar",
+        "human_f"
+      ],
+      "debate": false
+    },
+    {
+      "id": "orbital_briefing",
+      "title": "Orbital Briefing",
+      "desk": "FLEET DESK",
+      "genre": "space",
+      "set": "anomaly_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "orbital_briefing.png",
+      "pair": [
+        "alkari",
+        "darlok"
+      ],
+      "debate": false
+    },
+    {
+      "id": "council_hour",
+      "title": "The Council Hour",
+      "desk": "SECTOR DEBATE",
+      "genre": "debate",
+      "set": "diplomatic_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "council_hour.png",
+      "pair": [
+        "bulrathi",
+        "psilon"
+      ],
+      "debate": true
+    },
+    {
+      "id": "galactic_spotlight",
+      "title": "Galactic Spotlight",
+      "desk": "CULTURE DESK",
+      "genre": "culture",
+      "set": "celebrity_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "galactic_spotlight.png",
+      "pair": [
+        "alkari_f",
+        "mrrshan_f"
+      ],
+      "debate": false
+    },
+    {
+      "id": "night_desk",
+      "title": "The Night Desk",
+      "desk": "OVERNIGHT DESK",
+      "genre": "overnight",
+      "set": "studio_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "night_desk.png",
+      "pair": [
+        "darlok",
+        "robot"
+      ],
+      "debate": false
+    },
+    {
+      "id": "deep_signal",
+      "title": "Deep Signal",
+      "desk": "INVESTIGATION DESK",
+      "genre": "latenight",
+      "set": "anomaly_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "deep_signal.png",
+      "pair": [
+        "silicoid",
+        "darlok"
+      ],
+      "debate": false
+    },
+    {
+      "id": "old_empires",
+      "title": "Chronicles of the Old Empires",
+      "desk": "ARCHIVE DESK",
+      "genre": "archive",
+      "set": "archive_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "old_empires.png",
+      "pair": [
+        "meklar",
+        "sakkra"
+      ],
+      "debate": false
+    },
+    {
+      "id": "world_tonight",
+      "title": "World Desk Tonight",
+      "desk": "WORLD DESK",
+      "genre": "world",
+      "set": "geopolitics_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "world_tonight.png",
+      "pair": [
+        "human",
+        "bulrathi"
+      ],
+      "debate": false
+    },
+    {
+      "id": "signal_circuit",
+      "title": "Signal & Circuit",
+      "desk": "TECH DESK",
+      "genre": "tech",
+      "set": "tech_wide_empty.png",
+      "backdrop": "earth_globe_dawn.png",
+      "titlecard": "signal_circuit.png",
+      "pair": [
+        "klackon",
         "robot"
       ],
       "debate": false
@@ -261,7 +457,7 @@
       "enabled": true
     },
     "alkari": {
-      "voice": "bf_emma",
+      "voice": "am_puck",
       "enabled": true
     },
     "darlok": {
