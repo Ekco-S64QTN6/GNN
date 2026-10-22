@@ -186,9 +186,10 @@ Complete decoding/rendering of raw MoO2 music sources is not automated yet:
 describe a populated local extraction tree; counts may differ when ignored
 music outputs are absent.
 
-That is about five minutes on a modern machine. `assets/generated/` — the AI
-plates the studio is made of — is already in the clone, so nothing else has to
-be generated.
+Elapsed time depends on the local game data and whether video frames need
+to be decoded; rerunning only the stages whose inputs changed is faster than
+a full rebuild. `assets/generated/` — the AI plates the studio is made of — is
+already in the clone.
 
 Verify before launching:
 
