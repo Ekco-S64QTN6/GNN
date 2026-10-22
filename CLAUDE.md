@@ -43,7 +43,7 @@ the metric is the thing to doubt.
 |---|---|
 | Voice engine | Kokoro-82M, local, in-process, ~7× realtime on CPU |
 | Fallback | `edge-tts` (cloud) when `.venv` is absent |
-| Assets (MoO1) | 873 graphics items / 4,205 frames across 22 archives — decodes byte-exact |
+| Assets (MoO1) | 873 graphics items across 22 archives; historical checks report byte-exact decoding, but frame totals conflict (4,205 here vs. 4,316 in `assets/README.md`) and need a fresh local extraction comparison |
 | Assets (MoO2) | 6,502 graphics items across 285 archives — decoder correct, palette map from community sources |
 | Merged manifest | 342 directory keys and 0 duplicate ids are expected. The last verifier/README output says 7,374 items, while §3's post-merge audit records 7,375; rerun merge + verification locally before treating the one-item count as reconciled |
 | Admitted pools | MoO1 + MoO2: 147 broll (86+61) · 219 portrait (136+83) · 1,005 sprite (396+609) · 154 chrome (12+142) · 15 glitch. `STATIC_DENY` (scene-compositor.js) is enforced **inside `GNNAssets.find()`**, so every consumer gets it |
