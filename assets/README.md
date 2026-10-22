@@ -1,7 +1,11 @@
 # GNN Asset Catalog 🎬📦
 
-Everything here was decoded out of `Master of Orion 1/data/*.LBX` by
-`tools/lbx.py`. Re-run the extractors to rebuild any of it.
+This page documents the MoO1 graphics/cutscene decoder and the manifest fields
+that began the GNN asset library. The runtime catalog also includes MoO2
+assets; see [MOO2_GRAPHICS_DEEP_DIVE.md](../MOO2_GRAPHICS_DEEP_DIVE.md) and
+[tools/PROJECT.md](../tools/PROJECT.md) for MoO2 format, runtime integration,
+and remaining pipeline work. MoO1 items documented below are rebuilt from
+`Master of Orion 1/data/*.LBX` with `tools/lbx.py`.
 
 ---
 
@@ -92,8 +96,13 @@ compositor asks for "a clean bright backdrop over 140px" or "four readout
 plates bigger than a button", and the glitch engine asks for the opposite.
 
 ### `audio-manifest.json`
-All 41 `SOUNDFX.LBX` effects with `dur · rate · peak · rms · bright · attack ·
-sustain`, bucketed into a `role`:
+Produced by `tools/build_audio.py`. The base pool is the 41 MoO1
+`SOUNDFX.LBX` effects, measured with `dur · rate · peak · rms · bright · attack ·
+sustain` and bucketed into a `role`. When `assets/audio/moo2/manifest.json`
+exists, the builder also profiles and merges the native-WAV MoO2 `SOUND.LBX`
+samples into that pool. It indexes MoO2 music OGGs already present under
+`assets/audio/music/moo2/`, but does not decode or render raw MoO2 music
+source formats. Totals therefore depend on the ignored local extraction outputs.
 
 ```
 click  sfx_06 sfx_36        tick   sfx_05         thud   sfx_00 sfx_26
@@ -103,8 +112,10 @@ siren  sfx_03 sfx_24        alarm  sfx_14         drone  sfx_20 sfx_25 sfx_32
 rumble sfx_02 04 08 15 17 18 37 39
 ```
 
-Plus the 5 `INTROSND` stings and all 40 `MUSIC.LBX` tracks (21m36s total)
-rendered to OGG with FluidR3 GM.
+MoO1 also supplies the five `INTROSND` stings and forty `MUSIC.LBX` tracks,
+rendered to OGG through FluidR3 GM when the MIDI inputs and soundfont are
+available. MoO2 music OGGs are optional already-rendered inputs, as described
+above.
 
 ### `moo-strings.json`
 - **`bulletins`** — 75 usable news templates out of the 154 in `EVENTMSG.LBX`,
@@ -136,7 +147,7 @@ console readout at `114,435 · 735×135` is outside it.
 
 ---
 
-## 🎬 `cutscenes/` — 873 items, 4,316 frames, 418 GIFs
+## 🎬 MoO1 `cutscenes/` — 873 items, 4,316 frames, 418 GIFs
 
 Frames are `item_NN_frame_NNN.png`, **RGBA with real transparency** (index 0 is
 alpha 0, not a filled backdrop colour) so they can be layered.
@@ -168,6 +179,22 @@ and `glitch-engine.js` uses them deliberately as transmission interference.
 ---
 
 ## 🔁 Rebuilding
+
+All commands require your own game files under `Master of Orion 1/`.
+Extracted output directories are ignored and must be regenerated locally.
+
+```bash
+python3 tools/extract_all.py              # MoO1 graphics + gfx-manifest.json
+python3 tools/extract_text.py             # MoO1 text + moo-strings.json
+python3 tools/build_audio.py              # MoO1 audio and any present MoO2 outputs
+python3 tools/extract_moo2.py             # MoO2 graphics
+python3 tools/extract_moo2_text.py        # MoO2 NUL-delimited text + raw records
+python3 tools/extract_sound_moo2.py       # MoO2 SOUND.LBX samples to WAV
+python3 tools/extract_moo2_video.py       # MoO2 Smacker to PNG frames
+python3 tools/merge_moo2_manifests.py     # merge MoO2 graphics into gfx-manifest.json
+python3 tools/merge_moo2_text.py          # filter/merge MoO2 text into moo2-strings.json
+python3 tools/build_audio.py              # re-profile SFX and index present MoO2 music OGGs
+```
 
 ```bash
 python3 tools/extract_all.py     # graphics + gfx-manifest.json
