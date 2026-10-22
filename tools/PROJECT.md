@@ -269,7 +269,7 @@ populated local manifest has music entries.
 ### 6.2 MoO2 runtime integration
 
 - **Graphics:** runtime support for `source: 'moo2'` and merged graphics manifests is implemented. Re-run extraction and `merge_moo2_manifests.py` after changing decoder or palette behavior.
-- **Text:** `assets/moo2-strings.json` is loaded, but runtime admission is intentionally limited to reviewed race/star names. Narrative event text needs classification and allowlist changes (see §6.4 and `docs/ROADMAP.md` §4.4).
+- **Text:** `assets/moo2-strings.json` is loaded, but runtime admission is intentionally limited to reviewed race/star names. Narrative event text needs classification and allowlist changes (see §6.4 and [docs/ROADMAP.md](../docs/ROADMAP.md) §4.4).
 - **Video:** nine source cinematics are decoded; 33 vetted segments route through `cutscene-manager.js`. Selecting/validating additional unused segments is an optional content task, not missing decoder wiring.
 
 ### 6.3 MoO1 in the runtime
@@ -1119,5 +1119,5 @@ that all generated assets or live broadcast behaviour have been revalidated.
 - Add automated comparisons against the listed `liblbx` fixture hashes when
   suitable fixtures are available.
 
-The authoritative current backlog is `docs/ROADMAP.md`; see §6 above for the
+The authoritative current backlog is [docs/ROADMAP.md](../docs/ROADMAP.md); see §6 above for the
 separate text-curation and MoO2 music-source implementation gaps.
