@@ -1,23 +1,24 @@
 # GNN Test & Diagnostic Suite
 
-Standalone tools for testing, verifying and diagnosing the running GNN
-station. Nothing in this folder is part of the shipped broadcast; every
-script drives the station from outside, over CDP or HTTP, or manipulates
-files under `assets/` without touching the runtime.
+These scripts are split between offline checks and diagnostics that observe a
+running broadcast. Read the mode in each row before running a script.
 
-Every script that talks to a browser does so through
-[`tools/drive.py`](../drive.py), which launches a headless Chromium,
-attaches a CDP session, and reaps every process it started when it exits.
+The offline suite needs no running station and is safe while the owner is on
+air:
 
-The station must already be running:
-
-```
-./start.sh --bg
+```bash
+tools/tests/offline.sh
 ```
 
-Most scripts then run with `python3 tools/tests/<script>.py`.
+It runs JavaScript syntax checks, Python compilation, the content checks,
+MoO2 tool unit tests, asset-path verification, and a product contact sheet.
+Some checks need extracted game assets under `assets/`; the repository does
+not include all ignored extraction outputs.
 
----
+Browser/CDP diagnostics use `tools/drive.py` and normally need the station at
+`http://localhost:8080/`. Do not stop or restart the owner's station to run a
+probe; use the documented second-server procedure in `CONTRIBUTING.md` when
+isolation is required.
 
 ## 1. Tests
 
@@ -116,33 +117,16 @@ during development and all but these two were superseded.
 
 ## Notes
 
-**Every script in this folder assumes the station is running** on
-`http://localhost:8080/`. `drive.py` launches its own headless Chromium,
-attaches to it over CDP on port 9333, and kills every process it started
-when the script exits — including Chromium's helper processes and any
-flatpak survivors.
+- **Server requirement is per-script, not universal.** CDP and live audio/feed
+  probes need a running station. `offline.sh`, `content_check.py`,
+  `test_moo2_tools.py`, and `productsheet.py` are offline checks.
+- CDP diagnostics target `http://localhost:8080/` by default. `drive.py`
+  launches and reaps the Chromium process it creates; it does not own the
+  production server.
+- Do not run two scripts that tap `GNNAudio.getMasterBus()` at the same time.
+  Each adds an audio tap and can double the level measured by the other.
+- Do not run `./stop.sh` while a CDP probe is attached. The CDP session can
+  hang after its target is killed.
+- `links.py` checks internal Markdown links in `README.md`, `CLAUDE.md`,
+  and `docs/ROADMAP.md`. It is not a full audit of every Markdown file.
 
-**Scripts that install a `ScriptProcessor` on the master bus** — every
-script in section 3 — should not be run two at a time. Each one connects a
-new audio tap and the second one will report double the level of the first.
-
-**Do not run `./stop.sh` while a diagnostic is attached.** The CDP session
-will hang waiting for a target that has been killed, and `drive.py`'s
-shutdown will not be able to close a browser that never had a page.
-
-**Hardcoded paths.** Every script in this folder starts with
-`sys.path.insert(0, '/home/ekco/github/GNN/tools')`. That is the owner's
-machine. If the project ever moves, that line breaks every script. The
-replacement is:
-
-```python
-import os, sys
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(ROOT, 'tools'))
-```
-
-Not done yet — it is a personal project, and it is only a problem when the
-project moves.
-```
-
-Save it as `tools/tests/README.md`, delete the 19 superseded scripts, and the folder is clean.
