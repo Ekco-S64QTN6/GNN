@@ -15,10 +15,10 @@ MoO2 tool unit tests, asset-path verification, and a product contact sheet.
 Some checks need extracted game assets under `assets/`; the repository does
 not include all ignored extraction outputs.
 
-Browser/CDP diagnostics use `tools/drive.py` and normally need the station at
-`http://localhost:8080/`. Do not stop or restart the owner's station to run a
-probe; use the documented second-server procedure in
-[CONTRIBUTING.md](../../CONTRIBUTING.md) when isolation is required.
+Browser/CDP diagnostics use `tools/drive.py` and need an explicitly chosen
+test URL. Never point a test browser at the owner's production station on port
+8080. Follow [CONTRIBUTING.md](../../CONTRIBUTING.md) to launch an isolated
+server on a different port and set `GNN_URL` / `GNN_CDP_PORT` for the probe.
 
 ## 1. Tests
 
