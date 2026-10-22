@@ -10,8 +10,8 @@ Twenty-four shows, ninety-six slots a day, never off the air.
 [![No dependencies](https://img.shields.io/badge/frontend-vanilla_JS-f7df1e?style=flat-square&logo=javascript&logoColor=black)](#)
 [![Python](https://img.shields.io/badge/server-python_3.8%2B-3776ab?style=flat-square&logo=python&logoColor=white)](#)
 [![Canvas](https://img.shields.io/badge/render-HTML5_canvas_full--window-6fc3df?style=flat-square)](#)
-[![Assets](https://img.shields.io/badge/assets-MoO1_%2B_MoO2_·_7374_items-9c6bff?style=flat-square)](#)
-[![Audio](https://img.shields.io/badge/audio-109_SFX_·_57_tracks-54e08a?style=flat-square)](#)
+[![Assets](https://img.shields.io/badge/assets-MoO1_%2B_MoO2_catalog-9c6bff?style=flat-square)](#)
+[![Audio](https://img.shields.io/badge/audio-profiled_SFX_%2B_indexed_music-54e08a?style=flat-square)](#)
 [![Voice](https://img.shields.io/badge/voice-kokoro--82M_local-ff9de2?style=flat-square)](#)
 [![Cast](https://img.shields.io/badge/cast-14_characters-ffb454?style=flat-square)](#)
 
@@ -69,13 +69,21 @@ a real story.
 
 The channel is built on two sources.
 
-**The archive.** Decoded out of the original `.LBX` files from both
-*Master of Orion 1* and *Master of Orion 2*: **7,374 graphics items** across
-both games, nine MoO2 cinematics, 109 sound effects, 57 music tracks, the 75
-news bulletins the original in-game anchor read, and the diplomacy the
-empires sent each other. It supplies the sound, the music, the cutaway
-footage — stills and moving video — and the lore show's copy. The freighter convoys and tactical plots are *composited
-at runtime* out of parts the game shipped separately.
+**The archive.** Decoded from the original `.LBX` files for both games, the
+catalog combines MoO1 and MoO2 graphics with game text, sound effects and
+music assets. Nine MoO2 Smacker source videos can be decoded into frames;
+33 reviewed segments are routed for runtime cutaways. `SOUND.LBX` effect
+extraction and manifest integration are implemented, but automated decoding
+and rendering of raw MoO2 music sources is still unfinished. The recorded
+local graphics totals disagree (7,374 vs. 7,375), so regenerate, merge and
+verify local assets before publishing an exact item count. The documented
+MoO1 frame totals also differ (4,205 vs. 4,316) and need the same local
+extraction comparison. The archive also
+supplies the 75 news bulletins the original in-game anchor read and the
+diplomacy the empires sent each other. It supplies the sound, the music and
+the cutaway footage — stills and moving video — and the lore show's copy. The
+freighter convoys and tactical plots are *composited at runtime* out of parts
+the game shipped separately.
 
 **The studio.** The set, the generated anchors and correspondents, the window
 backdrops and the story cutaways are generated art, conditioned by
@@ -178,17 +186,30 @@ python3 tools/merge_moo2_text.py          # folds MoO2 text into assets/moo2-str
 python3 tools/build_audio.py              # re-runs to merge MoO2 audio into the manifest
 ```
 
-That is about five minutes on a modern machine. `assets/generated/` — the AI
-plates the studio is made of — is already in the clone, so nothing else has to
-be generated.
+**MoO2 music boundary:** `extract_sound_moo2.py` and `build_audio.py` automate
+SOUND.LBX sound-effect extraction, profiling and manifest integration.
+Complete decoding/rendering of raw MoO2 music sources is not automated yet:
+`build_audio.py` only indexes OGG files already present in
+`assets/audio/music/moo2/`. The reported 109-effect / 57-music-bed counts
+describe a populated local extraction tree; counts may differ when ignored
+music outputs are absent.
+
+Elapsed time depends on the local game data and whether video frames need
+to be decoded; rerunning only the stages whose inputs changed is faster than
+a full rebuild. `assets/generated/` — the AI plates the studio is made of — is
+already in the clone.
 
 Verify before launching:
 
 ```bash
 python3 tools/verify_assets.py
+# Example from a previously populated local extraction tree:
 # graphics : 7374 items, 10063 spot-checked frames
 # audio    : 109 effects, 5 stings, 57 music beds
 # OK — every runtime asset resolves inside the project.
+# Count caveat: CLAUDE.md §3 records 7375 after merge; rerun the local
+# extract/merge/verify pipeline and compare the fresh boot log to settle it.
+# Optional pre-rendered MoO2 OGGs can change the music-bed count.
 ```
 
 ### Launch
@@ -426,12 +447,16 @@ villa to a foundry floor; archive stills are the occasional throwback.
 <details open>
 <summary><b>The full audio bank</b></summary>
 
-All 109 effects (41 MoO1, 68 MoO2) are profiled offline by duration, spectral
-brightness, attack and sustain, then bucketed into 13 roles — `click blip tick
-thud beep chirp zap servo sweep blast siren alarm drone rumble` — so the
-director asks for *a kind of noise*, not an index. All 57 music tracks (40
-MoO1 MIDI renders and 17 MoO2 cinematic/stream OGGs) are used as break beds,
-ducked under the voice.
+The latest recorded populated local manifest lists 109 effects (41 MoO1,
+68 MoO2), profiled offline by duration, spectral brightness, attack and
+sustain, then bucketed into 13 roles — `click blip tick thud beep chirp zap
+servo sweep blast siren alarm drone rumble` — so the director asks for *a
+kind of noise*, not an index. The same recorded output indexed 57 music beds:
+40 MoO1 MIDI renders and 17 pre-existing MoO2 cinematic/stream OGGs. Counts
+depend on the local extraction outputs. `build_audio.py` integrates MoO2
+effects when `assets/audio/moo2/manifest.json` exists and indexes MoO2 OGGs
+already present under `assets/audio/music/moo2/`; it does not decode or
+render raw MoO2 music sources.
 
 The graph is a real console: separate SFX, music and voice buses into a
 station bus, through a bit-crush glitch stage, into a master compressor.
@@ -684,8 +709,14 @@ assets from the pipeline in [Quickstart](#quickstart). Once both are in place:
 
 ```bash
 python3 tools/verify_assets.py
+# Example from a previously populated local extraction tree:
 # graphics : 7374 items, 10063 spot-checked frames
 # audio    : 109 effects, 5 stings, 57 music beds
+# The recorded merged graphics total differs elsewhere (7375); regenerate
+# and verify local outputs before treating these example counts as current.
+# CLAUDE.md and assets/README.md also disagree on the MoO1 frame total
+# (4205 vs. 4316); a fresh extraction is needed to reconcile it.
+# Optional MoO2 OGGs also affect the music-bed count.
 # OK — every runtime asset resolves inside the project.
 ```
 

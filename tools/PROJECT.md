@@ -1,8 +1,7 @@
 # GNN Newsroom — Asset Pipeline Source of Truth
 
-**Last updated:** 2026-10-20
-**Status:** MoO1 graphics pipeline complete and verified. MoO2 graphics + text done.
-MoO2 audio not started. Runtime wiring for MoO2 pending.
+**Last updated:** 2026-10-22
+**Status:** MoO1 graphics decoding is verified. MoO2 graphics are merged into runtime pools; text extraction/merge exists, but narrative classification and broad runtime admission remain open. SOUND.LBX SFX extraction and manifest integration are implemented; complete automated MoO2 music-source decoding/rendering is not. Extracted game-asset outputs are local/ignored and must be regenerated from owned game files.
 
 This document is the current state of the asset extraction work for the GNN
 Newsroom. It replaces every previous version. It is written to be self-
@@ -70,23 +69,16 @@ diagnosis:
 **Verify by:** extracting to `assets/cutscenes/` and inspecting the frames
 in `tools/scene_review.html` cutscenes mode.
 
-### 1.2 MoO2 — graphics and text complete, audio not started
+### 1.2 MoO2 — graphics integrated; narrative text and music work remain
 
-- Command-stream frame decoder verified. `SHIPS.LBX` went from 293 warnings
-  to 26 to 0. All combat-family archives extract with 0 warnings.
-- Empty-frame and 6-byte trailer handling: SHIPS items 405/406/425–448 are
-  valid empty sentinel frames; every MoO2 frame body has a 6-byte trailer
-  after its `(0, 1000)` terminator. Neither is a warning.
-- Container validation rejects the ten non-LBX files in `mastori2/`.
-- `IFONTS.LBX` palette path works. `PLNTSUM.LBX` extracts 84 items, 0
-  warnings.
-- Text extraction: RACENAME (1333), SHIPNAME (4742), STARNAME (7553),
-  TECHDESC (7134) — 20,762 records, verified readable.
-- Audio: not started. `.MDI`, `.DIG`, `.BNK` files exist under
-  `Master of Orion 1/mastori2/`; none have been touched.
-- Runtime wiring: not done. `asset-registry.js` doesn't know about
-  `source: 'moo2'`, and per-archive MoO2 manifests haven't been merged into
-  `assets/gfx-manifest.json`.
+- **Graphics:** command-stream frame decoder and palette logic are implemented. The earlier real-archive check reduced SHIPS warnings from 293 to 0; empty sentinels and the 6-byte trailer after each MoO2 frame terminator are handled.
+- **Runtime:** `merge_moo2_manifests.py` merges per-archive manifests, and the runtime/asset verifier understands `source: 'moo2'`. Extracted frames and manifests are generated local outputs, not all shipped files.
+- **Text:** `extract_moo2_text.py` preserves NUL-delimited records and raw bytes; `merge_moo2_text.py` filters those records into `assets/moo2-strings.json`. The runtime allowlist remains narrow (race/star labels); classifying and admitting narrative event text is still open (§6.4).
+- **Sound effects:** `extract_sound_moo2.py` extracts native-WAV samples from `SOUND.LBX`; `build_audio.py` profiles and merges them when the local output manifest exists.
+- **Music:** `build_audio.py` only indexes OGG files already present under `assets/audio/music/moo2/`. The complete raw MoO2 music-source decoder/render path is not implemented.
+- **Video:** `extract_moo2_video.py` decodes nine Smacker sources into PNG frames. The runtime routes 33 vetted segments full-screen; additional segments remain to be reviewed for possible use.
+
+**Verification boundary:** source-level support is not the same as visually checking every extracted asset. Use `tools/palette_review.py` and the real game/reference output for unresolved palette cases.
 
 ---
 
@@ -259,51 +251,56 @@ repDy:     51
 
 ## 6. What's left
 
-### 6.1 MoO2 audio
+### 6.1 MoO2 music source decoding and rendering
 
-Not started. `.MDI`, `.DIG`, `.BNK` files under `Master of Orion 1/mastori2/`.
-Same Miles Sound System family as MoO1, so `build_audio.py` is the shape to
-adapt — but examine one file of each type before writing the decoder. The
-`.MDI` files are almost certainly MIDI (same as MoO1's `music_track_*.mid`),
-`.DIG` is a digital sample format, `.BNK` is likely a bank of samples.
+Sound-effect extraction is implemented. `tools/extract_sound_moo2.py` writes
+the native WAV items in `SOUND.LBX`; `tools/build_audio.py` profiles the
+result and includes it in `assets/audio-manifest.json` when the local sample
+manifest exists.
 
-**Reconnaissance first:** hex-dump the first 64 bytes of each and compare
-against the MoO1 versions, which are already understood.
+The **music** part is incomplete: `build_audio.py` only discovers OGG files
+already present under `assets/audio/music/moo2/`. It does not decode/render
+the raw MoO2 music source formats (`.MDI`, `.DIG`, `.BNK`, or streams
+inside `STREAM.LBX`). The next step is format reconnaissance against the
+local game files, followed by a tested conversion path and listening checks.
+Do not describe the whole MoO2 audio pipeline as complete solely because a
+populated local manifest has music entries.
 
-### 6.2 MoO2 runtime wiring
+### 6.2 MoO2 runtime integration
 
-- Update `asset-registry.js` to route `source: 'moo2'` paths. The frame
-  path builder already supports it (checks `entry.source`); the runtime
-  needs to load the per-archive manifests.
-- Merge `assets/cutscenes/moo2/*/manifest.json` into a MoO2 fragment of
-  `assets/gfx-manifest.json`.
+- **Graphics:** runtime support for `source: 'moo2'` and merged graphics manifests is implemented. Re-run extraction and `merge_moo2_manifests.py` after changing decoder or palette behavior.
+- **Text:** `assets/moo2-strings.json` is loaded, but runtime admission is intentionally limited to reviewed race/star names. Narrative event text needs classification and allowlist changes (see §6.4 and [docs/ROADMAP.md](../docs/ROADMAP.md) §4.4).
+- **Video:** nine source cinematics are decoded; 33 vetted segments route through `cutscene-manager.js`. Selecting/validating additional unused segments is an optional content task, not missing decoder wiring.
 
 ### 6.3 MoO1 in the runtime
 
 The decoder is verified at the frame level, but the missile-in-GNN test
-hasn't been re-run since the fixes landed. Load the station, trigger a
-combat cutaway, and watch a missile animation end to end. If it moves
-cleanly from A to B with no trail, MoO1 is done.
+should still be observed on the target machine after re-extracting the local
+assets. Trigger a combat cutaway and watch a missile animation end to end;
+use a current video/render rather than an old review capture.
 
-### 6.4 MoO2 text — remaining archives
+### 6.4 MoO2 narrative text — classification and runtime allowlist
 
-Four archives done. The extractor's default prefix list includes HELP, INFO,
-EVENTMSG, STRNGS, MAINTEXT, and others. Run the full set and spot-check:
+The extraction and merge tools exist; raw NUL-delimited records are not the
+same thing as a curated narrative corpus. The current runtime only admits a
+restricted set of race/star names. Classify English narrative records, reject
+UI labels, code identifiers, templates with unsupported formatting, and
+non-English or binary-contaminated material, then widen the runtime allowlist
+only for records that have been reviewed.
 
+Useful local commands (requires the game archives):
+
+```bash
+python3 tools/extract_moo2_text.py --all-lbx
+python3 tools/merge_moo2_text.py --dry-run
+python3 tools/merge_moo2_text.py
 ```
-python3 tools/extract_moo2_text.py --only HELP,INFO,EVENTMSG,STRNGS,MAINTEXT
-```
-
-If they read cleanly, run without `--only` and you're done with text.
 
 ### 6.5 Optional
 
-- **Validate MoO2 ship colours** against `liblbx` output or the game
-  itself. The reference cases are already in `palette_map.json`; nothing
-  has been hash-compared yet.
-- **`IFONTS.LBX` on more archives.** Only `PLNTSUM` tested. Interface
-  archives (`LOADSAVE`, `NEWGAME`, `MAINMENU`) are the obvious next
-  candidates.
+- **Reference render tests:** compare the remaining known-good `liblbx` fixtures (SHIPS 42, MONSTER 7, STARBG 9, LOGO 0–1, MAINMENU) against our extracted render. The current synthetic unit tests do not establish parity with every original-game frame.
+- **Unresolved palettes:** review remaining first-pass assignments with `tools/palette_review.py` / `tools/palette_compare.py`. `RACES` items 32–45 remain a known excluded/unpooled concern. OFFICER items 143+ are skipped by the extractor as corrupted duplicates; their old per-item overrides were removed and should not be reported as a current extraction failure.
+- **Live scene review:** re-extract local assets and inspect current renders after decoder changes; do not use an old review capture as proof of a current visual defect.
 
 ---
 
@@ -347,583 +344,32 @@ question come back to this. `skip` means "leave the previous value";
 | 2026-10-16 (post-fix, synthetic) | Command-stream decoder, raw frames, junction compositing, coverage plane, 640×480 validation. |
 | 2026-10-16 (post-fix, real archives) | `SHIPS.LBX` 293 → 26 → 0 warnings. Full archive scan complete. Text extraction: 20,762 records. |
 | 2026-10-16 (MoO1 fixes) | Delta-frame inheritance fixed. Palette merge fixed. Opaque-zero rule with SPIES/EMBASSY exclusions. VORTEX palette diagnosis. Deny list built. Interview composition tuned. |
-| 2026-10-16 (cleanup) | This version. Tools folder review. `README_MOO2_LBX_FIX.md` deleted. PROJECT.md rewritten as a practical reference rather than a cold-reader introduction. |
+| 2026-10-16 (cleanup) | MoO2 decoder state and tools-folder reference consolidated. |
+| 2026-10-20–22 (reconciliation) | Recorded the landed MoO2 text/SFX/video tools and runtime integration; separated the remaining narrative-text and raw-music-source work from completed extraction support. |
 
 
-## `tools/extract_moo2.py`
+## 10. Extractor entry point and usage
 
-```python
-#!/usr/bin/env python3
-"""Extract MoO2 LBX graphics, respecting external and embedded palettes.
+The executable source of truth is [`extract_moo2.py`](extract_moo2.py). Do not
+maintain a second copy of its Python source in this document: the old embedded
+snapshot was substantially shorter than the current implementation and had
+drifted from it. Keep behavioral explanations here and implementation changes
+in the executable and its tests.
 
-Examples:
-    python3 tools/extract_moo2.py
-    python3 tools/extract_moo2.py --only SHIPS,MONSTER
-    python3 tools/extract_moo2.py --palette-item 3 --only CMBTSHP
-
-Palette indices are actual zero-based item indices in the selected palette
-archive (FONTS.LBX by default). Item 0 is font data, not a palette; external
-palette items start at item 1. Sparse internal palettes are merged over an
-external palette. Tiny palette-holder graphics update the running palette
-for later items and are not emitted as pixel art.
-
-palette_map.json supports four layers of configuration, all applied per item
-in this priority order:
-
-  1. _item_split         An item range uses a different external palette
-                         from the archive-level default. Used by GAME
-                         (in-game menu vs. main menu) and TECHSEL (two
-                         halves of the research screen).
-
-  2. _item_palettes      A specific item picks its own external palette.
-                         Used by SHIPS 42 (palette 12) and MONSTER 7
-                         (palette 4).
-
-  3. (archive level)     The archive-wide base palette from the top-level
-                         key, or _default.
-
-  4. _palette_overrides  A range of items draws its embedded palette from
-                         a named sibling item in the same archive. Used by
-                         COUNCIL (item 0 patches the rest of the archive),
-                         MONSTER (per-image override chain), RACESEL, and
-                         TECHSEL.
-
-  5. _item_overrides     One item's embedded palette is merged over the
-                         base for one other item.
-
-  6. Embedded palette    If the item itself carries flag 0x1000 with a
-                         valid internal palette, that patch is applied
-                         last and takes precedence over everything else.
-
-The community-documented values in palette_map.json come from Nick Bowler's
-liblbx moo2-data.txt and Wolverine's 2007-2008 Orion Nebula research. See
-tools/PROJECT.md for the full source attribution.
-"""
-
-import argparse
-import json
-import os
-import sys
-
-from PIL import Image
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lbx import LbxArchive, GfxItem, get_moo2_palette, LbxError  # noqa: E402
-
-MOO2_DIR = 'Master of Orion 1/mastori2'
-OUT_ROOT = 'assets/cutscenes/moo2'
-PALETTE_MAP = 'tools/palette_map.json'
-
-
-def is_palette_holder(item):
-    """True only for a tiny one-frame image with a valid internal palette."""
-    return (
-        item.w <= 2 and item.h <= 2 and item.nframes == 1
-        and item.internal_palette() is not None
-    )
-
-
-def _parse_range_key(key):
-    """'7' -> (7, 7); '0-6' -> (0, 6). Raises on anything else."""
-    s = str(key).strip()
-    if '-' in s:
-        lo, hi = s.split('-', 1)
-        lo, hi = int(lo.strip()), int(hi.strip())
-        if lo > hi:
-            lo, hi = hi, lo
-        return lo, hi
-    n = int(s)
-    return n, n
-
-
-def _load_item_map(raw, key):
-    """Parse a nested archive -> item-index -> integer map from JSON.
-
-    Used for _item_palettes and _item_overrides, both of which are simple
-    item_index -> value maps. The only difference is the minimum value:
-    palette selections reference external palette archive items (>=1, since
-    item 0 is font data), while overrides reference sibling items in the
-    graphic archive and can be 0.
-    """
-    result = {}
-    nested = raw.get(key, {})
-    if not isinstance(nested, dict):
-        return result
-    for archive_name, item_values in nested.items():
-        if str(archive_name).startswith('_'):
-            continue
-        if not isinstance(item_values, dict):
-            continue
-        parsed = {}
-        for item_id, value in item_values.items():
-            if str(item_id).startswith('_'):
-                continue
-            try:
-                item_no = int(item_id)
-                value_no = int(value)
-            except (TypeError, ValueError):
-                continue
-            minimum_value = 0 if key == '_item_overrides' else 1
-            if item_no >= 0 and value_no >= minimum_value:
-                parsed[item_no] = value_no
-        result[archive_name.upper()] = parsed
-    return result
-
-
-def _load_range_map(raw, key):
-    """Parse an archive -> [(lo, hi, value)] range map from JSON.
-
-    Used for _item_split and _palette_overrides, both of which are
-    item-range maps. The JSON stores keys as either '7' (single item) or
-    '0-6' (inclusive range); this returns one list of tuples per archive,
-    sorted by nothing in particular. _lookup_range walks the list and
-    returns the first tuple whose range contains the item index.
-    """
-    result = {}
-    nested = raw.get(key, {})
-    if not isinstance(nested, dict):
-        return result
-    for archive_name, ranges in nested.items():
-        if str(archive_name).startswith('_'):
-            continue
-        if not isinstance(ranges, dict):
-            continue
-        parsed = []
-        for range_key, value in ranges.items():
-            if str(range_key).startswith('_'):
-                continue
-            try:
-                lo, hi = _parse_range_key(range_key)
-                value_no = int(value)
-            except (TypeError, ValueError):
-                continue
-            parsed.append((lo, hi, value_no))
-        if parsed:
-            result[archive_name.upper()] = parsed
-    return result
-
-
-def _lookup_range(ranges, item_no):
-    """The value whose range contains item_no, or None."""
-    for lo, hi, value in ranges:
-        if lo <= item_no <= hi:
-            return value
-    return None
-
-
-def apply_forced_palette(palette_item, palette_map, default_item,
-                         item_palettes, item_overrides,
-                         item_splits, palette_overrides):
-    """Apply --palette-item semantics: ignore every map-based override."""
-    if palette_item is None:
-        return (palette_map, default_item, item_palettes, item_overrides,
-                item_splits, palette_overrides)
-    return {}, int(palette_item), {}, {}, {}, {}
-
-
-def load_palette_map(path):
-    """Return the full palette configuration from JSON.
-
-    Returns a 6-tuple:
-        (archive_map, default_item, item_palettes, item_overrides,
-         item_splits, palette_overrides)
-    """
-    empty = ({}, 1, {}, {}, {}, {})
-    if not os.path.isfile(path):
-        return empty
-    try:
-        with open(path, encoding='utf-8') as fh:
-            raw = json.load(fh)
-    except (OSError, ValueError) as err:
-        print('warning: could not read palette map %s (%s); using defaults'
-              % (path, err), file=sys.stderr)
-        return empty
-
-    try:
-        default = int(raw.get('_default', 1))
-    except (TypeError, ValueError):
-        default = 1
-    if default < 1:
-        print('warning: palette-map _default must be >= 1; using item 1',
-              file=sys.stderr)
-        default = 1
-
-    mapping = {}
-    for key, value in raw.items():
-        if key.startswith('_'):
-            continue
-        try:
-            index = int(value)
-        except (TypeError, ValueError):
-            continue
-        if index >= 1:
-            mapping[key.upper()] = index
-        else:
-            print('warning: ignoring invalid palette index for %s: %r'
-                  % (key, value), file=sys.stderr)
-
-    return (
-        mapping,
-        default,
-        _load_item_map(raw, '_item_palettes'),
-        _load_item_map(raw, '_item_overrides'),
-        _load_range_map(raw, '_item_split'),
-        _load_range_map(raw, '_palette_overrides'),
-    )
-
-
-def _guess_role(item):
-    """Loose size-based first pass; roles can be edited in the manifest."""
-    if item.w >= 320 and item.h >= 200:
-        return 'fullscreen'
-    if item.w >= 128 and item.h >= 96:
-        return 'panel'
-    if item.w <= 40 and item.h <= 40:
-        return 'sprite'
-    return 'panel'
-
-
-def extract_archive(lbx_path, out_dir, base_palette, base_palette_index,
-                    palette_for, item_palette_map=None, item_override_map=None,
-                    item_split_ranges=None, palette_override_ranges=None,
-                    palette_source='FONTS'):
-    """Extract one archive with all six palette rules applied.
-
-    See the module docstring for the priority order. The two per-archive
-    maps (`item_palette_map`, `item_override_map`) are passed in
-    pre-filtered for this archive; the two range maps are passed in as
-    lists of tuples, also pre-filtered.
-    """
-    archive = LbxArchive(lbx_path)
-    name = os.path.splitext(os.path.basename(lbx_path))[0].upper()
-    os.makedirs(out_dir, exist_ok=True)
-
-    item_palette_map = item_palette_map or {}
-    item_override_map = item_override_map or {}
-    item_split_ranges = item_split_ranges or []
-    palette_override_ranges = palette_override_ranges or []
-
-    active_palette = dict(base_palette)
-    manifest_entries = []
-    palette_holders = []
-    decode_warnings = []
-    extracted = skipped = unclean_frames = 0
-
-    # Cache for embedded palettes of sibling items referenced by the
-    # override chains. A long override sequence (MONSTER, TECHSEL) reads
-    # the same few sibling items over and over; caching them keeps the
-    # inner loop cheap.
-    embedded_cache = {}
-
-    def embedded_for(idx):
-        if idx in embedded_cache:
-            return embedded_cache[idx]
-        try:
-            sibling = GfxItem(archive.item(idx), format='moo2')
-            embedded_cache[idx] = sibling.internal_palette()
-        except Exception:
-            embedded_cache[idx] = None
-        return embedded_cache[idx]
-
-    for i in range(len(archive)):
-        try:
-            item = GfxItem(archive.item(i), format='moo2')
-        except Exception as err:
-            print('  item %d: open failed (%s)' % (i, err))
-            skipped += 1
-            continue
-
-        if not item.plausible():
-            skipped += 1
-            continue
-
-        embedded = item.internal_palette()
-        if is_palette_holder(item):
-            # A tiny item with a valid internal palette is a sequential
-            # palette holder. Merge its palette over the running archive
-            # palette so later items see the new colours, and do not emit
-            # the item as pixel art.
-            active_palette = item.palette(active_palette)
-            first_index, colors = embedded
-            palette_holders.append({
-                'item': i,
-                'first_color': first_index,
-                'color_count': len(colors),
-            })
-            skipped += 1
-            continue
-
-        # Rule 1 and 2: pick the base palette for this item. An item-range
-        # split (GAME, TECHSEL) overrides a single-item override, which in
-        # turn overrides the archive-level value.
-        split_index = _lookup_range(item_split_ranges, i)
-        if split_index is not None:
-            chosen_index = split_index
-        else:
-            chosen_index = item_palette_map.get(i)
-
-        if chosen_index is None:
-            effective_base = dict(active_palette)
-            palette_index_used = base_palette_index
-        else:
-            try:
-                effective_base = dict(palette_for(chosen_index))
-                palette_index_used = chosen_index
-            except (LbxError, IndexError, OSError) as err:
-                print('  item %d: palette item %d unavailable (%s); '
-                      'using active palette' % (i, chosen_index, err),
-                      file=sys.stderr)
-                effective_base = dict(active_palette)
-                palette_index_used = base_palette_index
-
-        # Rule 4: whole-archive override chain. If this item's index falls
-        # in a range from _palette_overrides, merge the named sibling
-        # item's embedded palette on top of the base. COUNCIL, MONSTER,
-        # RACESEL and TECHSEL all use this.
-        chain_item = _lookup_range(palette_override_ranges, i)
-        if chain_item is not None and chain_item != i:
-            chain_pal = embedded_for(chain_item)
-            if chain_pal is not None:
-                effective_base.update(chain_pal[1])
-
-        # Rule 5: single-item override. Same mechanism as rule 4 but keyed
-        # by one item index rather than a range.
-        override_item_index = item_override_map.get(i)
-        if override_item_index is not None:
-            if not (0 <= override_item_index < len(archive)):
-                print('  item %d: override item %d is out of range; ignored'
-                      % (i, override_item_index), file=sys.stderr)
-                override_item_index = None
-            else:
-                try:
-                    override_item = GfxItem(archive.item(override_item_index),
-                                            format='moo2')
-                    override_palette = override_item.internal_palette()
-                    if override_palette is None:
-                        print('  item %d: override item %d has no valid '
-                              'internal palette; ignored'
-                              % (i, override_item_index), file=sys.stderr)
-                        override_item_index = None
-                    else:
-                        effective_base = override_item.palette(effective_base)
-                except Exception as err:
-                    print('  item %d: could not read override item %d (%s); '
-                          'ignored' % (i, override_item_index, err),
-                          file=sys.stderr)
-                    override_item_index = None
-
-        # Rule 6: the item's own embedded palette, applied last so it takes
-        # precedence over every external choice above.
-        effective_palette = item.palette(effective_base)
-        frame_paths = []
-        frame_clean = []
-        for frame_index in range(item.nframes):
-            rgba, clean = item.render_rgba(frame_index, effective_palette)
-            if not clean:
-                unclean_frames += 1
-                if unclean_frames <= 5:
-                    issue_kinds = ','.join(
-                        issue.get('kind', 'unknown')
-                        for issue in item.decode_warnings.get(frame_index, [])
-                    ) or 'unspecified'
-                    print('  unclean: item %d frame %d (%s)' %
-                          (i, frame_index, issue_kinds), file=sys.stderr)
-                frame_start = item.frame_offsets[frame_index]
-                frame_end = item.frame_offsets[frame_index + 1]
-                decode_warnings.append({
-                    'item': i,
-                    'frame': frame_index,
-                    'width': item.w,
-                    'height': item.h,
-                    'item_offset': archive.offsets[i],
-                    'frame_offset': archive.offsets[i] + frame_start,
-                    'frame_end_offset': archive.offsets[i] + frame_end,
-                    'frame_bytes': frame_end - frame_start,
-                    'issues': item.decode_warnings.get(frame_index, []),
-                })
-            fname = 'item_%02d_frame_%03d.png' % (i, frame_index)
-            fpath = os.path.join(out_dir, fname)
-            Image.frombytes('RGBA', (item.w, item.h), rgba).save(fpath)
-            frame_paths.append(fname)
-            frame_clean.append(bool(clean))
-
-        if not frame_paths:
-            skipped += 1
-            continue
-
-        manifest_entries.append({
-            'id': 'moo2/%s/item_%02d' % (name, i),
-            'source': 'moo2',
-            'dir': name,
-            'item': i,
-            'w': item.w,
-            'h': item.h,
-            'frames': item.nframes,
-            'hero': 0,
-            'role': _guess_role(item),
-            'pools': [],
-            'palette_index': palette_index_used,
-            'palette_source': palette_source,
-            'palette_override_item': override_item_index,
-            'palette_chain_item': chain_item,
-            'has_internal_palette': embedded is not None,
-            'frame_files': frame_paths,
-            'frame_clean': frame_clean,
-        })
-        extracted += 1
-
-    manifest_path = os.path.join(out_dir, 'manifest.json')
-    with open(manifest_path, 'w', encoding='utf-8') as fh:
-        json.dump({
-            'archive': name,
-            'source': 'moo2',
-            'palette_index': base_palette_index,
-            'palette_source': palette_source,
-            'palette_holders': palette_holders,
-            'items': manifest_entries,
-        }, fh, indent=2)
-        fh.write('\n')
-
-    warning_path = os.path.join(out_dir, 'decode_warnings.json')
-    with open(warning_path, 'w', encoding='utf-8') as fh:
-        json.dump({
-            'archive': name,
-            'warning_frame_count': unclean_frames,
-            'frames': decode_warnings,
-        }, fh, indent=2)
-        fh.write('\n')
-
-    if unclean_frames:
-        print('  warning: %d frame(s) decoded with structural/format '
-              'warnings; details: %s' % (unclean_frames, warning_path),
-              file=sys.stderr)
-    return extracted, skipped
-
-
-def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--moo2-dir', default=MOO2_DIR,
-                    help='directory containing MoO2 LBX archives')
-    ap.add_argument('--out', default=OUT_ROOT, help='output root directory')
-    ap.add_argument('--palette-item', type=int, default=None,
-                    help='force one palette item for all archives (>=1)')
-    ap.add_argument('--palette-archive', choices=('FONTS', 'IFONTS'),
-                    default='FONTS',
-                    help='external palette archive to use (default: FONTS)')
-    ap.add_argument('--palette-map', default=PALETTE_MAP,
-                    help='JSON file with archive/item palette assignments')
-    ap.add_argument('--only', default=None,
-                    help='comma-separated archive basenames to extract')
-    args = ap.parse_args()
-
-    fonts_path = os.path.join(args.moo2_dir, args.palette_archive + '.LBX')
-    if not os.path.isfile(fonts_path):
-        print('%s.LBX not found at %s'
-              % (args.palette_archive, fonts_path), file=sys.stderr)
-        return 1
-    if args.palette_item is not None and args.palette_item < 1:
-        print('--palette-item must be >= 1; palette item 0 is font data',
-              file=sys.stderr)
-        return 2
-
-    (palette_map, default_item, item_palettes, item_overrides,
-     item_splits, palette_overrides) = load_palette_map(args.palette_map)
-
-    (palette_map, default_item, item_palettes, item_overrides,
-     item_splits, palette_overrides) = apply_forced_palette(
-        args.palette_item, palette_map, default_item, item_palettes,
-        item_overrides, item_splits, palette_overrides)
-
-    palette_cache = {}
-
-    def palette_for(index):
-        index = int(index)
-        if index < 1:
-            raise LbxError('palette item index must be >= 1 '
-                           '(item 0 is font data)')
-        if index not in palette_cache:
-            palette_cache[index] = get_moo2_palette(fonts_path, index)
-        return palette_cache[index]
-
-    try:
-        # Eager validation so a bad entry in the map is caught before a
-        # long run rather than silently falling back to the active palette
-        # for one item and hiding the misconfiguration.
-        palette_for(default_item)
-        for index in palette_map.values():
-            palette_for(index)
-        for ranges in item_splits.values():
-            for _lo, _hi, idx in ranges:
-                palette_for(idx)
-    except (LbxError, IndexError, OSError) as err:
-        print('invalid palette configuration: %s' % err, file=sys.stderr)
-        return 2
-
-    print('palette source: %s.LBX' % args.palette_archive)
-    print('palette map: %d explicit archive entries, default item %d; '
-          '%d per-item palettes, %d per-item overrides, '
-          '%d item splits, %d override chains'
-          % (len(palette_map), default_item,
-             sum(len(v) for v in item_palettes.values()),
-             sum(len(v) for v in item_overrides.values()),
-             sum(len(v) for v in item_splits.values()),
-             sum(len(v) for v in palette_overrides.values())))
-
-    only = {a.strip().upper() for a in args.only.split(',') if a.strip()} \
-        if args.only else None
-    total_extracted = total_skipped = 0
-    for filename in sorted(os.listdir(args.moo2_dir)):
-        if not filename.lower().endswith('.lbx'):
-            continue
-        key = os.path.splitext(filename)[0].upper()
-        if only is not None and key not in only:
-            continue
-        palette_index = palette_map.get(key, default_item)
-        try:
-            palette = palette_for(palette_index)
-            extracted, skipped = extract_archive(
-                os.path.join(args.moo2_dir, filename),
-                os.path.join(args.out, key),
-                palette,
-                palette_index,
-                palette_for,
-                item_palettes.get(key, {}),
-                item_overrides.get(key, {}),
-                item_splits.get(key, []),
-                palette_overrides.get(key, []),
-                args.palette_archive,
-            )
-        except (LbxError, IndexError, OSError) as err:
-            print('%-20s skip (%s)' % (filename, err), file=sys.stderr)
-            continue
-        print('%-20s palette %2d  extracted %4d items, skipped %d'
-              % (filename, palette_index, extracted, skipped))
-        total_extracted += extracted
-        total_skipped += skipped
-
-    print('\n%d items extracted, %d skipped'
-          % (total_extracted, total_skipped))
-    return 0
-
-
-if __name__ == '__main__':
-    sys.exit(main())
-```
-
-Save as `tools/extract_moo2.py`. Re-run the TANM/GAME/TECHSEL/COUNCIL/MONSTER archives:
+Examples (requires the owner’s MoO2 archive files and local output directory):
 
 ```bash
-python3 tools/extract_moo2.py --only TANM_001,GAME,TECHSEL,COUNCIL,MONSTER,RACESEL,SHIPS
+python3 tools/extract_moo2.py
+python3 tools/extract_moo2.py --only SHIPS,MONSTER
+python3 tools/extract_moo2.py --palette-item 3 --only CMBTSHP
+python3 tools/extract_moo2.py --help
 ```
 
-Watch for anything unusual in the output.
+Generated PNGs and merged manifests are local/ignored outputs. After decoder
+or palette changes, re-extract and inspect current renders; old captures are
+not evidence of current output quality.
 
-## Update to `tools/PROJECT.md`
-
-Replace the entire `## 4. The interview composition` section and everything palette-related below it with this. If there's an existing palette section, this supersedes it.
-
-```markdown
-## 4. Palette assignments and their sources
+## 11. Palette assignments and their sources
 
 MoO2 archives do not all use the same palette. Each archive is assigned a
 base external palette from `FONTS.LBX` (or, for a small number, `IFONTS.LBX`),
@@ -944,7 +390,7 @@ the same archive, or by the item's own embedded palette.
 `tools/extract_moo2.py` applies these in the priority order given in its
 module docstring.
 
-### 4.1 Where the values come from
+### 11.1 Where the values come from
 
 Two community sources, in order of authority:
 
@@ -963,7 +409,7 @@ with an explicit list of uncatalogued archives. Wolverine's conclusion was
 that many of them use **custom internal palettes** not reachable from any
 external palette, which is why they have no assignment.
 
-### 4.2 Community-documented assignments
+### 11.2 Community-documented assignments
 
 | Archive | Palette | Notes |
 |---------|---------|-------|
@@ -983,7 +429,7 @@ external palette, which is why they have no assignment.
 | `tanm_001`–`tanm_213` | `FONTS` 2 | 213 archives, spinning tech animations |
 | `techsel` | split 4 / 5 | Images 0–13 → 4; images 14–27 → 5 |
 
-### 4.3 Override chains
+### 11.3 Override chains
 
 The community documented four whole-archive override chains. Each says:
 items in this range should have the embedded palette of a named sibling
@@ -1014,7 +460,7 @@ Applied as `{"0": 0}`.
 **TECHSEL** — the two item ranges each carry their own palette patch.
 Applied as `{"0-13": 0, "14-27": 14}`.
 
-### 4.4 Reference hashes from liblbx
+### 11.4 Reference hashes from liblbx
 
 The `liblbx` regression tests carry hash-verified render fixtures for these
 specific cases. Matching a fixture proves the decoder pipeline is correct
@@ -1033,7 +479,7 @@ opportunity presents itself, comparing a rendered PNG byte-for-byte
 against a `liblbx` fixture for these five cases is the strongest possible
 verification.
 
-### 4.5 Archives with no community assignment
+### 11.5 Archives with no community assignment
 
 The `liblbx` `moo2-data.txt` file lists these archives as **uncatalogued**.
 They have no community palette assignment and their colours have been
@@ -1065,7 +511,7 @@ APP_PICS, BEAMS, FLEET, FLTICONS, RACES, RACEOPT), palette choices are
 **candidates, not authoritative**. If a runtime cutaway shows a wrong
 palette, `tools/palette_compare.py` is the tool to settle it.
 
-### 4.6 The two things that are known to be wrong
+### 11.6 The two things that are known to be wrong
 
 **MoO2 Workshop's palette descriptions are unreliable.** A 2018 discussion
 between the fmoo2-tool developer and the community concluded that some of
@@ -1081,66 +527,45 @@ available. The community says 12. If a SHIPS sprite looks wrong after
 re-extraction, `palette_compare` output on item 0 will settle it.
 ```
 
-## What else needs updating in the docs
+### 11.7 Palette verification remains open
 
-**`tools/PROJECT.md`** — replace the palette section (as above), and add
-these two lines to the references section:
+The map uses community-documented assignments where available and locally
+reviewed candidates elsewhere. `SHIPS` / `SHIPS2` now use community palette
+12 according to the current map. That does not close reference-output
+verification: compare the listed `liblbx` fixture cases with actual rendered
+PNGs when the local game archives and generated output are available.
 
-```
-- **liblbx moo2-data.txt** (palette assignments, item splits, override
-  chains): github.com/MarcoKull/liblbx, doc/txt/moo2-data.txt
-- **Wolverine's original graphics-format research** (COUNCIL override,
-  SHIPS palette-holder mechanism): masteroforion2.blogspot.com
-```
+## 12. Recent code audit — 2026-10-20 changes
 
-**`tools/tests/README.md`** — no changes needed.
+This status note summarizes code already merged on `main`; it is not a claim
+that all generated assets or live broadcast behaviour have been revalidated.
 
-**Root `README.md`** and **`CLAUDE.md`** — no palette content in either; no
-changes needed for this finding. If you want to note the community source
-somewhere in the root README, a single line under the MoO2 asset paragraph
-suffices: "*Palette assignments confirmed against Nick Bowler's liblbx
-moo2-data.txt (github.com/MarcoKull/liblbx).*"
+### Landed code changes
 
-## On the SHIPS verification
+- `tools/scan_strays.py` uses the exported `MOO1_HEADER` (0x12 bytes) and
+  `MOO2_HEADER` (0x0C bytes) constants.
+- `js/tts.js` passes the live sequence ID when promoting a queued TTS
+  prefetch; `gnnTtsDebug=1` in localStorage opts into verbose TTS diagnostics.
+- `js/renderer.js` probes a 5×5 alpha neighborhood in `measureHole()`.
+- `server.py` expires the loaded news ledger on boot; `js/feed-manager.js`
+  lowers the token-cache clearing threshold to 5,000 entries.
+- The extractor renders `0x0800` MoO2 functional-colour items and accepts
+  multi-frame tiny palette holders. Known corrupt `OFFICER` duplicate items
+  143+ are skipped; their unreachable palette overrides were removed.
+- Weather assets exist and the `weather` classifier, generated cutaway pool,
+  and sound recipe are wired in `js/cutscene-manager.js`.
 
-You ran `palette_compare.py SHIPS --item 0` but didn't report the result.
-Before committing SHIPS/SHIPS2 to 12, look at that grid — palettes 3 and 12
-should look visibly different. If 12 doesn't look right, leave the map at 3
-and note it as a case where our GOG copy differs from what the community
-tested. Nothing else in the pipeline depends on the choice; it's a one-line
-change either way.
+### Evidence still required
 
----
+- Run `tools/tests/offline.sh` in the target environment; this documentation
+  update did not run it.
+- Re-extract local game assets and compare selected output against reference
+  renders; source-level unit tests and clean decode warnings do not prove every
+  palette is visually correct.
+- Inspect weather plates at their actual on-air monitor size and watch a live
+  weather story.
+- Add automated comparisons against the listed `liblbx` fixture hashes when
+  suitable fixtures are available.
 
-## 2026-10-20 repository audit update
-
-This addendum records source-level fixes proposed from the current repository review.
-It does not claim that the game-asset outputs have been reference-verified; that
-still requires testing against the user's installed game data and known-good
-renders.
-
-### Fixes in the audit patch
-
-- `tools/scan_strays.py` now imports the header constants actually exported by
-  `tools/lbx.py`. The MoO1 probe uses `MOO1_HEADER` (0x12 bytes) and the MoO2
-  probe uses `MOO2_HEADER` (0x0C bytes). This removes the import-time failure
-  caused by the nonexistent `GFX_HEADER` symbol and corrects the MoO2 header
-  size previously hard-coded as 0x10.
-- `js/tts.js` promotes a queued prefetch using the live request's sequence ID
-  instead of always synthesizing it with sequence 0. This allows the promoted
-  request to retain the live request metadata while reusing the queued promise.
-
-### Verification boundaries and remaining review items
-
-- Run the Python tool tests and `python tools/scan_strays.py --help` in the
-  target environment after applying this patch.
-- TTS request sequencing should be exercised in-browser with a queued line that
-  is then requested live, and with a line already in flight. This patch has not
-  been validated against a running voice server here.
-- Renderer alpha-hole robustness, ledger expiry timing, the unused palette-map
-  entries, generated cutscene asset mapping, default TTS debug logging, and
-  cross-platform test-path assumptions remain review items rather than claimed
-  fixes in this patch.
-- Runtime audio wiring, generated assets, and MoO2 visual correctness should
-  not be marked fully verified without the relevant local assets and reference
-  comparisons.
+The authoritative current backlog is [docs/ROADMAP.md](../docs/ROADMAP.md); see §6 above for the
+separate text-curation and MoO2 music-source implementation gaps.

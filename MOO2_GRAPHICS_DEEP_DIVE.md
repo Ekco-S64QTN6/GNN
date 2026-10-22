@@ -70,12 +70,11 @@ Once the base is selected, the engine merges the following on top of it:
 
 During the development of the GNN extractor, several specific archives required brute-force testing or specialized code.
 
-### OFFICER.LBX (The Duplicate Bug)
-*   **Items 0–276:** Use standard palettes (mostly `FONTS:2`).
-*   **Items 277–342:** Use `FONTS:4` or `IFONTS:3`.
-*   **CRITICAL DISCOVERY:** The file header declares **344 items** (indices 0 through 343). However, items 143–343 are **duplicate leader portraits** of items 21–87. 
-*   **Binary Proof:** Items 51, 143, 307, and 343 are all exactly `7244` bytes and `73x88` pixels. However, their MD5 hashes differ, and items 143+ have their internal palette flags stripped (`0x0`). This indicates the developers appended a second, corrupted batch of portraits (likely during a patch) without correctly rebuilding the palette headers. 
-*   **The Fix:** The higher-numbered items are impossible to extract cleanly because the pixel data points to corrupt indices. The correct solution is to **skip extracting items 143+ entirely**; the game engine uses the intact lower-numbered versions (21–87).
+### OFFICER.LBX (The Duplicate/Corrupted Batch)
+*   **Current extractor behavior:** `tools/extract_moo2.py` skips items 143–343 (the file declares 344 items, indexed 0–343). The retained range is 0–142; do not treat 143+ as usable extracted portraits.
+*   **Palette-map status:** Earlier per-item palette entries for OFFICER items 277–343 were removed from `tools/palette_map.json` because those items are skipped by the extractor. They are not active overrides.
+*   **Binary evidence:** Items 51, 143, 307, and 343 are all `7244` bytes and `73x88` pixels, while their MD5 hashes differ and items 143+ have their internal palette flags stripped (`0x0`). This supports treating the higher-numbered run as a corrupted/redundant appended batch, rather than trying to repair it with palette overrides.
+*   **Practical rule:** When validating palette assignments, compare and review the retained items in the current extractor output. A historical palette note for 277–342 must not be read as a current map assignment or as a guarantee those items can be decoded cleanly.
 
 ### CMBTSFX.LBX (Functional colors, fill-background images, and palette state)
 
