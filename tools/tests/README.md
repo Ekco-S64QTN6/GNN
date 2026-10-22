@@ -120,9 +120,12 @@ during development and all but these two were superseded.
 - **Server requirement is per-script, not universal.** CDP and live audio/feed
   probes need a running station. `offline.sh`, `content_check.py`,
   `test_moo2_tools.py`, and `productsheet.py` are offline checks.
-- CDP diagnostics target `http://localhost:8080/` by default. `drive.py`
-  launches and reaps the Chromium process it creates; it does not own the
-  production server.
+- Choose an isolated test server URL per `CONTRIBUTING.md`; the documented
+  setup uses port 8091 and CDP port 9444. Never point probes at production
+  port 8080. `drive.py` launches/reaps its Chromium process, not the server.
+- Several interactive diagnostics still embed `/home/ekco/github/GNN` paths.
+  They are owner-workstation tools for now, not portable tests; offline-suite
+  success does not prove path portability.
 - Do not run two scripts that tap `GNNAudio.getMasterBus()` at the same time.
   Each adds an audio tap and can double the level measured by the other.
 - Do not run `./stop.sh` while a CDP probe is attached. The CDP session can
