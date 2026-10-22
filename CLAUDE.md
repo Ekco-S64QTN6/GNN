@@ -45,7 +45,7 @@ the metric is the thing to doubt.
 | Fallback | `edge-tts` (cloud) when `.venv` is absent |
 | Assets (MoO1) | 873 graphics items / 4,205 frames across 22 archives — decodes byte-exact |
 | Assets (MoO2) | 6,502 graphics items across 285 archives — decoder correct, palette map from community sources |
-| Merged manifest | 7,374 items across 342 keys in `assets/gfx-manifest.json`, **0 duplicate ids**. MoO2 entries carry `source: 'moo2'` and ids `moo2/<DIR>/item_NN`; their key is the bare archive name except the four that collide with MoO1 (`COUNCIL_moo2`, `DESIGN_moo2`, `PLANETS_moo2`, `SHIPS_moo2`). See §3 for how the file had drifted to 13,144 items |
+| Merged manifest | 342 directory keys and 0 duplicate ids are expected. The last verifier/README output says 7,374 items, while §3's post-merge audit records 7,375; rerun merge + verification locally before treating the one-item count as reconciled |
 | Admitted pools | MoO1 + MoO2: 147 broll (86+61) · 219 portrait (136+83) · 1,005 sprite (396+609) · 154 chrome (12+142) · 15 glitch. `STATIC_DENY` (scene-compositor.js) is enforced **inside `GNNAssets.find()`**, so every consumer gets it |
 | Output ceiling | peak 0.872 under deliberate overload, zero clipped samples |
 | Per-line loudness | −19.3 to −20.3 LUFS, 1.0 LU spread, true peak −3.0 dBFS |
@@ -100,9 +100,12 @@ python3 tools/audio_probe.py 110        # clips + level-relative pops
 ./stop.sh
 ```
 
-The `[GNN Assets]` line in `gnn-server.log` on a fresh boot reports the count
-the runtime is actually drawing from. It should now read **7,375** graphics
-items; before the manifest fix in §3 it counted every MoO2 item twice.
+The `[GNN Assets]` line in `gnn-server.log` reports the runtime's flattened
+manifest count. The available documentation disagrees by one item: the last
+verifier/README output says 7,374, while §3's post-merge audit says 7,375.
+Run the local extraction, merge and `tools/verify_assets.py`, then compare the
+fresh boot log before calling the total reconciled; the earlier 13,144-item /
+5,769-duplicate manifest state is the separate bug fixed in §3.
 
 ---
 
@@ -1208,8 +1211,7 @@ This section is reconciled with the code and commit history through 2026-10-20 (
 - MoO2 video extracted (nine cinematics); 33 vetted segments are routed full-screen by `cutscene-manager.js`. Additional unused segments still need selection/quality review (ROADMAP §5).
 - `_palette_overrides` is loaded and applied by `extract_moo2.py`.
 - `BACKGRND/item_32` no longer reaches broll: no BACKGRND item is in the pool.
-- The asset count is reconciled (7,375) — §3, *Every MoO2 item was in the
-  manifest twice*.
+- The duplicate-manifest defect is fixed: 342 keys and 0 duplicate ids. The exact item total still needs a fresh local manifest/verifier comparison because the available docs report 7,374 and 7,375.
 - `key_robot.py`, the robot cels and their checks are retired; the renderer's
   `person.frames` branch had already gone.
 - README's cast badge reads 14.
