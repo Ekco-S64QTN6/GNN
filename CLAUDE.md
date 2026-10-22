@@ -7,7 +7,7 @@ what must not be touched.** `README.md` is the public front page.
 MoO2 decoders, palette map, extraction order.
 `CONTRIBUTING.md` is how to work here — read it before changing anything.
 
-Last verified against the code on 2026-10-16, after commit `8cb098d`.
+Last reconciled against the code and commit history through 2026-10-20 (`82f6949`). This was a remote source review; generated asset outputs and live on-air behaviour were not rerun during the documentation pass.
 
 ---
 
@@ -1149,11 +1149,7 @@ The `seq=0` burst in old logs is `tools/voice_audition.py`.
 
 ## 7. Known open items
 
-Every item here was checked against the code on 2026-10-16. Two copies of
-this section had drifted apart — the first still said MoO2 had no pools and
-`openDebate()` was unwired, the second said both were done — and a reader
-trusting the wrong one would have re-done finished work. The second was
-right on every count; the verification is below under *Closed*.
+This section is reconciled with the code and commit history through 2026-10-20 (`82f6949`). It separates implementation status from work that still requires the local game archives, visual comparison, or an on-air run. This documentation review did not rerun those live checks.
 
 ### Open — asset pipeline
 
@@ -1184,8 +1180,7 @@ right on every count; the verification is below under *Closed*.
 
 - **Generated art still unused**: 18 standing figures and five logos.
   ROADMAP §5 lists where each belongs.
-- **The weather shows have no weather feed.** They read what the weather
-  regex catches and fall back to science and space (`draws`). ROADMAP §4.2.
+- **Weather cutaway visual check remains.** The `weather_map` and `weather_map_02` assets are committed and routed through the `weather` cutaway pool (2026-10-20). Inspect output at its on-air size and confirm conditioning/appearance; do not treat the route landing as proof of visual quality.
 
 - **Two COLONIES items decode with a scattered-pixel sky** (`item_02`,
   `item_03`), excluded by `COLONIES_SCRAMBLED` in `scene-compositor.js`.
@@ -1199,7 +1194,7 @@ right on every count; the verification is below under *Closed*.
 - ~~`calculateImportance()` suspect regex~~ — checked 2026-10-18: correct;
   whole words only (WAR not WARMING), repeats capped at two.
 
-### Closed — verified 2026-10-16
+### Closed — previous verification retained
 
 - MoO2 items carry pools: 61 broll, 609 sprite, 83 portrait, 142 chrome.
 - `GNNCutsceneManager.openDebate()` is wired (`beginDebate`, `DEBATE_BLOCKS`).
@@ -1207,11 +1202,10 @@ right on every count; the verification is below under *Closed*.
   `window.GNNBootReady`.
 - `audio-engine.js:playMusic()` logs only on failure (missing entry, fetch,
   decode).
-- MoO2 audio extracted: 109 effects and 57 music beds in
-  `assets/audio-manifest.json` (MoO1 alone was 41 and 40).
+- MoO2 `SOUND.LBX` effects have an extractor and are merged into the audio manifest when local extraction output exists. The owner's generated manifest has reported 109 effects and 57 music beds, but the repository does not yet automate decoding/rendering all MoO2 music source formats; `build_audio.py` only indexes pre-rendered MoO2 OGGs already under `assets/audio/music/moo2/`.
 - MoO2 text extracted and **loaded**: `asset-registry.js` fetches
   `assets/moo2-strings.json`.
-- MoO2 video extracted (nine cinematics) — but see *Open*: not yet read.
+- MoO2 video extracted (nine cinematics); 33 vetted segments are routed full-screen by `cutscene-manager.js`. Additional unused segments still need selection/quality review (ROADMAP §5).
 - `_palette_overrides` is loaded and applied by `extract_moo2.py`.
 - `BACKGRND/item_32` no longer reaches broll: no BACKGRND item is in the pool.
 - The asset count is reconciled (7,375) — §3, *Every MoO2 item was in the
