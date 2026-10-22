@@ -76,7 +76,9 @@ music assets. Nine MoO2 Smacker source videos can be decoded into frames;
 extraction and manifest integration are implemented, but automated decoding
 and rendering of raw MoO2 music sources is still unfinished. The recorded
 local graphics totals disagree (7,374 vs. 7,375), so regenerate, merge and
-verify local assets before publishing an exact item count. The archive also
+verify local assets before publishing an exact item count. The documented
+MoO1 frame totals also differ (4,205 vs. 4,316) and need the same local
+extraction comparison. The archive also
 supplies the 75 news bulletins the original in-game anchor read and the
 diplomacy the empires sent each other. It supplies the sound, the music and
 the cutaway footage — stills and moving video — and the lore show's copy. The
@@ -712,6 +714,8 @@ python3 tools/verify_assets.py
 # audio    : 109 effects, 5 stings, 57 music beds
 # The recorded merged graphics total differs elsewhere (7375); regenerate
 # and verify local outputs before treating these example counts as current.
+# CLAUDE.md and assets/README.md also disagree on the MoO1 frame total
+# (4205 vs. 4316); a fresh extraction is needed to reconcile it.
 # Optional MoO2 OGGs also affect the music-bed count.
 # OK — every runtime asset resolves inside the project.
 ```
