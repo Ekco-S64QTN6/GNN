@@ -620,8 +620,10 @@ came last. It doubled the boot log's asset count — the "asset count needs
 reconciling" item that had been open in §7.
 
 The merge now recognises a MoO2 list **by content** (`source: 'moo2'`), not
-by name. After: 342 keys, 7,375 items, 0 duplicate ids, every pool size
-identical. Only the four real name collisions keep the suffix.
+by name. The cleanup run at the time reported 342 keys, 7,375 items, 0
+ duplicate ids, with every pool size identical. Only the four real name
+collisions keep the suffix. The current exact item count still needs a fresh
+local merge/verify comparison; the README's recorded verifier output is 7,374.
 
 → **When the name is the thing that went wrong, identify by content.**
 
