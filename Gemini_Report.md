@@ -1,92 +1,72 @@
-Here is the exact, up-to-date list of what remains open. You can save this as `OPEN_ITEMS.md` or paste it into your project management tool.
+# GNN — Repository Audit Status
 
-I have excluded everything you just fixed (TTS sequence, `scan_strays.py` imports, MoO2 functional colors, palette holders, trailer gitignore, and the `PROJECT.md` truncation).
+**Snapshot date:** 2026-10-22  
+**Code snapshot:** main through commit 82f6949 (2026-10-20)
 
-***
+This replaces the earlier checklist, which continued to list several fixes as
+open after they had landed. It is a source-review snapshot, not a claim that
+the station was launched or every generated asset was visually inspected
+during this documentation pass.
 
-```markdown
-# GNN — Open Items & Remaining Work
+Authoritative status lives in [CLAUDE.md](CLAUDE.md), the
+[roadmap](docs/ROADMAP.md), and the
+[asset-pipeline reference](tools/PROJECT.md). This file is only a concise
+audit cross-check.
 
-**Status as of October 2026 (Post-Merge)**
+## Confirmed fixes in the current code
 
-This document tracks the remaining bugs, technical debt, and unimplemented features from the various system audits.
+- The TTS prefetch promotion preserves the live request's sequence ID.
+- TTS console diagnostics are opt-in through the `gnnTtsDebug` local-storage
+  flag; normal broadcasts do not emit the boot-race diagnostics.
+- `tools/scan_strays.py` imports the exported MoO1/MoO2 header constants and
+  uses the 0x12-byte and 0x0C-byte graphics headers.
+- `js/renderer.js` probes a 5×5 alpha neighborhood in `measureHole()`, rather
+  than trusting one center pixel.
+- `server.py` expires old ledger entries when loading the ledger, including a
+  read-only startup.
+- `js/feed-manager.js` clears its token cache above 5,000 entries, not 60,000.
+- Unreachable OFFICER palette-map entries for items 277+ were removed; the
+  extractor skips the known corrupt duplicate range from item 143 onward.
+- MoO2 functional-colour rendering and multi-frame palette-holder detection
+  are implemented in the graphics extractor.
+- The weather-map assets are present and the weather cutaway route is wired.
+  Visual quality and conditioning still need an actual render/on-air check.
 
----
+## Still open or requiring evidence
 
-## 🚨 P1: High Priority (Next Session)
+- **Palette verification:** remaining first-pass MoO2 palette assignments
+  still need visual review. The current review queue is not proof that every
+  palette is correct; RACES items 32–45 remain a known excluded/unpooled
+  problem area. MoO1 COLONIES items 02–03 still have scattered-pixel skies and
+  remain excluded by `COLONIES_SCRAMBLED` in `scene-compositor.js`.
+- **Reference-output testing:** the MoO2 unit tests build synthetic LBX data.
+  They do not yet compare a broad set of extracted pixels against
+  community-reference hashes or game captures.
+- **Narrative text:** extraction and merge tools exist, but runtime text
+  admission remains deliberately narrow. Classifying narrative records before
+  widening the runtime allowlist is still open.
+- **MoO2 music sources:** SOUND.LBX SFX extraction is implemented. A complete
+  automated decoder/render path for the remaining MoO2 music source formats
+  is not; `build_audio.py` indexes OGGs already present under
+  `assets/audio/music/moo2/`.
+- **Workstation-specific diagnostics:** several `tools/tests/*.py` scripts
+  still hard-code `/home/ekco/github/GNN/tools` or absolute asset/doc roots
+  (for example `breakcheck.py`, `breakedges.py`, `ceiling.py`, `cinecheck.py`,
+  `compare.py`, `compose2.py`, and `docshots.py`). Refactor paths from each
+  script's location and verify on a relocated checkout before claiming these
+  diagnostics are portable.
+- **Generated art / archive footage:** title-card polish, unused standing art
+  and logos, and unused MoO2 cinematic segments remain content-selection or
+  on-air verification work. See ROADMAP §5.
+- **Weather cutaways:** assets and routing have landed; inspect their actual
+  on-air size and appearance before closing the validation item.
+- **MoO1 composite scene review:** regenerate the review output after the
+  decoder fix before attributing old delta-frame artifacts to the current
+  extractor.
 
-### 1. `js/renderer.js` — Fragile `measureHole()` Probe
-- **The Issue:** The function to find the transparent window in the studio bezel probes the exact center pixel `(cx, cy)`. If a reticle, watermark, or compression artifact makes that single pixel opaque, the entire rendering falls back to a solid rectangle, breaking the window.
-- **The Fix:** Modify the `at(x, y)` function inside `measureHole()` to probe a 5x5 grid around the center and return the minimum alpha value.
+## Verification boundary
 
-### 2. Add Reference-Pixel Tests for MoO1 & MoO2
-- **The Issue:** The extraction code is structurally brilliant, but it is **evidentially unverified**. There are no unit tests that compare our RGBA output against a known-good community reference.
-- **The Fix:** Pick 5–10 items from `liblbx/moo2-data.txt` that have reference hashes. Add a test to `tools/tests/test_moo2_tools.py` that checks our extracted pixels against those known-good hashes.
-
-### 3. `tools/tests/` — Hardcoded Paths
-- **The Issue:** Over 25 test scripts hardcode `sys.path.insert(0, '/home/ekco/github/GNN/tools')`. This will fail on any other machine or CI environment.
-- **The Fix:** Replace the hardcoded strings with `os.path.dirname(os.path.abspath(__file__))` to dynamically resolve the root.
-
----
-
-## ⚠️ P2: Medium Priority (Asset & Polish)
-
-### 4. Unconditioned Weather Cutaways
-- **The Issue:** `weather_map.png` and `weather_map_02.png` exist in `assets/generated/cutaways/` as raw 2+ MB files. They have not been conditioned to 256-color plates.
-- **The Fix:** Run `python3 tools/condition_plates.py` and wire the resulting assets into the `GENERATED` dictionary in `js/cutscene-manager.js`.
-
-### 5. Dead Code in `palette_map.json`
-- **The Issue:** `palette_map.json` contains `_item_palettes` overrides for `OFFICER` items 277–343. However, `extract_moo2.py` now skips extracting `OFFICER` items 143+ entirely because they are corrupted duplicates. These map entries are dead code.
-- **The Fix:** Remove the `OFFICER` entries from `_item_palettes` in `palette_map.json`, or add a comment noting they are unreachable.
-
-### 6. MoO2 Cinematics Are Decoded But Unread
-- **The Issue:** `extract_moo2_video.py` successfully decoded nine Smacker videos (intro, endings, planet destruction) into `assets/cutscenes/moo2_video/`. However, nothing in `js/` references them yet.
-- **The Fix:** Expose them via the asset registry as animated `single()` scenes, and route them through `js/cutscene-manager.js` for the `anomaly` or `fleet` blocks.
-
-### 7. Title-Card Prompts Are Incorrect
-- **The Issue:** The fallback for title cards is currently just a `_standing.png` per character over a set plate.
-- **The Fix:** Update the prompts in `assets/generated/Prompts/` for `titlecards/` to generate proper show bumpers.
-
-### 8. `assets/generated/icons/` Partially Populated
-- **The Issue:** The story icons are regenerating, but the folder is not fully populated yet.
-- **The Fix:** Run the generation and conditioning pipeline for the remaining icons.
-
----
-
-## 🔧 P3: Low Priority (Hygiene & Edge Cases)
-
-### 9. `server.py` — Ledger Pruning on Boot
-- **The Issue:** `_expire_ledger()` is only called during a PUT request. A read-only server session will hold stale ledger records in memory indefinitely.
-- **The Fix:** Call `_expire_ledger()` inside `_load_ledger()` during server initialization.
-
-### 10. `js/feed-manager.js` — High Token Cache Ceiling
-- **The Issue:** `tokenCache` holds up to 60,000 entries before clearing. A 24/7 kiosk does not need this much GC pressure.
-- **The Fix:** Lower the ceiling to 3,000–5,000 entries.
-
-### 11. `feed-manager.js:calculateImportance()` Suspect Regex
-- **The Issue:** A reported issue suggests the regex used to calculate story importance might have a bug (reported, not yet confirmed against the file).
-- **The Fix:** Verify the regex against known headlines.
-
-### 12. `js/cast.js` — Robot Entry Review
-- **The Issue:** The `robot` entry in `cast.js` still reads as MoO1-lineage. It needs a review to decide if he stays seatable (`SHOW_PAIRS` block 4 seats `sakkra` + `robot`).
-
----
-
-## 🌐 Content & Lore Separation (Owner Request)
-
-### 13. MoO1 Lore and Real News Still Mix
-- **The Issue:** `PACE.wireShare` interleaves sector bulletins with real stories, and the banter templates have not been audited for in-universe terms applied to real headlines.
-- **The Fix:** Separate the two completely. Commercials are in-universe by design and should remain untouched.
-
-### 14. Twelve Show Logos and Nothing Loads Them
-- **The Issue:** `assets/generated/logos/` holds one logo per show plus `galaxy_shop` and `main_desk`, but no code actually draws them.
-- **The Fix:** The network promos now name each show; add the logo to the promo card.
-
-### 15. Two COLONIES Items Decode Scrambled
-- **The Issue:** `COLONIES` `item_02` and `item_03` decode with a scattered-pixel sky.
-- **The Fix:** Keep them excluded via `COLONIES_SCRAMBLED` in `scene-compositor.js`, or attempt a new palette extraction.
-
-### 16. `capture_docs.py` Hangs on 429
-- **The Issue:** The script hangs when RSS feeds return a 429 (Too Many Requests), waiting for live states.
-- **The Fix:** Drive the director instead (enqueue, then force states).
-```
+This report was prepared from GitHub source and commit history only. It did
+not run the offline suite, re-extract the user's local game archives, compare
+pixels against reference output, or observe a live broadcast. Treat local
+asset counts and on-air behaviour as unverified until those checks are run.

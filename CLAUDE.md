@@ -7,7 +7,7 @@ what must not be touched.** `README.md` is the public front page.
 MoO2 decoders, palette map, extraction order.
 `CONTRIBUTING.md` is how to work here — read it before changing anything.
 
-Last verified against the code on 2026-10-16, after commit `8cb098d`.
+Last reconciled against the code and commit history through 2026-10-20 (`82f6949`). This was a remote source review; generated asset outputs and live on-air behaviour were not rerun during the documentation pass.
 
 ---
 
@@ -43,9 +43,9 @@ the metric is the thing to doubt.
 |---|---|
 | Voice engine | Kokoro-82M, local, in-process, ~7× realtime on CPU |
 | Fallback | `edge-tts` (cloud) when `.venv` is absent |
-| Assets (MoO1) | 873 graphics items / 4,205 frames across 22 archives — decodes byte-exact |
+| Assets (MoO1) | 873 graphics items across 22 archives; historical checks report byte-exact decoding, but frame totals conflict (4,205 here vs. 4,316 in `assets/README.md`) and need a fresh local extraction comparison |
 | Assets (MoO2) | 6,502 graphics items across 285 archives — decoder correct, palette map from community sources |
-| Merged manifest | 7,374 items across 342 keys in `assets/gfx-manifest.json`, **0 duplicate ids**. MoO2 entries carry `source: 'moo2'` and ids `moo2/<DIR>/item_NN`; their key is the bare archive name except the four that collide with MoO1 (`COUNCIL_moo2`, `DESIGN_moo2`, `PLANETS_moo2`, `SHIPS_moo2`). See §3 for how the file had drifted to 13,144 items |
+| Merged manifest | 342 directory keys and 0 duplicate ids are expected. The last verifier/README output says 7,374 items, while §3's post-merge audit records 7,375; rerun merge + verification locally before treating the one-item count as reconciled |
 | Admitted pools | MoO1 + MoO2: 147 broll (86+61) · 219 portrait (136+83) · 1,005 sprite (396+609) · 154 chrome (12+142) · 15 glitch. `STATIC_DENY` (scene-compositor.js) is enforced **inside `GNNAssets.find()`**, so every consumer gets it |
 | Output ceiling | peak 0.872 under deliberate overload, zero clipped samples |
 | Per-line loudness | −19.3 to −20.3 LUFS, 1.0 LU spread, true peak −3.0 dBFS |
@@ -100,9 +100,12 @@ python3 tools/audio_probe.py 110        # clips + level-relative pops
 ./stop.sh
 ```
 
-The `[GNN Assets]` line in `gnn-server.log` on a fresh boot reports the count
-the runtime is actually drawing from. It should now read **7,375** graphics
-items; before the manifest fix in §3 it counted every MoO2 item twice.
+The `[GNN Assets]` line in `gnn-server.log` reports the runtime's flattened
+manifest count. The available documentation disagrees by one item: the last
+verifier/README output says 7,374, while §3's post-merge audit says 7,375.
+Run the local extraction, merge and `tools/verify_assets.py`, then compare the
+fresh boot log before calling the total reconciled; the earlier 13,144-item /
+5,769-duplicate manifest state is the separate bug fixed in §3.
 
 ---
 
@@ -617,8 +620,10 @@ came last. It doubled the boot log's asset count — the "asset count needs
 reconciling" item that had been open in §7.
 
 The merge now recognises a MoO2 list **by content** (`source: 'moo2'`), not
-by name. After: 342 keys, 7,375 items, 0 duplicate ids, every pool size
-identical. Only the four real name collisions keep the suffix.
+by name. The cleanup run at the time reported 342 keys, 7,375 items, 0
+duplicate ids, with every pool size identical. Only the four real name
+collisions keep the suffix. The current exact item count still needs a fresh
+local merge/verify comparison; the README's recorded verifier output is 7,374.
 
 → **When the name is the thing that went wrong, identify by content.**
 
@@ -1149,11 +1154,7 @@ The `seq=0` burst in old logs is `tools/voice_audition.py`.
 
 ## 7. Known open items
 
-Every item here was checked against the code on 2026-10-16. Two copies of
-this section had drifted apart — the first still said MoO2 had no pools and
-`openDebate()` was unwired, the second said both were done — and a reader
-trusting the wrong one would have re-done finished work. The second was
-right on every count; the verification is below under *Closed*.
+This section is reconciled with the code and commit history through 2026-10-20 (`82f6949`). It separates implementation status from work that still requires the local game archives, visual comparison, or an on-air run. This documentation review did not rerun those live checks.
 
 ### Open — asset pipeline
 
@@ -1184,8 +1185,7 @@ right on every count; the verification is below under *Closed*.
 
 - **Generated art still unused**: 18 standing figures and five logos.
   ROADMAP §5 lists where each belongs.
-- **The weather shows have no weather feed.** They read what the weather
-  regex catches and fall back to science and space (`draws`). ROADMAP §4.2.
+- **Weather cutaway visual check remains.** The `weather_map` and `weather_map_02` assets are committed and routed through the `weather` cutaway pool (2026-10-20). Inspect output at its on-air size and confirm conditioning/appearance; do not treat the route landing as proof of visual quality.
 
 - **Two COLONIES items decode with a scattered-pixel sky** (`item_02`,
   `item_03`), excluded by `COLONIES_SCRAMBLED` in `scene-compositor.js`.
@@ -1199,7 +1199,7 @@ right on every count; the verification is below under *Closed*.
 - ~~`calculateImportance()` suspect regex~~ — checked 2026-10-18: correct;
   whole words only (WAR not WARMING), repeats capped at two.
 
-### Closed — verified 2026-10-16
+### Closed — previous verification retained
 
 - MoO2 items carry pools: 61 broll, 609 sprite, 83 portrait, 142 chrome.
 - `GNNCutsceneManager.openDebate()` is wired (`beginDebate`, `DEBATE_BLOCKS`).
@@ -1207,15 +1207,13 @@ right on every count; the verification is below under *Closed*.
   `window.GNNBootReady`.
 - `audio-engine.js:playMusic()` logs only on failure (missing entry, fetch,
   decode).
-- MoO2 audio extracted: 109 effects and 57 music beds in
-  `assets/audio-manifest.json` (MoO1 alone was 41 and 40).
+- MoO2 `SOUND.LBX` effects have an extractor and are merged into the audio manifest when local extraction output exists. The owner's generated manifest has reported 109 effects and 57 music beds, but the repository does not yet automate decoding/rendering all MoO2 music source formats; `build_audio.py` only indexes pre-rendered MoO2 OGGs already under `assets/audio/music/moo2/`.
 - MoO2 text extracted and **loaded**: `asset-registry.js` fetches
   `assets/moo2-strings.json`.
-- MoO2 video extracted (nine cinematics) — but see *Open*: not yet read.
+- MoO2 video extracted (nine cinematics); 33 vetted segments are routed full-screen by `cutscene-manager.js`. Additional unused segments still need selection/quality review (ROADMAP §5).
 - `_palette_overrides` is loaded and applied by `extract_moo2.py`.
 - `BACKGRND/item_32` no longer reaches broll: no BACKGRND item is in the pool.
-- The asset count is reconciled (7,375) — §3, *Every MoO2 item was in the
-  manifest twice*.
+- The duplicate-manifest defect is fixed: 342 keys and 0 duplicate ids. The exact item total still needs a fresh local manifest/verifier comparison because the available docs report 7,374 and 7,375.
 - `key_robot.py`, the robot cels and their checks are retired; the renderer's
   `person.frames` branch had already gone.
 - README's cast badge reads 14.

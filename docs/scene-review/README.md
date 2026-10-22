@@ -128,7 +128,8 @@ removed from the pool that feeds commercial hero shots.
   entirely.
 - The review page is a development tool. It is not linked from the
   broadcast and only exists at `/tools/scene_review.html`.
-- **Fixing the recipes in `scene-compositor.js` does not fix the delta-
-  frame or scrambled-asset problems** — those are in the extractor, and
-  they will keep showing up on any animated LBX asset in the broadcast
-  until the extractor is fixed.
+- **The delta-frame warning above predates the MoO1 decoder fix.** Re-extract
+  the MoO1 assets and regenerate the review set before using an old capture as
+  evidence of a current decoder fault. Composite recipe defects still live in
+  `scene-compositor.js`; palette-scrambled assets remain a separate review
+  category and should be judged from current renders.
