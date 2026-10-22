@@ -1,56 +1,24 @@
-# Outstanding art — everything still to generate
+# Outstanding art — generated-assets backlog
 
-**The one place to look.** Every other prompt file in this folder is done:
-an audit on 2026-10-17 checked all 193 "save the result as" targets against
-the disk and found 173 present. This file lists the rest, with the prompt
-to copy where one is needed. When you generate one, delete its entry here.
+This file is a prompt/backlog aid, not proof that an output is absent. The
+filesystem audit dated 2026-10-17 is historical; the weather cutaway assets
+were added and routed after that audit. Check the current tree and runtime
+consumer before generating replacements. After generating new art, run
+`python3 tools/condition_plates.py` and inspect the result at the size it airs.
 
-How the audit was run, so it can be re-run:
+## 1. Exists — verify before regenerating
 
-```
-python3 - <<'X'
-import re, os, glob
-for f in sorted(glob.glob('assets/generated/Prompts/*.md')):
-    for t in re.findall(r"[Ss]ave (?:the result |it )?as `([^`]+)`", open(f).read()):
-        p = t if t.startswith('assets/') else 'assets/generated/' + t
-        if not os.path.exists(p): print(os.path.basename(f), p)
-X
-```
+### Weather cutaways
 
-After generating anything, run `python3 tools/condition_plates.py`.
+`assets/generated/cutaways/weather_map.png` and
+`weather_map_02.png` are present in the repository. The 2026-10-20 runtime
+change added both names to the `weather` cutaway pool and added a dedicated
+weather topic classifier and sound recipe.
 
----
-
-## 1. Wanted — the station uses it as soon as it exists
-
-
-### `cutaways/weather_map.png` and `cutaways/weather_map_02.png`
-
-For the two weather shows' cutaways in the monitor (*Sector Weather Watch*,
-*Solar Wind Overnight*). Tell Claude when they exist and they will be routed
-to every weather story. Generate both — one is a planet's surface weather,
-the other the space weather around a star.
-
-```
-Create a 1792x1024 image.
-
-detailed digital illustration in the manner of pre-rendered art from an early-2000s space strategy game, the generation after Master of Orion 1 and not that game, smooth rich shading with real gradients, volumetric light, specular highlights on metal, high fidelity and finely detailed, not pixel art, no visible pixel grid, no dithering, no chunky blocks, no retro or 8-bit or 16-bit styling. a glowing holographic weather display floating in a dark broadcast studio, showing a planet seen from orbit with swirling storm fronts, a large hurricane spiral, bands of rain and lightning flickers drawn as luminous translucent layers over the globe, curved pressure lines and wind-direction arrows made of light, a faint grid of latitude and longitude lines around the planet, soft scanlines in the hologram. Framing: wide plate, full bleed to all four edges, no border and no frame, the planet a little right of centre. Palette: deep navy and black, cyan hologram light, white storm clouds, warning amber and red at the hurricane's eye. Background: full-bleed scene, no transparency.
-
-Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, people, pixel art, dithering, visible pixels, retro 8-bit or 16-bit styling, flat untextured surfaces, large areas of a single colour, modern logos, real-world brand names, photographic texture, watermarks, signatures.
-```
-
-```
-Create a 1792x1024 image.
-
-detailed digital illustration in the manner of pre-rendered art from an early-2000s space strategy game, the generation after Master of Orion 1 and not that game, smooth rich shading with real gradients, volumetric light, specular highlights on metal, high fidelity and finely detailed, not pixel art, no visible pixel grid, no dithering, no chunky blocks, no retro or 8-bit or 16-bit styling. a glowing holographic space-weather display floating in a dark broadcast studio, showing a star on the left throwing a huge curling solar flare and a wave of charged particles across space towards a small planet on the right, the planet's magnetic field drawn as glowing curved field lines bending under the storm, auroras glowing at its poles, translucent warning rings of light pulsing outward from the flare. Framing: wide plate, full bleed to all four edges, no border and no frame. Palette: deep black and violet, hot orange and yellow flare, cyan and green field lines and aurora. Background: full-bleed scene, no transparency.
-
-Do not include: captions, headlines, tickers, labels, letters, numbers or writing of any kind anywhere in the image, people, pixel art, dithering, visible pixels, retro 8-bit or 16-bit styling, flat untextured surfaces, large areas of a single colour, modern logos, real-world brand names, photographic texture, watermarks, signatures.
-```
-
-Save them as `assets/generated/cutaways/weather_map.png` and
-`assets/generated/cutaways/weather_map_02.png`.
-
----
+Do not regenerate these files just because they appeared in the old backlog.
+Still verify their current rendering at the actual monitor size and on an
+on-air weather story. If the image treatment needs conditioning, document the
+measured problem and regenerate only the required output.
 
 ## 2. Not needed unless the cast grows
 
@@ -78,7 +46,7 @@ prompts are ready in `Hero_prompts.md`.
 
 ---
 
-## 4. Ideas, if you want more
+## 3. Ideas, if you want more
 
 Not required by anything. Each would be wired in on request.
 
