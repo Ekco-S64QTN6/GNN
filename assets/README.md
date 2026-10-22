@@ -195,9 +195,3 @@ python3 tools/merge_moo2_manifests.py     # merge MoO2 graphics into gfx-manifes
 python3 tools/merge_moo2_text.py          # filter/merge MoO2 text into moo2-strings.json
 python3 tools/build_audio.py              # re-profile SFX and index present MoO2 music OGGs
 ```
-
-```bash
-python3 tools/extract_all.py     # graphics + gfx-manifest.json
-python3 tools/build_audio.py     # audio-manifest.json + music/*.ogg
-python3 tools/extract_text.py    # moo-strings.json
-```
