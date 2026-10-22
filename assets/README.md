@@ -50,9 +50,13 @@ is a gap, not an absolute `y`.
 `v - 0xDF` copies of the byte that follows (max run 32); anything else is a
 literal palette index. Index 0 is transparent.
 
-All **4,316 frames across 22 archives decode byte-exact** — every frame body is
-consumed to its last byte, with exactly `width` columns, and all **872,024
-runs** land inside their column with no clamping.
+The historical extraction report counted **4,316 frames across 22 archives**
+and **872,024 runs** that landed inside their columns with no clamping. The
+current `CLAUDE.md` snapshot records 4,205 frames for 873 items across the
+same 22-archive scope. This documentation pass did not regenerate the local
+game assets, so the aggregate frame total is unresolved; rerun extraction and
+compare manifests before citing either count as current. The byte-exact
+statement belongs to the historical report, not a new verification here.
 
 > Both structural properties are invisible on solid artwork. The 25-cel anchor
 > and the 22 story icons are one run per column, so they decode identically
@@ -147,7 +151,7 @@ console readout at `114,435 · 735×135` is outside it.
 
 ---
 
-## 🎬 MoO1 `cutscenes/` — 873 items, 4,316 frames, 418 GIFs
+## 🎬 MoO1 `cutscenes/` — recorded output: 873 items, 4,316 frames, 418 GIFs
 
 Frames are `item_NN_frame_NNN.png`, **RGBA with real transparency** (index 0 is
 alpha 0, not a filled backdrop colour) so they can be layered.
