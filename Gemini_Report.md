@@ -36,7 +36,9 @@ audit cross-check.
 
 - **Palette verification:** remaining first-pass MoO2 palette assignments
   still need visual review. The current review queue is not proof that every
-  palette is correct; RACES items 32–45 remain a known excluded problem area.
+  palette is correct; RACES items 32–45 remain a known excluded/unpooled
+  problem area. MoO1 COLONIES items 02–03 still have scattered-pixel skies and
+  remain excluded by `COLONIES_SCRAMBLED` in `scene-compositor.js`.
 - **Reference-output testing:** the MoO2 unit tests build synthetic LBX data.
   They do not yet compare a broad set of extracted pixels against
   community-reference hashes or game captures.
@@ -47,6 +49,12 @@ audit cross-check.
   automated decoder/render path for the remaining MoO2 music source formats
   is not; `build_audio.py` indexes OGGs already present under
   `assets/audio/music/moo2/`.
+- **Workstation-specific diagnostics:** several `tools/tests/*.py` scripts
+  still hard-code `/home/ekco/github/GNN/tools` or absolute asset/doc roots
+  (for example `breakcheck.py`, `breakedges.py`, `ceiling.py`, `cinecheck.py`,
+  `compare.py`, `compose2.py`, and `docshots.py`). Refactor paths from each
+  script's location and verify on a relocated checkout before claiming these
+  diagnostics are portable.
 - **Generated art / archive footage:** title-card polish, unused standing art
   and logos, and unused MoO2 cinematic segments remain content-selection or
   on-air verification work. See ROADMAP §5.
