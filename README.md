@@ -194,11 +194,13 @@ Verify before launching:
 
 ```bash
 python3 tools/verify_assets.py
-# Example output from a fully populated local extraction tree:
+# Example from a previously populated local extraction tree:
 # graphics : 7374 items, 10063 spot-checked frames
 # audio    : 109 effects, 5 stings, 57 music beds
 # OK — every runtime asset resolves inside the project.
-# Ignored generated outputs and optional MoO2 OGGs can change these counts.
+# Count caveat: CLAUDE.md §3 records 7375 after merge; rerun the local
+# extract/merge/verify pipeline and compare the fresh boot log to settle it.
+# Optional pre-rendered MoO2 OGGs can change the music-bed count.
 ```
 
 ### Launch
