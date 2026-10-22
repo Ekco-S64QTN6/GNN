@@ -46,7 +46,7 @@ prompts are ready in `Hero_prompts.md`.
 
 ---
 
-## 3. Ideas, if you want more
+## 4. Ideas, if you want more
 
 Not required by anything. Each would be wired in on request.
 
