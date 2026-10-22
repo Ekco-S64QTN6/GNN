@@ -274,7 +274,7 @@ with an immediate visible result.
 | `generated/standing/` | 18 (single figures, pairs) | Title cards and show opens: the pair for the block standing in front of the set before they sit. `*_pairs.png` already match four show cards. |
 | `generated/logos/` unused | 6 | `main_desk`, `market_desk`, `tech_desk`, `fleet_briefing`, `sector_midday_wire`, `the_spotlight` — desk bumpers between stories, or the corner bug |
 | `generated/icons/` | 22 | Story icons beside the chyron |
-| MoO2 audio | SOUND.LBX SFX extraction + optional OGGs | Sound-effect extraction is integrated; `build_audio.py` indexes pre-rendered OGGs under `assets/audio/music/moo2/` but does not decode raw MoO2 music sources. Automating source decoding/rendering remains open. |
+| MoO2 SFX/music | SOUND.LBX effects decoded and merged; optional pre-rendered OGGs | Use MoO2 combat effects in tactical cutaways. Raw MoO2 music-source decoding/rendering remains open; `build_audio.py` only indexes existing OGGs under `assets/audio/music/moo2/`. |
 | MoO2 cinematics, unvetted stretches | ~1,400 frames | `intro` has more clean segments than are listed; `loserfin` and `wininfin` endings have whole scenes unused |
 | Sprite pool | 1,005 items | A ship-of-the-week segment; a "fleet review" crawl |
 | **MoO2 GNN newsroom** (`EVENTS` item 1, 640×480, 31 frames) | 1 | The original game's Galactic News Network studio: the android anchor at her desk, a blank GNN monitor behind her (screen ≈ x 0.49–0.75, y 0.03–0.27 of the frame — measure before use). The 157×125 event pictures were made for that monitor. Rebuild the original newscast as a full-screen **archive cutaway on the lore show**: newsroom, event picture on its screen. Palette fixed 2026-10-18 (item 0 is its holder). |
