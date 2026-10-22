@@ -17,8 +17,8 @@ not include all ignored extraction outputs.
 
 Browser/CDP diagnostics use `tools/drive.py` and normally need the station at
 `http://localhost:8080/`. Do not stop or restart the owner's station to run a
-probe; use the documented second-server procedure in `CONTRIBUTING.md` when
-isolation is required.
+probe; use the documented second-server procedure in
+[CONTRIBUTING.md](../../CONTRIBUTING.md) when isolation is required.
 
 ## 1. Tests
 
