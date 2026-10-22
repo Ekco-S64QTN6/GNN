@@ -1,8 +1,7 @@
 # GNN Newsroom — Asset Pipeline Source of Truth
 
-**Last updated:** 2026-10-20
-**Status:** MoO1 graphics pipeline complete and verified. MoO2 graphics + text done.
-MoO2 audio not started. Runtime wiring for MoO2 pending.
+**Last updated:** 2026-10-22
+**Status:** MoO1 graphics decoding is verified. MoO2 graphics are merged into runtime pools; text extraction/merge exists, but narrative classification and broad runtime admission remain open. SOUND.LBX SFX extraction and manifest integration are implemented; complete automated MoO2 music-source decoding/rendering is not. Extracted game-asset outputs are local/ignored and must be regenerated from owned game files.
 
 This document is the current state of the asset extraction work for the GNN
 Newsroom. It replaces every previous version. It is written to be self-
@@ -70,23 +69,16 @@ diagnosis:
 **Verify by:** extracting to `assets/cutscenes/` and inspecting the frames
 in `tools/scene_review.html` cutscenes mode.
 
-### 1.2 MoO2 — graphics and text complete, audio not started
+### 1.2 MoO2 — graphics integrated; narrative text and music work remain
 
-- Command-stream frame decoder verified. `SHIPS.LBX` went from 293 warnings
-  to 26 to 0. All combat-family archives extract with 0 warnings.
-- Empty-frame and 6-byte trailer handling: SHIPS items 405/406/425–448 are
-  valid empty sentinel frames; every MoO2 frame body has a 6-byte trailer
-  after its `(0, 1000)` terminator. Neither is a warning.
-- Container validation rejects the ten non-LBX files in `mastori2/`.
-- `IFONTS.LBX` palette path works. `PLNTSUM.LBX` extracts 84 items, 0
-  warnings.
-- Text extraction: RACENAME (1333), SHIPNAME (4742), STARNAME (7553),
-  TECHDESC (7134) — 20,762 records, verified readable.
-- Audio: not started. `.MDI`, `.DIG`, `.BNK` files exist under
-  `Master of Orion 1/mastori2/`; none have been touched.
-- Runtime wiring: not done. `asset-registry.js` doesn't know about
-  `source: 'moo2'`, and per-archive MoO2 manifests haven't been merged into
-  `assets/gfx-manifest.json`.
+- **Graphics:** command-stream frame decoder and palette logic are implemented. The earlier real-archive check reduced SHIPS warnings from 293 to 0; empty sentinels and the 6-byte trailer after each MoO2 frame terminator are handled.
+- **Runtime:** `merge_moo2_manifests.py` merges per-archive manifests, and the runtime/asset verifier understands `source: 'moo2'`. Extracted frames and manifests are generated local outputs, not all shipped files.
+- **Text:** `extract_moo2_text.py` preserves NUL-delimited records and raw bytes; `merge_moo2_text.py` filters those records into `assets/moo2-strings.json`. The runtime allowlist remains narrow (race/star labels); classifying and admitting narrative event text is still open (§6.4).
+- **Sound effects:** `extract_sound_moo2.py` extracts native-WAV samples from `SOUND.LBX`; `build_audio.py` profiles and merges them when the local output manifest exists.
+- **Music:** `build_audio.py` only indexes OGG files already present under `assets/audio/music/moo2/`. The complete raw MoO2 music-source decoder/render path is not implemented.
+- **Video:** `extract_moo2_video.py` decodes nine Smacker sources into PNG frames. The runtime routes 33 vetted segments full-screen; additional segments remain to be reviewed for possible use.
+
+**Verification boundary:** source-level support is not the same as visually checking every extracted asset. Use `tools/palette_review.py` and the real game/reference output for unresolved palette cases.
 
 ---
 
@@ -259,51 +251,56 @@ repDy:     51
 
 ## 6. What's left
 
-### 6.1 MoO2 audio
+### 6.1 MoO2 music source decoding and rendering
 
-Not started. `.MDI`, `.DIG`, `.BNK` files under `Master of Orion 1/mastori2/`.
-Same Miles Sound System family as MoO1, so `build_audio.py` is the shape to
-adapt — but examine one file of each type before writing the decoder. The
-`.MDI` files are almost certainly MIDI (same as MoO1's `music_track_*.mid`),
-`.DIG` is a digital sample format, `.BNK` is likely a bank of samples.
+Sound-effect extraction is implemented. `tools/extract_sound_moo2.py` writes
+the native WAV items in `SOUND.LBX`; `tools/build_audio.py` profiles the
+result and includes it in `assets/audio-manifest.json` when the local sample
+manifest exists.
 
-**Reconnaissance first:** hex-dump the first 64 bytes of each and compare
-against the MoO1 versions, which are already understood.
+The **music** part is incomplete: `build_audio.py` only discovers OGG files
+already present under `assets/audio/music/moo2/`. It does not decode/render
+the raw MoO2 music source formats (`.MDI`, `.DIG`, `.BNK`, or streams
+inside `STREAM.LBX`). The next step is format reconnaissance against the
+local game files, followed by a tested conversion path and listening checks.
+Do not describe the whole MoO2 audio pipeline as complete solely because a
+populated local manifest has music entries.
 
-### 6.2 MoO2 runtime wiring
+### 6.2 MoO2 runtime integration
 
-- Update `asset-registry.js` to route `source: 'moo2'` paths. The frame
-  path builder already supports it (checks `entry.source`); the runtime
-  needs to load the per-archive manifests.
-- Merge `assets/cutscenes/moo2/*/manifest.json` into a MoO2 fragment of
-  `assets/gfx-manifest.json`.
+- **Graphics:** runtime support for `source: 'moo2'` and merged graphics manifests is implemented. Re-run extraction and `merge_moo2_manifests.py` after changing decoder or palette behavior.
+- **Text:** `assets/moo2-strings.json` is loaded, but runtime admission is intentionally limited to reviewed race/star names. Narrative event text needs classification and allowlist changes (see §6.4 and `docs/ROADMAP.md` §4.4).
+- **Video:** nine source cinematics are decoded; 33 vetted segments route through `cutscene-manager.js`. Selecting/validating additional unused segments is an optional content task, not missing decoder wiring.
 
 ### 6.3 MoO1 in the runtime
 
 The decoder is verified at the frame level, but the missile-in-GNN test
-hasn't been re-run since the fixes landed. Load the station, trigger a
-combat cutaway, and watch a missile animation end to end. If it moves
-cleanly from A to B with no trail, MoO1 is done.
+should still be observed on the target machine after re-extracting the local
+assets. Trigger a combat cutaway and watch a missile animation end to end;
+use a current video/render rather than an old review capture.
 
-### 6.4 MoO2 text — remaining archives
+### 6.4 MoO2 narrative text — classification and runtime allowlist
 
-Four archives done. The extractor's default prefix list includes HELP, INFO,
-EVENTMSG, STRNGS, MAINTEXT, and others. Run the full set and spot-check:
+The extraction and merge tools exist; raw NUL-delimited records are not the
+same thing as a curated narrative corpus. The current runtime only admits a
+restricted set of race/star names. Classify English narrative records, reject
+UI labels, code identifiers, templates with unsupported formatting, and
+non-English or binary-contaminated material, then widen the runtime allowlist
+only for records that have been reviewed.
 
+Useful local commands (requires the game archives):
+
+```bash
+python3 tools/extract_moo2_text.py --all-lbx
+python3 tools/merge_moo2_text.py --dry-run
+python3 tools/merge_moo2_text.py
 ```
-python3 tools/extract_moo2_text.py --only HELP,INFO,EVENTMSG,STRNGS,MAINTEXT
-```
-
-If they read cleanly, run without `--only` and you're done with text.
 
 ### 6.5 Optional
 
-- **Validate MoO2 ship colours** against `liblbx` output or the game
-  itself. The reference cases are already in `palette_map.json`; nothing
-  has been hash-compared yet.
-- **`IFONTS.LBX` on more archives.** Only `PLNTSUM` tested. Interface
-  archives (`LOADSAVE`, `NEWGAME`, `MAINMENU`) are the obvious next
-  candidates.
+- **Reference render tests:** compare the remaining known-good `liblbx` fixtures (SHIPS 42, MONSTER 7, STARBG 9, LOGO 0–1, MAINMENU) against our extracted render. The current synthetic unit tests do not establish parity with every original-game frame.
+- **Unresolved palettes:** review remaining first-pass assignments with `tools/palette_review.py` / `tools/palette_compare.py`. `RACES` items 32–45 remain a known excluded/unpooled concern. OFFICER items 143+ are skipped by the extractor as corrupted duplicates; their old per-item overrides were removed and should not be reported as a current extraction failure.
+- **Live scene review:** re-extract local assets and inspect current renders after decoder changes; do not use an old review capture as proof of a current visual defect.
 
 ---
 
@@ -347,7 +344,8 @@ question come back to this. `skip` means "leave the previous value";
 | 2026-10-16 (post-fix, synthetic) | Command-stream decoder, raw frames, junction compositing, coverage plane, 640×480 validation. |
 | 2026-10-16 (post-fix, real archives) | `SHIPS.LBX` 293 → 26 → 0 warnings. Full archive scan complete. Text extraction: 20,762 records. |
 | 2026-10-16 (MoO1 fixes) | Delta-frame inheritance fixed. Palette merge fixed. Opaque-zero rule with SPIES/EMBASSY exclusions. VORTEX palette diagnosis. Deny list built. Interview composition tuned. |
-| 2026-10-16 (cleanup) | This version. Tools folder review. `README_MOO2_LBX_FIX.md` deleted. PROJECT.md rewritten as a practical reference rather than a cold-reader introduction. |
+| 2026-10-16 (cleanup) | MoO2 decoder state and tools-folder reference consolidated. |
+| 2026-10-20–22 (reconciliation) | Recorded the landed MoO2 text/SFX/video tools and runtime integration; separated the remaining narrative-text and raw-music-source work from completed extraction support. |
 
 
 ## `tools/extract_moo2.py`
@@ -1081,66 +1079,45 @@ available. The community says 12. If a SHIPS sprite looks wrong after
 re-extraction, `palette_compare` output on item 0 will settle it.
 ```
 
-## What else needs updating in the docs
+## Palette verification remains open
 
-**`tools/PROJECT.md`** — replace the palette section (as above), and add
-these two lines to the references section:
-
-```
-- **liblbx moo2-data.txt** (palette assignments, item splits, override
-  chains): github.com/MarcoKull/liblbx, doc/txt/moo2-data.txt
-- **Wolverine's original graphics-format research** (COUNCIL override,
-  SHIPS palette-holder mechanism): masteroforion2.blogspot.com
-```
-
-**`tools/tests/README.md`** — no changes needed.
-
-**Root `README.md`** and **`CLAUDE.md`** — no palette content in either; no
-changes needed for this finding. If you want to note the community source
-somewhere in the root README, a single line under the MoO2 asset paragraph
-suffices: "*Palette assignments confirmed against Nick Bowler's liblbx
-moo2-data.txt (github.com/MarcoKull/liblbx).*"
-
-## On the SHIPS verification
-
-You ran `palette_compare.py SHIPS --item 0` but didn't report the result.
-Before committing SHIPS/SHIPS2 to 12, look at that grid — palettes 3 and 12
-should look visibly different. If 12 doesn't look right, leave the map at 3
-and note it as a case where our GOG copy differs from what the community
-tested. Nothing else in the pipeline depends on the choice; it's a one-line
-change either way.
-
----
+The map uses community-documented assignments where available and locally
+reviewed candidates elsewhere. `SHIPS` / `SHIPS2` now use community palette
+12 according to the current map. That does not close reference-output
+verification: compare the listed `liblbx` fixture cases with actual rendered
+PNGs when the local game archives and generated output are available.
 
 ## 2026-10-20 repository audit update
 
-This addendum records source-level fixes proposed from the current repository review.
-It does not claim that the game-asset outputs have been reference-verified; that
-still requires testing against the user's installed game data and known-good
-renders.
+This status note summarizes code already merged on `main`; it is not a claim
+that all generated assets or live broadcast behaviour have been revalidated.
 
-### Fixes in the audit patch
+### Landed code changes
 
-- `tools/scan_strays.py` now imports the header constants actually exported by
-  `tools/lbx.py`. The MoO1 probe uses `MOO1_HEADER` (0x12 bytes) and the MoO2
-  probe uses `MOO2_HEADER` (0x0C bytes). This removes the import-time failure
-  caused by the nonexistent `GFX_HEADER` symbol and corrects the MoO2 header
-  size previously hard-coded as 0x10.
-- `js/tts.js` promotes a queued prefetch using the live request's sequence ID
-  instead of always synthesizing it with sequence 0. This allows the promoted
-  request to retain the live request metadata while reusing the queued promise.
+- `tools/scan_strays.py` uses the exported `MOO1_HEADER` (0x12 bytes) and
+  `MOO2_HEADER` (0x0C bytes) constants.
+- `js/tts.js` passes the live sequence ID when promoting a queued TTS
+  prefetch; `gnnTtsDebug=1` in localStorage opts into verbose TTS diagnostics.
+- `js/renderer.js` probes a 5×5 alpha neighborhood in `measureHole()`.
+- `server.py` expires the loaded news ledger on boot; `js/feed-manager.js`
+  lowers the token-cache clearing threshold to 5,000 entries.
+- The extractor renders `0x0800` MoO2 functional-colour items and accepts
+  multi-frame tiny palette holders. Known corrupt `OFFICER` duplicate items
+  143+ are skipped; their unreachable palette overrides were removed.
+- Weather assets exist and the `weather` classifier, generated cutaway pool,
+  and sound recipe are wired in `js/cutscene-manager.js`.
 
-### Verification boundaries and remaining review items
+### Evidence still required
 
-- Run the Python tool tests and `python tools/scan_strays.py --help` in the
-  target environment after applying this patch.
-- TTS request sequencing should be exercised in-browser with a queued line that
-  is then requested live, and with a line already in flight. This patch has not
-  been validated against a running voice server here.
-- Renderer alpha-hole robustness, ledger expiry timing, the unused palette-map
-  entries, generated cutscene asset mapping, default TTS debug logging, and
-  cross-platform test-path assumptions remain review items rather than claimed
-  fixes in this patch.
-- Runtime audio wiring, generated assets, and MoO2 visual correctness should
-  not be marked fully verified without the relevant local assets and reference
-  comparisons.
+- Run `tools/tests/offline.sh` in the target environment; this documentation
+  update did not run it.
+- Re-extract local game assets and compare selected output against reference
+  renders; source-level unit tests and clean decode warnings do not prove every
+  palette is visually correct.
+- Inspect weather plates at their actual on-air monitor size and watch a live
+  weather story.
+- Add automated comparisons against the listed `liblbx` fixture hashes when
+  suitable fixtures are available.
+
+The authoritative current backlog is `docs/ROADMAP.md`; see §6 above for the
+separate text-curation and MoO2 music-source implementation gaps.
