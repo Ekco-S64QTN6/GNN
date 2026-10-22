@@ -178,6 +178,14 @@ python3 tools/merge_moo2_text.py          # folds MoO2 text into assets/moo2-str
 python3 tools/build_audio.py              # re-runs to merge MoO2 audio into the manifest
 ```
 
+**MoO2 music boundary:** `extract_sound_moo2.py` and `build_audio.py` automate
+SOUND.LBX sound-effect extraction, profiling and manifest integration.
+Complete decoding/rendering of raw MoO2 music sources is not automated yet:
+`build_audio.py` only indexes OGG files already present in
+`assets/audio/music/moo2/`. The reported 109-effect / 57-music-bed counts
+describe a populated local extraction tree; counts may differ when ignored
+music outputs are absent.
+
 That is about five minutes on a modern machine. `assets/generated/` — the AI
 plates the studio is made of — is already in the clone, so nothing else has to
 be generated.
@@ -186,9 +194,11 @@ Verify before launching:
 
 ```bash
 python3 tools/verify_assets.py
+# Example output from a fully populated local extraction tree:
 # graphics : 7374 items, 10063 spot-checked frames
 # audio    : 109 effects, 5 stings, 57 music beds
 # OK — every runtime asset resolves inside the project.
+# Ignored generated outputs and optional MoO2 OGGs can change these counts.
 ```
 
 ### Launch
