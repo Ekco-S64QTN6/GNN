@@ -195,7 +195,17 @@ UI_ARCHIVES = {
     'LOADSAVE', 'NEWGAME', 'MAINMENU', 'INSTALL', 'APP_PICS', 'WARNING',
     'CREDITS', 'TECHSEL', 'GAME', 'BUFFER0', 'RACESEL', 'RACEOPT',
     'OFFICER', 'SYSDISP', 'FLTICONS', 'DESIGN', 'CONFIRM', 'NEXT_PLYR',
+    # Colony-screen popups, refit and build menus. Their empty bordered
+    # panels pass the broll gates (contact sheet, 2026-10-24).
+    'COLPUPS', 'COLPUSP', 'COLREFIT', 'COLBLDG',
 }
+
+# The glitch pool wants a scrambled picture, not a small detailed object in
+# an empty frame: a tech animation's gadget or a building on 640x480 of
+# transparency scores the same chroma noise. Every such item on the contact
+# sheet sat at coverage 0.02-0.054; the scrambled ones (RACESEL 27,
+# DIPLOMAT 38) at 0.55 and up.
+GLITCH_MIN_COVERAGE = 0.08
 
 # An empty menu frame scores low on ui_score because almost all of it is the
 # backdrop colour, which that measure deliberately ignores. What gives it
@@ -236,7 +246,8 @@ def pools_for(w, h, coverage, noise, ui, role, colors=64, archive='', item=-1):
 
     # Deliberate interference. Same admission as the MoO1 side, so
     # `GNNGlitch` can pick from either library without a branch.
-    if (noise > 95 and w >= 200 and ui < UI_LIMIT and role != 'blank'):
+    if (noise > 95 and w >= 200 and ui < UI_LIMIT and role != 'blank'
+            and coverage >= GLITCH_MIN_COVERAGE):
         out.append('glitch')
 
     if ui >= UI_LIMIT or role == 'blank':
@@ -749,6 +760,15 @@ def extract_archive(lbx_path, out_dir, base_palette, base_palette_index,
             'frame_clean': frame_clean,
         })
         extracted += 1
+
+    if not manifest_entries:
+        # Text, palette and audio archives are LBX containers too; they
+        # hold no images and get no output directory.
+        try:
+            os.rmdir(out_dir)
+        except OSError:
+            pass
+        return extracted, skipped
 
     manifest_path = os.path.join(out_dir, 'manifest.json')
     with open(manifest_path, 'w', encoding='utf-8') as fh:

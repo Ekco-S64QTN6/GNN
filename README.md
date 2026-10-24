@@ -75,8 +75,8 @@ music assets. Nine MoO2 Smacker source videos can be decoded into frames;
 33 reviewed segments are routed for runtime cutaways. `SOUND.LBX` effect
 extraction and the MoO2 music (STREAM.LBX and the cinematics' soundtracks)
 are extracted by their own tools. The local
-build verified on 24 Oct 2026 holds 7,172 graphics items (MoO1 872 items /
-4,025 frames, MoO2 6,300); `tools/verify_assets.py` prints the count for
+build verified on 24 Oct 2026 holds 7,291 graphics items (MoO1 872 items /
+4,025 frames, MoO2 6,419); `tools/verify_assets.py` prints the count for
 whatever is on disk. The archive also
 supplies the 75 news bulletins the original in-game anchor read and the
 diplomacy the empires sent each other. It supplies the sound, the music and
@@ -203,7 +203,7 @@ Verify before launching:
 ```bash
 python3 tools/verify_assets.py
 # Output from the local extraction tree, 24 Oct 2026:
-# graphics : 7172 items, 9884 spot-checked frames, 417 gifs
+# graphics : 7291 items, 10282 spot-checked frames, 417 gifs
 # audio    : 109 effects, 5 stings, 57 music beds
 # OK — every runtime asset resolves inside the project.
 # Optional pre-rendered MoO2 OGGs can change the music-bed count.
@@ -716,7 +716,7 @@ assets from the pipeline in [Quickstart](#quickstart). Once both are in place:
 ```bash
 python3 tools/verify_assets.py
 # Output from the local extraction tree, 24 Oct 2026:
-# graphics : 7172 items, 9884 spot-checked frames, 417 gifs
+# graphics : 7291 items, 10282 spot-checked frames, 417 gifs
 # audio    : 109 effects, 5 stings, 57 music beds
 # The counts are whatever your extraction produced; optional MoO2 OGGs also
 # affect the music-bed count.

@@ -359,10 +359,12 @@ highlight or "selected" state.
   Under the archive's palette it is black. The 2×1 holder at **item 68**
   patches 160–175, but item 8 comes before it, so the patch has to be
   applied to it explicitly.
-- **Items 69–78** (59×59, 80 frames each, no flags) are smoke and dust left
-  after an explosion. They use indices below 80 and are correct under
-  FONTS 4. Sparse and grey is how they are meant to look: they are drawn
-  over a ship.
+- **Items 69–78** (59×59, 80 frames each, no flags, `chunk` 0, `leadin` 79)
+  look like smoke and dust, using indices below 80 under FONTS 4. Decoded
+  frame by frame on a blank canvas they dissolve into a starburst and shrink
+  to a dot. Decoded by the §3.4 rule, which liblbx's hashes support for other
+  items, they build up into a solid black disc. Which one the game shows is
+  **not known**: the hashes cover no item like these.
 
 ### CMBTPLNT.LBX
 
@@ -379,7 +381,7 @@ the pictures carry their own.
 ### DIPLOMAT.LBX
 
 Two items per race, in the game's alphabetical race order: a 640×480,
-38-frame scene (13, 15, …) and a 32-frame ambassador hologram (480 or 558 wide)
+38-frame item, mostly empty (13, 15, …) and a 32-frame ambassador hologram (480 or 558 wide)
 (14, 16, …, flag `0x2000`). Items 0–12 are their thirteen palettes, one per
 pair.
 
@@ -394,6 +396,8 @@ padding, not damage.
 
 - The palette of **OFFICER 277–343**.
 - The **functional-colour modes** other than `F`, and how the game blends them.
+- How **CMBTSFX 69–78** compose (§8): does the accumulation rule hold for
+  them, or does the game treat their index-0 writes as erasing?
 - What **`0x2000`** does in the game, given that compositing does not depend
   on it, and how `leadin` drives playback.
 - What **`0x0400`** clears to in the game.

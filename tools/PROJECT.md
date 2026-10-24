@@ -103,7 +103,12 @@ answers (CLAUDE.md §3).
 - **Pools**: every item is measured like MoO1 items (coverage, luminance,
   colour count, chroma noise, `ui_score`), classified, and admitted to
   `broll` / `portrait` / `sprite` / `chrome` / `glitch` by the same gates as
-  `extract_all.py`. `UI_ARCHIVES` never reach `broll`.
+  `extract_all.py`. `UI_ARCHIVES` (menus, including the colony-screen
+  popups COLPUPS/COLPUSP/COLREFIT/COLBLDG) never reach `broll`. The MoO2
+  glitch gate also needs `coverage >= 0.08`: a small detailed object on an
+  empty 640×480 frame (the TANM gadgets, BLDG buildings) scores like noise.
+- **Archives with no images** (text, palettes, audio) get no output
+  directory.
 
 ### 3.3 After changing the decoder or the map
 
@@ -146,6 +151,8 @@ What `STATIC_DENY` holds, and why:
 | `VORTEX` 00–34 | 01–34 authored against a palette not in the archive; 00 scrambled |
 | `INTRO2` 00, 02 | Black edge to edge; the game's credits |
 | `COLONIES` 02, 03 | Scattered-pixel sky (the other 26 are clean) |
+| MoO2 `COLONY2` 51 | Empty colony-screen panel that passes the broll gates |
+| MoO2 `CMBTSFX` 69–78 | Smoke that accumulates to a black disc; composition unknown (deep dive §8) |
 | MoO2 `EVENTS`, `DIPLOMAT`, `COUNCIL`, `OFFICER` (all) | In-universe and GNN-branded, or in-universe faces; loaded by path where they belong (lore show, archive look) |
 
 ---
@@ -275,4 +282,4 @@ repScale  2                    repDx 4                       repDy 51
 | 2026-10-16 | MoO2 command-stream decoder; SHIPS warnings 293 → 0. MoO1 delta-frame and palette-merge fixes; opaque-zero rule; deny list; interview tuning |
 | 2026-10-18 | COUNCIL palette rule widened to all items; EVENTS and DIPLOMAT palettes; `IFONTS:n` in `_item_split` |
 | 2026-10-20 | Functional-colour rendering; multi-frame holders; OFFICER 143+ skipped (reversed 10-24) |
-| 2026-10-24 | Frames accumulate as in liblbx, verified against its 14 hashes; OFFICER 143–276 restored; `extract_music_moo2.py`; liblbx's real location (`git.draconx.ca`); this file rewritten, the format moved to `MOO2_GRAPHICS_DEEP_DIVE.md` |
+| 2026-10-24 | Frames accumulate as in liblbx, verified against its 14 hashes; whole MoO2 tree regenerated (230 of 320 archives were stale), with the new-to-air items contact-sheeted first; glitch coverage gate and colony menus in `UI_ARCHIVES`; OFFICER 143–276 restored; `extract_music_moo2.py`; liblbx's real location (`git.draconx.ca`); this file rewritten, the format moved to `MOO2_GRAPHICS_DEEP_DIVE.md` |

@@ -163,6 +163,12 @@ const GNNSceneCompositor = (() => {
         // which kept these off air only by accident — denied so a future
         // `dirs` list cannot bring them back.
         'COLONIES/item_02', 'COLONIES/item_03',
+        // MoO2 COLONY2/item_51 is an empty colony-screen panel that passes
+        // the broll gates. CMBTSFX 69-78 are smoke clouds whose frames,
+        // built on each other as the decoder now does, end as a solid black
+        // disc; whether the game composes them that way is not known.
+        'moo2/COLONY2/item_51',
+        ...Array.from({ length: 10 }, (_, i) => 'moo2/CMBTSFX/item_' + (69 + i)),
         // MoO2's EVENTS archive is the game's own GNN newsroom and the event
         // pictures it showed — in-universe, GNN-branded. They air only on the
         // lore show, loaded by path in icon-manager.js. Denied here so a

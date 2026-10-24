@@ -51,9 +51,15 @@ MoO2 format findings are in [MOO2_GRAPHICS_DEEP_DIVE.md](../MOO2_GRAPHICS_DEEP_D
   320 per-archive outputs were written on 16 Oct by an earlier extractor: no
   measurements, `pools: []`, and in some archives a different base palette
   from the map (GAME 1 vs 5, BLDG4 6 vs 2, TANM_* 1 vs 2). Nothing in them
-  has been on air, so a full re-extract (`extract_moo2.py`, then
-  `merge_moo2_manifests.py`) changes what airs: contact-sheet the pools it
-  grows before keeping it. **Not done yet.**
+  had been on air. **Regenerated** with the fixed decoder. Every item that
+  would newly reach air was contact-sheeted first, which caught colony
+  menus passing the broll gates (now `UI_ARCHIVES`) and 44 clean
+  tech-animation objects scored as glitch noise (glitch gate now needs
+  coverage ≥ 0.08). After that only whole CMBTSHP ships and six BEAMS
+  sprites are new to air. Local build: 7,291 items, 34,549 frames, 0
+  duplicate ids; verifier, manifest and boot line agree.
+- **CMBTSFX 69–78** (smoke) build into a solid black disc under the new rule;
+  the hashes cannot settle it. Denied pending an answer.
 - **BUFFER0's 155 "bad" frames** were a stale warning kind
   (`raw_frame_size_mismatch`) from before the 4-byte raw padding fix;
   re-extracted, 0 warnings.
@@ -97,5 +103,6 @@ python3 tools/tests/links.py              # 0 broken links
 python3 tools/verify_assets.py            # every runtime path resolves
 ```
 
-Not checked: a live broadcast. The bezel fix and the decoder fix change what
-airs, and both need a look on air.
+On a test station (port 8091): the bezel draws (brass, THE SPOTLIGHT); a
+90 s drive raised 0 exceptions. Not checked: the owner's own station, and a
+commercial break showing the regenerated ships.
