@@ -31,6 +31,10 @@ way: each rule names the thing that went wrong without it. Read the rule
    harness uses 9444 here. If a change needs a restart of the real
    station, collect it and tell the owner — do not do it yourself.
 3. **Run the offline checks** before and after: `tools/tests/offline.sh`.
+   GitHub runs the asset-free part of it (`.github/workflows/offline-checks.yml`:
+   JS syntax, `server.py`, `content_check.py`, `test_moo2_tools.py`) on every pull
+   request, and `main` only accepts a pull request whose `offline-checks` passed.
+   `verify_assets.py` needs the extracted, git-ignored assets, so it stays local.
    No server, no browser, safe on air, exit code 1 on failure.
 
 ---

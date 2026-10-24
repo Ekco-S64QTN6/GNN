@@ -1,0 +1,48 @@
+name: Offline checks
+
+# The checks from tools/tests/offline.sh that need no extracted game assets:
+# the extracted tree is git-ignored, so tools/verify_assets.py (and the
+# product sheet) stay local-only. Run tools/tests/offline.sh before merging
+# anything that touches assets.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  offline-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: python -m pip install pillow numpy
+
+      - name: JavaScript syntax
+        run: |
+          set -euo pipefail
+          for f in js/*.js; do node --check "$f"; done
+
+      - name: Compile server
+        run: python -m py_compile server.py
+
+      - name: Content references
+        run: python tools/tests/content_check.py
+
+      - name: MoO2 tool tests
+        run: python tools/tests/test_moo2_tools.py
