@@ -52,11 +52,9 @@ literal palette index. Index 0 is transparent.
 
 The historical extraction report counted **4,316 frames across 22 archives**
 and **872,024 runs** that landed inside their columns with no clamping. The
-current `CLAUDE.md` snapshot records 4,205 frames for 873 items across the
-same 22-archive scope. This documentation pass did not regenerate the local
-game assets, so the aggregate frame total is unresolved; rerun extraction and
-compare manifests before citing either count as current. The byte-exact
-statement belongs to the historical report, not a new verification here.
+local build of 24 Oct 2026 holds 872 items / 4,025 frames across the same 22
+archives: 4,205 less the 180 frames of `INTRO2/item_02` (the credits), which
+was pruned. `tools/verify_assets.py` prints the count for what is on disk.
 
 > Both structural properties are invisible on solid artwork. The 25-cel anchor
 > and the 22 story icons are one run per column, so they decode identically
@@ -151,7 +149,7 @@ console readout at `114,435 · 735×135` is outside it.
 
 ---
 
-## 🎬 MoO1 `cutscenes/` — recorded output: 873 items, 4,316 frames, 418 GIFs
+## 🎬 MoO1 `cutscenes/` — recorded output before 10 Oct: 873 items, 4,316 frames, 418 GIFs
 
 Frames are `item_NN_frame_NNN.png`, **RGBA with real transparency** (index 0 is
 alpha 0, not a filled backdrop colour) so they can be layered.

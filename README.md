@@ -74,11 +74,10 @@ catalog combines MoO1 and MoO2 graphics with game text, sound effects and
 music assets. Nine MoO2 Smacker source videos can be decoded into frames;
 33 reviewed segments are routed for runtime cutaways. `SOUND.LBX` effect
 extraction and manifest integration are implemented, but automated decoding
-and rendering of raw MoO2 music sources is still unfinished. The recorded
-local graphics totals disagree (7,374 vs. 7,375), so regenerate, merge and
-verify local assets before publishing an exact item count. The documented
-MoO1 frame totals also differ (4,205 vs. 4,316) and need the same local
-extraction comparison. The archive also
+and rendering of raw MoO2 music sources is still unfinished. The local
+build verified on 24 Oct 2026 holds 7,172 graphics items (MoO1 872 items /
+4,025 frames, MoO2 6,300); `tools/verify_assets.py` prints the count for
+whatever is on disk. The archive also
 supplies the 75 news bulletins the original in-game anchor read and the
 diplomacy the empires sent each other. It supplies the sound, the music and
 the cutaway footage — stills and moving video — and the lore show's copy. The
@@ -203,12 +202,10 @@ Verify before launching:
 
 ```bash
 python3 tools/verify_assets.py
-# Example from a previously populated local extraction tree:
-# graphics : 7374 items, 10063 spot-checked frames
+# Output from the local extraction tree, 24 Oct 2026:
+# graphics : 7172 items, 9884 spot-checked frames, 417 gifs
 # audio    : 109 effects, 5 stings, 57 music beds
 # OK — every runtime asset resolves inside the project.
-# Count caveat: CLAUDE.md §3 records 7375 after merge; rerun the local
-# extract/merge/verify pipeline and compare the fresh boot log to settle it.
 # Optional pre-rendered MoO2 OGGs can change the music-bed count.
 ```
 
@@ -709,14 +706,11 @@ assets from the pipeline in [Quickstart](#quickstart). Once both are in place:
 
 ```bash
 python3 tools/verify_assets.py
-# Example from a previously populated local extraction tree:
-# graphics : 7374 items, 10063 spot-checked frames
+# Output from the local extraction tree, 24 Oct 2026:
+# graphics : 7172 items, 9884 spot-checked frames, 417 gifs
 # audio    : 109 effects, 5 stings, 57 music beds
-# The recorded merged graphics total differs elsewhere (7375); regenerate
-# and verify local outputs before treating these example counts as current.
-# CLAUDE.md and assets/README.md also disagree on the MoO1 frame total
-# (4205 vs. 4316); a fresh extraction is needed to reconcile it.
-# Optional MoO2 OGGs also affect the music-bed count.
+# The counts are whatever your extraction produced; optional MoO2 OGGs also
+# affect the music-bed count.
 # OK — every runtime asset resolves inside the project.
 ```
 
