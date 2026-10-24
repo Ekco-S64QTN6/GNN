@@ -1,6 +1,8 @@
 """Level of the anchor only, tagged by the engine's own speaking flag."""
 import sys, time
-sys.path.insert(0,'/home/ekco/github/GNN/tools')
+import os
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+sys.path.insert(0,os.path.join(ROOT, 'tools'))
 import drive
 import numpy as np
 

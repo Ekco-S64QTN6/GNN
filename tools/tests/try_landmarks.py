@@ -12,7 +12,8 @@ from mediapipe.tasks.python import vision, BaseOptions
 
 MODEL = sys.argv[1]
 OUT = sys.argv[2]
-A = '/home/ekco/github/GNN/assets/generated/anchors'
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+A = os.path.join(ROOT, 'assets/generated/anchors')
 IDX = {"eyeR_outer": 33, "eyeR_inner": 133, "eyeR_top": 159, "eyeR_bot": 145,
        "eyeL_outer": 263, "eyeL_inner": 362, "eyeL_top": 386, "eyeL_bot": 374,
        "irisR": 468, "irisL": 473,

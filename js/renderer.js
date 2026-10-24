@@ -605,13 +605,18 @@ const GNNRenderer = (() => {
         const g = c2.getContext('2d');
         g.drawImage(im, 0, 0);
         const a = g.getImageData(0, 0, im.width, im.height).data;
+        const w = im.width, h = im.height;
+        // Least alpha in a 5×5 neighbourhood, so one stray keyed-out speck
+        // inside the opening does not stop the walk. (This read undefined
+        // `w`/`h`/`data` for a while; the ReferenceError was swallowed by
+        // frameFor()'s catch and the drawn fallback border aired instead.)
         const at = (x, y) => {
             let minA = 255;
             for (let dx = -2; dx <= 2; dx++) {
                 for (let dy = -2; dy <= 2; dy++) {
                     const nx = Math.max(0, Math.min(w - 1, x + dx));
                     const ny = Math.max(0, Math.min(h - 1, y + dy));
-                    minA = Math.min(minA, data[(ny * w + nx) * 4 + 3]);
+                    minA = Math.min(minA, a[(ny * w + nx) * 4 + 3]);
                 }
             }
             return minA;

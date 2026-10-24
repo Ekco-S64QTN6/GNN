@@ -1,5 +1,7 @@
 import base64, json, sys, time
-sys.path.insert(0, '/home/ekco/github/GNN/tools')
+import os
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import drive
 S = sys.argv[1] if len(sys.argv) > 1 else '/tmp'
 WITH_LOGO = {'Galactic Morning Watch', 'Deep Space Economy', 'Council Crossfire',

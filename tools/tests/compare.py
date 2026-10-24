@@ -1,7 +1,8 @@
 import os, sys
 from PIL import Image, ImageDraw
 S = os.path.dirname(os.path.abspath(__file__))
-A = '/home/ekco/github/GNN/assets/generated/anchors'
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+A = os.path.join(ROOT, 'assets/generated/anchors')
 RAW = os.path.join(S, 'anchors_before')
 
 def norm(im, h=300):

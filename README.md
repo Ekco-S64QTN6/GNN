@@ -73,10 +73,10 @@ The channel is built on two sources.
 catalog combines MoO1 and MoO2 graphics with game text, sound effects and
 music assets. Nine MoO2 Smacker source videos can be decoded into frames;
 33 reviewed segments are routed for runtime cutaways. `SOUND.LBX` effect
-extraction and manifest integration are implemented, but automated decoding
-and rendering of raw MoO2 music sources is still unfinished. The local
-build verified on 24 Oct 2026 holds 7,172 graphics items (MoO1 872 items /
-4,025 frames, MoO2 6,300); `tools/verify_assets.py` prints the count for
+extraction and the MoO2 music (STREAM.LBX and the cinematics' soundtracks)
+are extracted by their own tools. The local
+build verified on 24 Oct 2026 holds 7,291 graphics items (MoO1 872 items /
+4,025 frames, MoO2 6,419); `tools/verify_assets.py` prints the count for
 whatever is on disk. The archive also
 supplies the 75 news bulletins the original in-game anchor read and the
 diplomacy the empires sent each other. It supplies the sound, the music and
@@ -203,7 +203,7 @@ Verify before launching:
 ```bash
 python3 tools/verify_assets.py
 # Output from the local extraction tree, 24 Oct 2026:
-# graphics : 7172 items, 9884 spot-checked frames, 417 gifs
+# graphics : 7291 items, 10282 spot-checked frames, 417 gifs
 # audio    : 109 effects, 5 stings, 57 music beds
 # OK — every runtime asset resolves inside the project.
 # Optional pre-rendered MoO2 OGGs can change the music-bed count.
@@ -595,9 +595,10 @@ u8 kind (1 = keyframe, 0 = delta over the previous frame)
   `skip`, not by writing 0. The two are different operations and only the
   encoder knows which is which.
 
-Getting the first rule wrong is what caused the missile-trail bug — every
-re-encoded column kept its previous contents, so a missile smeared from its
-launch point to its current position.
+Getting the second rule wrong is what caused the missile-trail bug: the
+decoder skipped writes of `0`, so pixels the encoder had erased kept the
+missile from the frame before, and it smeared from its launch point to its
+current position.
 
 ### MoO2 — row-major, self-contained per frame
 
@@ -610,8 +611,14 @@ launch point to its current position.
 ```
 
 Raw frames (flag `0x0100`) are `w × h` palette indices, row-major, padded to a
-4-byte boundary. Junction frames (flag `0x2000`) composite over the previous
-frame; frame 0 is blank.
+4-byte boundary. Every frame is drawn over the previous frame's pixels, and
+the visible area restarts every `chunk` frames (header byte 9) — whatever the
+`0x2000` "junction" flag says. That rule is what makes the decoder match
+liblbx's reference renders (`tools/tests/moo2_reference.py`).
+
+The whole MoO2 format, with the palette mechanisms and the archive-by-archive
+findings, is written up for anyone working with these files in
+[`MOO2_GRAPHICS_DEEP_DIVE.md`](MOO2_GRAPHICS_DEEP_DIVE.md).
 
 ### Text, Audio, and Video
 
@@ -636,15 +643,16 @@ and item-range splits/override chains.
 The values come from two community sources, attributed in
 [`tools/PROJECT.md`](tools/PROJECT.md):
 
-- **Nick Bowler's `liblbx`** (`github.com/MarcoKull/liblbx`,
-  `doc/txt/moo2-data.txt`) — explicit assignments for 17 archives, item-range
-  splits for three more, and reference output hashes for specific test cases.
-- **Wolverine's 2007–2008 Orion Nebula research** — the COUNCIL override rule,
-  the SHIPS palette-holder mechanism, and the general palette architecture.
+- **Nick Bowler's `liblbx`** (`git.draconx.ca/gitweb/liblbx.git`) —
+  `doc/txt/moo2-data.txt` assigns palettes to about 14 archives and families,
+  with item-range splits and override chains; `tests/moo2data.at` holds MD5s
+  of 14 reference renders, all of which our decoder reproduces.
+- **Wolverine's graphics-format write-up** — the header, flags, internal
+  palette layout and the SHIPS palette-holder mechanism.
 
-Neither source covers the whole library. The remaining uncatalogued archives
-(CMBTSHP, CMBTSFX, INSTALL, APP_PICS, BEAMS and others) have been assigned by
-visual inspection against `tools/palette_compare.py` output.
+Neither source covers the whole library. The rest — COUNCIL, CMBTSFX,
+OFFICER, DIPLOMAT, RACES, EVENTS, BEAMS and others — were worked out from the
+files and checked by eye; the deep dive marks which is which.
 
 ### Entry points
 
@@ -654,6 +662,7 @@ python3 tools/extract_moo2.py             # MoO2 graphics
 python3 tools/extract_moo2_text.py        # MoO2 NUL-delimited strings
 python3 tools/extract_sound_moo2.py       # MoO2 SFX (native WAVs)
 python3 tools/extract_moo2_video.py       # MoO2 Smacker video
+python3 tools/extract_music_moo2.py       # MoO2 music (STREAM.LBX + video soundtracks) → OGG
 python3 tools/build_audio.py              # MoO1 + MoO2 SFX & music → manifest
 python3 tools/extract_text.py             # MoO1 text and vocabulary
 python3 tools/merge_moo2_manifests.py     # folds MoO2 graphics into gfx-manifest.json
@@ -707,7 +716,7 @@ assets from the pipeline in [Quickstart](#quickstart). Once both are in place:
 ```bash
 python3 tools/verify_assets.py
 # Output from the local extraction tree, 24 Oct 2026:
-# graphics : 7172 items, 9884 spot-checked frames, 417 gifs
+# graphics : 7291 items, 10282 spot-checked frames, 417 gifs
 # audio    : 109 effects, 5 stings, 57 music beds
 # The counts are whatever your extraction produced; optional MoO2 OGGs also
 # affect the music-bed count.
@@ -756,9 +765,10 @@ of truth for current state; `docs/ROADMAP.md` is what comes next.
 - ***Master of Orion 1*** (1993) and ***Master of Orion 2*** (1996) —
   SimTex / MicroProse. All artwork, sound effects and music originate there.
 - **LBX format documentation and MoO2 palette assignments** —
-  Nick Bowler's [`liblbx`](https://github.com/MarcoKull/liblbx) project,
-  particularly `doc/txt/moo2-data.txt`, and Wolverine's original 2007–2008
-  Orion Nebula forum research.
+  Nick Bowler's [`liblbx`](https://git.draconx.ca/gitweb/liblbx.git) project,
+  particularly `doc/txt/moo2-data.txt` and its reference renders, and
+  Wolverine's graphics-format write-up
+  ([reposted 2008](https://masteroforion2.blogspot.com/2008/04/moo2-graphics.html)).
 - **Speech** — [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0),
   run locally. Microsoft neural voices via [`edge-tts`](https://github.com/rany2/edge-tts)
   remain as a fallback.

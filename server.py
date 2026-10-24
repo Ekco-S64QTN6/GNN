@@ -846,10 +846,11 @@ def _refresh_market():
 # it back, so a story that has been read once is never read again, no matter
 # how many tabs are open or how many Chromium profiles have been wiped.
 #
-# The ledger is a single JSON file, rewritten atomically. It grows for the
-# life of the installation; entries are not expired, because an old story
-# that has already aired is exactly the kind of thing that must not come
-# back six weeks later when an RSS feed republishes the same headline.
+# The ledger is a single JSON file, rewritten atomically. Records expire
+# after LEDGER_RETENTION_DAYS (below), on load and on every merge. That is
+# long enough to stop an aired story coming back when an RSS feed republishes
+# the same headline weeks later; past it, the director's archive cut-offs
+# file a resurfacing story to the lore show instead.
 
 _ledger_lock = threading.Lock()
 _ledger_cache = None

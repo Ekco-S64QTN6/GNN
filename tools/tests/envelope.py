@@ -5,7 +5,9 @@ is why lip-sync went to a free-running syllable clock. Before gating the
 mouth on it again, measure it rather than assume either way.
 """
 import sys, time
-sys.path.insert(0, '/home/ekco/github/GNN/tools')
+import os
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import drive
 cdp = None
 drive.launch()

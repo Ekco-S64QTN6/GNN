@@ -7,7 +7,7 @@ what must not be touched.** `README.md` is the public front page.
 MoO2 decoders, palette map, extraction order.
 `CONTRIBUTING.md` is how to work here — read it before changing anything.
 
-Last reconciled against the code and commit history through 2026-10-22 (`84c0034`). Asset counts verified locally on 2026-10-24: `tools/verify_assets.py`, the manifest itself and the broadcast's `[GNN Assets]` boot line agree, and `tools/tests/offline.sh` passes.
+Last reconciled against the code on 2026-10-24 (§17). Asset counts verified locally the same day, after regenerating the whole MoO2 tree with the fixed decoder: `tools/verify_assets.py`, the manifest itself and the broadcast's `[GNN Assets]` boot line agree, and `tools/tests/offline.sh` passes.
 
 ---
 
@@ -44,9 +44,9 @@ the metric is the thing to doubt.
 | Voice engine | Kokoro-82M, local, in-process, ~7× realtime on CPU |
 | Fallback | `edge-tts` (cloud) when `.venv` is absent |
 | Assets (MoO1) | 872 graphics items / 4,025 frames across 22 archives — decodes byte-exact. 873 / 4,205 until `INTRO2/item_02` (the credits, 180 frames) was pruned; 4,316 frames in builds before 10 Oct |
-| Assets (MoO2) | 6,300 graphics items in 320 archive keys — decoder correct, palette map from community sources |
-| Merged manifest | **7,172 items across 342 keys, 0 duplicate ids** (24 Oct; 34,715 frames at boot). The manifest is untracked since `7b2f5bb`, so the count is the local build's — take it from `tools/verify_assets.py`. 7,374 / 7,375 were earlier builds |
-| Admitted pools | MoO1 + MoO2: 147 broll (86+61) · 219 portrait (136+83) · 1,005 sprite (396+609) · 154 chrome (12+142) · 15 glitch. `STATIC_DENY` (scene-compositor.js) is enforced **inside `GNNAssets.find()`**, so every consumer gets it |
+| Assets (MoO2) | 6,419 graphics items in 320 archive keys — decoder reproduces all 14 of liblbx's reference hashes (`tools/tests/moo2_reference.py`); palette map from community sources and by-eye picks. The format is written up in `MOO2_GRAPHICS_DEEP_DIVE.md` |
+| Merged manifest | **7,291 items across 342 keys, 0 duplicate ids** (24 Oct; 34,549 frames at boot). The manifest is untracked since `7b2f5bb`, so the count is the local build's — take it from `tools/verify_assets.py`. 7,172 / 7,374 / 7,375 were earlier builds |
+| Admitted pools | After `STATIC_DENY`, MoO1 + MoO2: 203 broll (74+129) · 535 portrait (118+417) · 2,475 sprite (368+2,107) · 377 chrome (11+366) · 13 glitch (12+1). Most of the MoO2 sprite pool sits in archives no query names; only `dirs`-free queries (broll fallbacks, glitch) reach every archive. `STATIC_DENY` (scene-compositor.js) is enforced **inside `GNNAssets.find()`**, so every consumer gets it |
 | Output ceiling | peak 0.872 under deliberate overload, zero clipped samples |
 | Per-line loudness | −19.3 to −20.3 LUFS, 1.0 LU spread, true peak −3.0 dBFS |
 | Spoken lines | 22 consecutive, 0 truncated |
@@ -101,7 +101,7 @@ python3 tools/audio_probe.py 110        # clips + level-relative pops
 ```
 
 The `[GNN Assets]` line in `gnn-server.log` reports the runtime's flattened
-manifest count. On 24 Oct it read 7,172 items, the same as `tools/verify_assets.py` and the
+manifest count. On 24 Oct it read 7,291 items, the same as `tools/verify_assets.py` and the
 manifest; the earlier 13,144-item / 5,769-duplicate manifest state is the
 separate bug fixed in §3.
 
@@ -620,7 +620,7 @@ reconciling" item that had been open in §7.
 The merge now recognises a MoO2 list **by content** (`source: 'moo2'`), not
 by name. The cleanup run at the time reported 342 keys, 7,375 items, 0
 duplicate ids, with every pool size identical. Only the four real name
-collisions keep the suffix. The local build of 24 Oct holds 7,172 (verifier, manifest
+collisions keep the suffix. The local build of 24 Oct holds 7,291 (verifier, manifest
 and boot line agree).
 
 → **When the name is the thing that went wrong, identify by content.**
@@ -700,9 +700,10 @@ the game paints the sky, the starfield, the space behind the window, and a
 decoded-as-transparent frame only reads correctly when composited over black.
 
 Fixed by adding an `opaque_zero` flag on the render path, set for any item
-in `OPAQUE_ZERO_ARCHIVES` with `w >= 300 and h >= 180`. SPIES and EMBASSY
-items 12–17 are the exceptions: they are 320×200 overlays, not fullscreens,
-and want index 0 transparent so the studio shows through.
+with `w >= 300 and h >= 180`. SPIES and EMBASSY items 12–17 are the
+exceptions (`FORCE_TRANSPARENT_ARCHIVES` / `FORCE_TRANSPARENT_ITEMS` in
+`extract_all.py`): they are 320×200 overlays, not fullscreens, and want
+index 0 transparent so the studio shows through.
 
 → **Size is not role.** Two archives can produce the same size of item at
 the same colour depth with opposite transparency requirements.
@@ -723,8 +724,8 @@ those sources. New sections: `_item_split` for `GAME` and `TECHSEL`,
 archives) is mapped to `FONTS` item 2. `SHIPS`/`SHIPS2` corrected from 3
 to 12.
 
-→ **See `tools/PROJECT.md` §4 for the full source attribution and the list
-of archives the community never documented.**
+→ **See `MOO2_GRAPHICS_DEEP_DIVE.md` §7 for which assignments are
+community-documented and which archives the community never catalogued.**
 
 ### `extract_moo2.py` was reading only two of the four palette sections
 The community palette data uses four layers — archive base, per-item palette,
@@ -1091,7 +1092,7 @@ Do not re-chase these.
 | Assets use a keyed transparency colour | check PNG mode | **40/40 RGBA** |
 | Anchor filename collision blocks all desk work | checked against `main.js` load paths | **Already fixed.** §3 records the fix |
 | Voice IDs in `main.js` / `cast.js` are edge-tts IDs | checked ID format | **0** — they are Kokoro IDs |
-| `SHIPS` palette 3 is correct | community `liblbx` data | **Wrong.** Community says 12 with override 49. Verified against reference hashes. |
+| `SHIPS` palette 3 is correct | community `liblbx` data | **Wrong.** Community says 12 with override 49. Verified against liblbx's reference hash for SHIPS 42 (`tools/tests/moo2_reference.py`). |
 | Varr signed off "with Commander Hale" on the Varr/Vance show | owner's browser log, 18:30 close | **Misheard.** `showClose()` read the seated pair; the line named Commander Vance. Both human anchors carry the title. |
 
 The `seq=0` burst in old logs is `tools/voice_audition.py`.
@@ -1107,9 +1108,12 @@ The `seq=0` burst in old logs is `tools/voice_audition.py`.
 | `python3 tools/drive.py 90 /tmp/run` | drives the broadcast over CDP |
 | `python3 tools/audio_probe.py 110` | clip count and level-relative pop detection |
 | `python3 tools/extract_all.py` | re-decode MoO1 archives (~24 s) |
-| `python3 tools/extract_moo2.py` | re-decode MoO2 archives; four-layer palette priority (see `tools/PROJECT.md` §4) |
+| `python3 tools/extract_moo2.py` | re-decode MoO2 archives; layered palette priority (see `tools/PROJECT.md` §3.1) |
 | `python3 tools/extract_moo2_text.py` | MoO2 NUL-delimited string tables → JSON/TXT |
 | `python3 tools/merge_moo2_manifests.py` | fold per-archive MoO2 manifests into `assets/gfx-manifest.json` |
+| `python3 tools/extract_music_moo2.py` | MoO2 music beds: STREAM.LBX WAVs and nine video soundtracks → `assets/audio/music/moo2/*.ogg` (then `build_audio.py`) |
+| `python3 tools/tests/moo2_reference.py` | the MoO2 decoder against liblbx's 14 reference-render MD5s; SKIP without the game files |
+| `python3 tools/tests/links.py` | every relative link in every tracked Markdown file resolves |
 | `python3 tools/palette_compare.py <ARCHIVE> --item N` | render one MoO2 sprite against every FONTS palette |
 | `python3 tools/palette_review.py` | **settle per-item palettes by eye**: page of pooled outliers, each showing the on-air frame then every FONTS/IFONTS palette; `--apply picks.json` writes `_item_palettes`; `--archive X` reviews a whole archive |
 | `python3 tools/palette_fit.py --scan` | items whose palette-index range is unlike their siblings'. A review queue, **not** a palette picker — `--validate` records why |
@@ -1171,7 +1175,7 @@ This section is reconciled with the code and commit history through 2026-10-20 (
   their archive's own palette, not FONTS/IFONTS. The known MoO1 colour faults
   are the COLONIES pair below and the COUNCIL archive (denied wholesale).
 - **Uncatalogued MoO2 archives** (BEAMS, FLEET, FLTICONS, RACES, RACEOPT,
-  DIPLOMAT, APP_PICS — see `tools/PROJECT.md` §4.5) still use first-pass
+  DIPLOMAT, APP_PICS — see `tools/PROJECT.md` §5.1) still use first-pass
   picks. `palette_review.py --archive NAME` reviews one whole archive.
 - **Fresh clones must extract before `./start.sh`.** `assets/cutscenes/`,
   `assets/audio/`, `assets/icons/`, `assets/text/` are gitignored; the repo
@@ -1186,7 +1190,9 @@ This section is reconciled with the code and commit history through 2026-10-20 (
 - **Weather cutaway visual check remains.** The `weather_map` and `weather_map_02` assets are committed and routed through the `weather` cutaway pool (2026-10-20). Inspect output at its on-air size and confirm conditioning/appearance; do not treat the route landing as proof of visual quality.
 
 - **Two COLONIES items decode with a scattered-pixel sky** (`item_02`,
-  `item_03`), excluded by `COLONIES_SCRAMBLED` in `scene-compositor.js`.
+  `item_03`), in `STATIC_DENY` since 2026-10-24. (`COLONIES_SCRAMBLED`,
+  cited here before, never existed; they were off air only because no
+  query names COLONIES.)
 - **The MoO1 composite cutaways remain the fallback** when a story's route
   has no generated plate.
 - **Title-card prompts are not right yet**; fallback is one `_standing.png`
@@ -1199,7 +1205,7 @@ This section is reconciled with the code and commit history through 2026-10-20 (
 
 ### Closed — previous verification retained
 
-- MoO2 items carry pools: 61 broll, 609 sprite, 83 portrait, 142 chrome.
+- MoO2 items carry pools (counts in §1).
 - `GNNCutsceneManager.openDebate()` is wired (`beginDebate`, `DEBATE_BLOCKS`).
 - `main.js:init()` failure path calls `handleBootFailure()`, which sets
   `window.GNNBootReady`.
@@ -1211,7 +1217,7 @@ This section is reconciled with the code and commit history through 2026-10-20 (
 - MoO2 video extracted (nine cinematics); 33 vetted segments are routed full-screen by `cutscene-manager.js`. Additional unused segments still need selection/quality review (ROADMAP §5).
 - `_palette_overrides` is loaded and applied by `extract_moo2.py`.
 - `BACKGRND/item_32` no longer reaches broll: no BACKGRND item is in the pool.
-- The duplicate-manifest defect is fixed: 342 keys and 0 duplicate ids. The local build holds 7,172 items (24 Oct).
+- The duplicate-manifest defect is fixed: 342 keys and 0 duplicate ids. The local build holds 7,291 items (24 Oct).
 - `key_robot.py`, the robot cels and their checks are retired; the renderer's
   `person.frames` branch had already gone.
 - README's cast badge reads 14.
@@ -1245,30 +1251,35 @@ This section is reconciled with the code and commit history through 2026-10-20 (
 
 ## 8. Where the MoO2 work is documented
 
-The MoO2 pipeline is documented in three places, each with a different
+The MoO2 work is documented in three places, each with a different
 audience:
 
-- **`tools/PROJECT.md`** — the full format specification (MoO1 delta
-  encoding, MoO2 command-stream grammar, palette hierarchy), the four-layer
-  palette map, community source attribution, and the extraction order. This
-  is where a cold reader should start.
-- **`tools/PROJECT.md` §4** — the specific palette assignments and where
-  each came from. Marks which are community-documented and which are our
-  visual-inspection candidates.
+- **`MOO2_GRAPHICS_DEEP_DIVE.md`** (repository root, on purpose: it is
+  written for anyone extracting MoO2 assets, and the root is where searches
+  find it) — the format: container, header, flags, frame grammar, how frames
+  compose, the palette layers, archive-by-archive findings, liblbx's
+  reference hashes. Standalone: **keep project-specific material out of it**
+  (owner's rule); it goes in the files below.
+- **`tools/PROJECT.md`** — how this project applies it: `palette_map.json`'s
+  sections, the extractor's choices (what is skipped, pool gates), the deny
+  list, the rebuild order, the tools.
 - **`assets/README.md`** — the LBX container format and the manifest schema.
 
 The external sources, in order of authority:
 
-1. **`liblbx` `moo2-data.txt`** (`github.com/MarcoKull/liblbx`,
-   `doc/txt/moo2-data.txt`) — palette assignments, item-range splits,
-   override chains, reference output hashes.
-2. **Wolverine's 2007–2008 Orion Nebula research** — COUNCIL override rule,
-   SHIPS palette-holder mechanism.
+1. **Nick Bowler's `liblbx`** (`git.draconx.ca/gitweb/liblbx.git` — not
+   `github.com/MarcoKull/liblbx`, a different project) — `doc/txt/moo2-data.txt`
+   (palette assignments, item-range splits, override chains), its decoder
+   (`src/image.c`, `src/lbximg.c`: the frame-accumulation rule) and the
+   reference hashes in `tests/moo2data.at`.
+2. **Wolverine's graphics-format write-up** — header, flags, internal
+   palette layout, SHIPS palette holders. (The COUNCIL item-0 rule, once
+   credited to him, is not in it; it is ours.)
 3. **The Master of Orion II Online blog** repost of the graphics-format
    write-up (`masteroforion2.blogspot.com`).
 
 None of them cover the whole library. Do not assume an unlisted archive has
-a documented palette — check `tools/PROJECT.md` §4.5 first.
+a documented palette — check `MOO2_GRAPHICS_DEEP_DIVE.md` §7 first.
 
 ---
 
@@ -1767,3 +1778,64 @@ monitor's own at (320, 12).
 
 → **Run the thing, not just the checks.** Two of these four were found by
 looking at a screenshot taken for something else.
+
+---
+
+## 17. Audit of the audits, and the MoO2 decoder (2026-10-24)
+
+Every item in Gemini's report and every claim in the MoO2 deep dive was run
+against the code and the game files. Verdicts per item are in
+`docs/Claude_Report.md`; the format findings are in
+`MOO2_GRAPHICS_DEEP_DIVE.md`. What changed:
+
+- **The monitor bezel had never drawn since 20 Oct.** The "5×5 probe" in
+  `measureHole()` read `w`, `h` and `data`, none defined in that function;
+  the ReferenceError was swallowed by `frameFor()`'s `catch`, and the drawn
+  border aired instead. Fixed; seen on a test station (brass bezel on THE
+  SPOTLIGHT).
+- **MoO2 animations decoded wrong.** Frames were drawn on a blank canvas
+  unless flag `0x2000` was set. liblbx draws every frame over the previous
+  frame's pixels and restarts only the coverage, every `chunk` frames
+  (header byte 9) or every frame under `0x0400`. liblbx's test suite has
+  MD5s for 14 frames; the old decoder matched the first frames only, the new
+  one all 14 (`tools/tests/moo2_reference.py`, in `offline.sh`). On air it
+  meant CMBTSHP ships — commercial body shots, `SPRITE_DIRS` — vanished to
+  an engine glow on three frames of every four.
+- **230 of 320 MoO2 output directories predated the current extractor**
+  (16 Oct): no measurements, `pools: []`, some on a base palette the map no
+  longer names. The whole tree was regenerated. Before keeping it, every
+  item that would newly reach air was contact-sheeted, which found two more
+  faults, both fixed in `extract_moo2.py`: colony-screen menus (COLPUPS,
+  COLPUSP, COLREFIT, COLBLDG) passed the broll gates — now `UI_ARCHIVES`;
+  and 44 clean tech-animation gadgets and buildings, a small object on
+  640×480 of transparency, scored as glitch noise — the glitch gate now
+  needs `coverage >= 0.08` (they sat at 0.02–0.054, the scrambled ones at
+  0.55+). After that, the only items newly reachable are whole CMBTSHP
+  ships and six BEAMS sprites. Old tree kept only for the session.
+- **CMBTSFX 69–78** (smoke, no flags, chunk 0) accumulate into a solid black
+  disc under the new rule; liblbx's hashes do not cover that kind of item
+  and the game's behaviour is unknown. Denied, recorded as open.
+- **OFFICER 143–276 are not corrupt** — re-indexed copies of the 67 leader
+  portraits, each mapping from the original 97–100% deterministically.
+  Extracted again; only 277–343 (no known palette) are skipped.
+- `COLONIES_SCRAMBLED` never existed; COLONIES 02/03 are in `STATIC_DENY` now.
+- liblbx lives at `git.draconx.ca`, not `github.com/MarcoKull/liblbx`.
+  Fixed everywhere.
+- `tools/extract_music_moo2.py` reproduces the 17 MoO2 beds (same files and
+  durations); `dump_stream_lbx.py` saved STREAM.LBX's WAVs as `.smk`.
+- Test scripts find the repo from `__file__`; `links.py` checks every
+  tracked Markdown file and runs in CI. Retired: `dump_stream_lbx.py`,
+  `probe_sound_moo2.py`, `tests/docshots.py`, `two.py`, `shots2.py`,
+  `compose2.py`, and the six `docs/*.png` only they wrote.
+- The extractor no longer writes empty output directories for text,
+  palette and audio archives (43 of them).
+
+Still open: the pre-existing "no recipe named weather" warning (the
+plate route builds a compositor fallback in parallel and the compositor has
+no weather recipe — the plate airs, the warning is noise).
+
+→ **A fix that is never run is a guess, and so is a fix whose error is
+caught.** The bezel probe passed review and a source audit; it had never
+executed without throwing. → **Validate the decoder against someone else's
+known answers.** The blank-canvas decode looked right on every first frame,
+which is the frame every contact sheet shows.
