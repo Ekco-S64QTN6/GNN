@@ -7,7 +7,7 @@ what must not be touched.** `README.md` is the public front page.
 MoO2 decoders, palette map, extraction order.
 `CONTRIBUTING.md` is how to work here — read it before changing anything.
 
-Last reconciled against the code and commit history through 2026-10-20 (`82f6949`). This was a remote source review; generated asset outputs and live on-air behaviour were not rerun during the documentation pass.
+Last reconciled against the code and commit history through 2026-10-22 (`84c0034`). Asset counts verified locally on 2026-10-24: `tools/verify_assets.py`, the manifest itself and the broadcast's `[GNN Assets]` boot line agree, and `tools/tests/offline.sh` passes.
 
 ---
 
@@ -43,9 +43,9 @@ the metric is the thing to doubt.
 |---|---|
 | Voice engine | Kokoro-82M, local, in-process, ~7× realtime on CPU |
 | Fallback | `edge-tts` (cloud) when `.venv` is absent |
-| Assets (MoO1) | 873 graphics items across 22 archives; historical checks report byte-exact decoding, but frame totals conflict (4,205 here vs. 4,316 in `assets/README.md`) and need a fresh local extraction comparison |
-| Assets (MoO2) | 6,502 graphics items across 285 archives — decoder correct, palette map from community sources |
-| Merged manifest | 342 directory keys and 0 duplicate ids are expected. The last verifier/README output says 7,374 items, while §3's post-merge audit records 7,375; rerun merge + verification locally before treating the one-item count as reconciled |
+| Assets (MoO1) | 872 graphics items / 4,025 frames across 22 archives — decodes byte-exact. 873 / 4,205 until `INTRO2/item_02` (the credits, 180 frames) was pruned; 4,316 frames in builds before 10 Oct |
+| Assets (MoO2) | 6,300 graphics items in 320 archive keys — decoder correct, palette map from community sources |
+| Merged manifest | **7,172 items across 342 keys, 0 duplicate ids** (24 Oct; 34,715 frames at boot). The manifest is untracked since `7b2f5bb`, so the count is the local build's — take it from `tools/verify_assets.py`. 7,374 / 7,375 were earlier builds |
 | Admitted pools | MoO1 + MoO2: 147 broll (86+61) · 219 portrait (136+83) · 1,005 sprite (396+609) · 154 chrome (12+142) · 15 glitch. `STATIC_DENY` (scene-compositor.js) is enforced **inside `GNNAssets.find()`**, so every consumer gets it |
 | Output ceiling | peak 0.872 under deliberate overload, zero clipped samples |
 | Per-line loudness | −19.3 to −20.3 LUFS, 1.0 LU spread, true peak −3.0 dBFS |
@@ -101,11 +101,9 @@ python3 tools/audio_probe.py 110        # clips + level-relative pops
 ```
 
 The `[GNN Assets]` line in `gnn-server.log` reports the runtime's flattened
-manifest count. The available documentation disagrees by one item: the last
-verifier/README output says 7,374, while §3's post-merge audit says 7,375.
-Run the local extraction, merge and `tools/verify_assets.py`, then compare the
-fresh boot log before calling the total reconciled; the earlier 13,144-item /
-5,769-duplicate manifest state is the separate bug fixed in §3.
+manifest count. On 24 Oct it read 7,172 items, the same as `tools/verify_assets.py` and the
+manifest; the earlier 13,144-item / 5,769-duplicate manifest state is the
+separate bug fixed in §3.
 
 ---
 
@@ -622,8 +620,8 @@ reconciling" item that had been open in §7.
 The merge now recognises a MoO2 list **by content** (`source: 'moo2'`), not
 by name. The cleanup run at the time reported 342 keys, 7,375 items, 0
 duplicate ids, with every pool size identical. Only the four real name
-collisions keep the suffix. The current exact item count still needs a fresh
-local merge/verify comparison; the README's recorded verifier output is 7,374.
+collisions keep the suffix. The local build of 24 Oct holds 7,172 (verifier, manifest
+and boot line agree).
 
 → **When the name is the thing that went wrong, identify by content.**
 
@@ -1213,7 +1211,7 @@ This section is reconciled with the code and commit history through 2026-10-20 (
 - MoO2 video extracted (nine cinematics); 33 vetted segments are routed full-screen by `cutscene-manager.js`. Additional unused segments still need selection/quality review (ROADMAP §5).
 - `_palette_overrides` is loaded and applied by `extract_moo2.py`.
 - `BACKGRND/item_32` no longer reaches broll: no BACKGRND item is in the pool.
-- The duplicate-manifest defect is fixed: 342 keys and 0 duplicate ids. The exact item total still needs a fresh local manifest/verifier comparison because the available docs report 7,374 and 7,375.
+- The duplicate-manifest defect is fixed: 342 keys and 0 duplicate ids. The local build holds 7,172 items (24 Oct).
 - `key_robot.py`, the robot cels and their checks are retired; the renderer's
   `person.frames` branch had already gone.
 - README's cast badge reads 14.
