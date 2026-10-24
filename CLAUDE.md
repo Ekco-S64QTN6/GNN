@@ -1784,9 +1784,9 @@ looking at a screenshot taken for something else.
 ## 17. Audit of the audits, and the MoO2 decoder (2026-10-24)
 
 Every item in Gemini's report and every claim in the MoO2 deep dive was run
-against the code and the game files. Verdicts per item are in
-`docs/Claude_Report.md`; the format findings are in
-`MOO2_GRAPHICS_DEEP_DIVE.md`. What changed:
+against the code and the game files (the per-item verdicts were posted on
+PR #9; the report file itself was retired once its open items were in the
+roadmap). The format findings are in `MOO2_GRAPHICS_DEEP_DIVE.md`. What changed:
 
 - **The monitor bezel had never drawn since 20 Oct.** The "5×5 probe" in
   `measureHole()` read `w`, `h` and `data`, none defined in that function;

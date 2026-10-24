@@ -143,71 +143,8 @@ needs no new art. Title cards for the composed shows come from
 
 ## 3. Landed
 
-Built, wired, and seen working. Evidence for each is in `CLAUDE.md` §3.
-
-### Broadcast
-| | Verified by |
-|---|---|
-| **24 shows on a 96-slot day**, each with its own set, pair and card; shows end on the quarter hour | mocked-clock check: early close → next slot, 08:29 → diplomacy for 16.0 min, 08:46 → morning watch for 14.0 min |
-| **One speech queue** — nothing speaks directly; 420 ms between lines; caption raised when its own line starts | the ident, break throw and two-way no longer cut each other off |
-| **Speech watchdog extends, never shortens.** Queueing a short line behind a long read no longer clears the queue mid-read | `tools/tests/spamcheck.py`: 2 queued secret lines both play after a 24 s read |
-| **Show shape** — cold open with a three-story rundown tease, banter, two-anchor exchanges, two-ways, panels, breaks, show close | `drive.py` reaches `SHOW_CLOSE` → `COLD_OPEN` |
-| **Remote two-ways and split-screen debate** through the studio monitor | `docs/gallery/correspondent.png`, `docs/gallery/debate.png`; `?block=crossfire` |
-| **Lore separated.** *Imperial Historical Wire* reads archive bulletins and nothing else does | live: lore show read 5 bulletins; Evening Rim read 3 real stories, 0 bulletins |
-| **Lip-sync gated on the voice**; prompter typed from the audio position | mouth open 1–2% in silence, 56% in speech |
-| **Breaking news** — klaxon, the generated breaking-news frame, chyron override; keyword cooldown that no longer blocks the first six minutes | `?block=evening_rim` + `injectBreaking()`, screenshot |
-| **Commercial dissolves** cross from the outgoing shot instead of from black | 0 of 18 shot starts near-black |
-| **Faults motivated by the news** — a storm triples the odds of snow, a cyber story of macroblocking | 4,000-sample picker: hurricane → snow 13%, vertical hold 12% |
-| **Secrets stay found** across reloads (`localStorage`, guarded) | `help` survives a reload |
-| **Secrets board** in the settings panel: found secrets by name, the rest as blanks with a hint, "N of 35 found" | screenshot, 2 of 31 after typing two words |
-| **Weather shows read weather** — Guardian extreme-weather and severe-weather.eu feeds; a show reads its primary topic first | Sector Weather Watch queue: wildfires, floods, drought, a hurricane |
-| **Faults motivated by the news** also respond to elections, market crashes and power-grid stories | `MOTIVES` |
-| **Calendar events** — Halloween (rare events every few minutes), New Year's first minute, April Fools (crossed wires), the solstices; each a secret | `calendarEggs()` |
-| **Real space weather** — NOAA SWPC alerts (geomagnetic storms, flares, radiation) as stories for the weather desk | `/api/spaceweather` |
-| **Space-weather conditions report** — solar wind, K-index, R/S/G scales, the day's odds, the outlook; each NOAA item its own story (they had all been filed as repeats of the first) | live: report + 4 alerts reach the ledger separately, routed `weather` |
-| **Commercial breaks without seams** — break assembled during the toss; first spot line on the picture's frame; skip and secrets no longer collide with the break | `breakcheck.py` (exit-coded): 5 breaks, toss → picture 0.3 s, first line −0.01 s, 0 cut lines; `breakedges.py`: all passed |
-| **Every pair has its own exchanges** (120 entries, all 24 shows both ways) | live: Oth/Unit 7's new exchange aired on the lore show; `content_check.py` |
-| **Captions labelled with their own speaker** | live: 8 of 8 captions match the director's speech log (was "UNIT 7" over Oth's words) |
-| **Skip ignored during a show bumper**; the incoming show opens on schedule | live: morning_watch → bumper → skip → economy cold open |
-| **Cutaways belong to their story** — a prefetched scene is used only by the story it was built for | live: real-story triggers drew their own outbreak plates while the lore show prefetched |
-| **MoO2's own GNN newscast on the lore show** — the EVENTS newsroom with the event picture on its monitor, full-screen, `◆ ARCHIVE`; MoO2 GNN pictures on the monitor for 52 of 75 bulletins | live screenshot; real stories keep ordinary icons and cutaways |
-| **Products stand on their sets** | live screenshots on the jewellery, expedition and home sets; `productsheet.py`: 40 pairings |
-| **Wire abbreviations and Grolm** said right | live `sanitize()` under Kokoro: Senator, Mount, Company; St. Louis untouched |
-
-### Content
-| | Size |
-|---|---|
-| Commercial breaks | a **pod of 2–3 spots**, each with its own announcer, no brand twice, at most one promo |
-| Spot types | 21 shop products · 14 infomercials · 5 named sponsors (with logos) · procedural brand spots · 10 show promos (6 with logos) · 6 Council notices |
-| Commercial footage per beat (after deny list) | ident 68 · hook 108 · body 594 · claim 67 · tag 88 · legal 88 |
-| Testimonials | 6 portraits on 8 infomercials' claim beats |
-| Orion Salvage Auction | MoO2 APP_PICS — 212 applied-research renders — as numbered lots, copy by category (weapon, missile, building, craft, trooper, device, bio, medal) |
-| Honest Gnolam's Starships | used-ship dealership, a different archive hull on the pad every shot |
-| Colonial Marine Corps | recruitment spot over a six-second ground battle |
-| Imperial Research Exchange | technology sold for research points: the MoO1 TECHNO lab console with one of 40 blueprint schematics composited onto its monitor, each named for what it shows |
-| Show promos | 24 shows, each with two lines and a tag |
-| Lore show copy | 75 original bulletins (one fragment filtered) + 46 archive bulletins + 49 intercepted MoO2 transmissions (a quarter of lore stories) |
-| Desk joins | breaks 16 in / 16 out · tosses 18 · show closes 13 · idents 15 · holds 13 · context 20 · asides 24 crew / 22 machine |
-| Two-way copy | intros 10 · asks 12 · follow-ups 12 · answers 20 · thanks 9 |
-
-### Picture
-| | |
-|---|---|
-| Story cutaways | three sources: generated plates (26), archive composites, and **MoO2 cinematic footage, full-screen** (33 vetted segments across 9 videos, labelled ARCHIVE) |
-| Ground war | COLGCBT troops — infantry, tanks, power armour — fighting it out on a MoO2 planet surface, two tinted armies with tracer fire; illustrates lore stories only |
-| Audio | every effect role has a caller (all 109 effects + 5 stings); each of the 24 shows opens on its own theme |
-| Pronunciation | Kokoro table verified word by word against misaki (`tools/pronounce_kokoro.py`); 0 spelled-out words in the test headlines |
-| Window | eight panes keyed out of each set; 16 backdrops behind them |
-| Glitch engine | **22 faults + 3 rare events**, none repeating within four; 35 secrets — see §7 |
-
-### Asset pipeline
-| | |
-|---|---|
-| MoO1 | 872 items / 4,025 frames (local build, 24 Oct), decoded byte-exact |
-| MoO2 | 6,419 items in 320 archive keys (local build regenerated 24 Oct), command-stream decoder matching liblbx's 14 reference hashes, layered palette map; SOUND.LBX SFX extraction and 9 Smacker source files implemented; 33 cinematic segments vetted for runtime |
-| Audio | SOUND.LBX SFX and MoO2 music both have extractors (`extract_sound_moo2.py`, `extract_music_moo2.py`); `build_audio.py` indexes them. STREAMHD.LBX's 21 short cues are not rendered (adding a bed re-themes every show) |
-| Manifest | 7,291 items, 342 keys, **0 duplicate ids** — `verify_assets.py` and the broadcast's `[GNN Assets]` boot line agree (24 Oct). The manifest is untracked, so the count is the local build's |
-| Verification | The latest local run (24 Oct) checked 10,971 paths; rerun `tools/tests/offline.sh` after asset/code changes before relying on this result |
+What is built and on air is described in [BROADCAST.md](BROADCAST.md); the evidence for each fix
+is in `CLAUDE.md` §3. This file keeps only what is still to do.
 
 ---
 
@@ -387,7 +324,6 @@ anchors, and certain minutes of the day.
 - **rss2json's daily cap** is the single most likely way the channel runs
   dry. An API key, or the local digest as a first-class source rather than
   a fallback.
-- ~~`capture_docs.py` hangs~~ — replaced by `capture_gallery.py`; deleted.
 
 ### 9.2 Tooling
 - **A commercial review page** that plays every spot type on demand — a
@@ -416,10 +352,10 @@ anchors, and certain minutes of the day.
 
 ### 9.3 Asset pipeline
 - Per-item palette review (§4.1); MoO2 text classification (§4.4).
-- **Pool assignment for the remaining MoO2 archives** — RACES and the BLDG
-  archives are unpooled and could feed council and industry cutaways once
-  looked at. EVENTS and DIPLOMAT are deliberately denied from every pool
-  (in-universe; used by path where they belong).
+- **Pool the remaining MoO2 archives on purpose** — the BLDG archives and the
+  TANM tech animations are pooled but named by no recipe; looked at, they could
+  feed industry and research cutaways. EVENTS, DIPLOMAT, COUNCIL and OFFICER are
+  deliberately denied (in-universe; used by path where they belong).
 - **Palette holders are easy to miss.** A run of tiny (24×24) items at the
   head of an archive are palette holders for the big items after them —
   EVENTS (1) and DIPLOMAT (13) were both decoding in the wrong colours
@@ -431,11 +367,6 @@ anchors, and certain minutes of the day.
   corrupt — CLAUDE.md §17). `RACES` 32–44 render correctly and are pooled.
 - **CMBTSFX 69–78** (smoke) accumulate to a solid black disc under liblbx's
   frame rule; denied until the game's behaviour is known.
-- ~~`_item_split` did not accept `"IFONTS:n"`~~ — fixed 2026-10-18: split
-  values are parsed through `parse_palette_ref()` and unusable entries are
-  reported instead of silently skipped.
-- ~~Validate against `liblbx` reference hashes~~ — done 2026-10-24: 14/14
-  frames match (`tools/tests/moo2_reference.py`, in `offline.sh`).
 
 ---
 
