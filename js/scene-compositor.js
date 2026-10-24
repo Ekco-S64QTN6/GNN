@@ -158,6 +158,11 @@ const GNNSceneCompositor = (() => {
         // this keeps a re-extraction from putting it back on air.
         'INTRO2/item_02',
         'SPIES/item_00', 'SPIES/item_27',
+        // COLONIES 02 and 03 decode with a scattered-pixel purple sky; the
+        // other 26 are clean landscapes. Nothing queries COLONIES today,
+        // which kept these off air only by accident — denied so a future
+        // `dirs` list cannot bring them back.
+        'COLONIES/item_02', 'COLONIES/item_03',
         // MoO2's EVENTS archive is the game's own GNN newsroom and the event
         // pictures it showed — in-universe, GNN-branded. They air only on the
         // lore show, loaded by path in icon-manager.js. Denied here so a

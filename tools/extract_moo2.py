@@ -552,11 +552,19 @@ def extract_archive(lbx_path, out_dir, base_palette, base_palette_index,
         return embedded_cache[idx]
 
     for i in range(len(archive)):
-        # Ignore the broken duplicate leader portraits in OFFICER
-        if name == 'OFFICER' and i >= 143:
+        # OFFICER holds the 67 leader portraits (21-87) and three re-indexed
+        # copies of them: 143-209 (a darker shade, FONTS 1 like the
+        # originals), 210-276 (FONTS 2, via _item_split) and 277-343. The
+        # copies are not corrupt — each pixel maps from the original's index
+        # 97-100% deterministically — but no FONTS or IFONTS palette
+        # reproduces the last set (per item it splits between FONTS 4 and
+        # IFONTS 3 and fits neither well), so its colours are presumably
+        # built at run time. Skipped until that is found, rather than
+        # written out in the wrong colours.
+        if name == 'OFFICER' and i >= 277:
             skipped += 1
             continue
-            
+
         try:
             item = GfxItem(archive.item(i), format='moo2')
         except Exception as err:

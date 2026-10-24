@@ -1,571 +1,278 @@
-# GNN Newsroom — Asset Pipeline Source of Truth
+# GNN — asset pipeline
 
-**Last updated:** 2026-10-22
-**Status:** MoO1 graphics decoding is verified. MoO2 graphics are merged into runtime pools; text extraction/merge exists, but narrative classification and broad runtime admission remain open. SOUND.LBX SFX extraction and manifest integration are implemented; complete automated MoO2 music-source decoding/rendering is not. Extracted game-asset outputs are local/ignored and must be regenerated from owned game files.
+**Last updated:** 2026-10-24
 
-This document is the current state of the asset extraction work for the GNN
-Newsroom. It replaces every previous version. It is written to be self-
-contained — a reader who has not seen the code before should be able to
-understand what is here, what works, and what is left.
+How the station turns the two games' files into the PNGs, audio and
+manifests under `assets/`. The MoO2 *format* — container, frames, palettes,
+the archive-by-archive findings — is written up for anyone working with those
+files, separately from this project, in
+[`MOO2_GRAPHICS_DEEP_DIVE.md`](../MOO2_GRAPHICS_DEEP_DIVE.md). This file covers
+how *we* apply it: the tools, the palette map, and the choices we made.
 
----
-
-## 0. What this project is
-
-The GNN Newsroom is a browser-based newsroom simulation. It draws its
-graphics, text and audio from Master of Orion 1 and Master of Orion 2 (both
-GoG releases). Both games store their assets inside a container format called
-**LBX**. To use those assets in the browser, they must be decoded into PNGs
-(and audio into a playable format) and described in a manifest the runtime
-reads.
-
-The project started as a bug fix and grew into a full extraction pipeline.
-
-### 0.1 Where it started
-
-The original bug was in MoO1 animations: **missiles and other moving sprites
-were painting across the screen** instead of moving cleanly from A to B. Each
-frame stacked on the previous one rather than replacing it. The result was a
-smear of missile sprites trailing back to the launch point.
-
-The cause: the MoO1 delta-frame decoder was applying each delta's pixels on
-top of the previous frame's pixels without clearing the columns that the delta
-re-encoded. MoO1's delta columns describe the *complete new state* of a
-column, not an addition to it — so any pixel the current frame did not touch
-was left lit from the previous frame.
-
-### 0.2 Why MoO2 was added
-
-While investigating MoO1, it became clear MoO2 uses the same LBX container
-but a completely different frame encoding — row-major command stream rather
-than column-major delta. Adding MoO2 assets was a natural extension: same
-tools, same runtime, richer library. The project now covers both games, and
-the goal is **100% working** — no half-decoded sprites, no leftover warnings
-on real archives, no palette guesses that aren't verified.
+Extracted output is git-ignored and rebuilt from owned game files (§6).
 
 ---
 
-## 1. Current state, by game
+## 1. State
 
-### 1.1 MoO1 — complete, verified against real archives
+| | |
+|---|---|
+| MoO1 graphics | Decoded byte-exact; delta frames, palette merge, opaque-zero rule (§2) |
+| MoO2 graphics | Decoder reproduces all 14 of liblbx's reference hashes (`tests/moo2_reference.py`); palettes from `palette_map.json` (§3) |
+| MoO2 text | Extracted and merged; runtime admits only reviewed race and star names (§5.2) |
+| MoO2 sound effects | `extract_sound_moo2.py`, merged by `build_audio.py` |
+| MoO2 music | `extract_music_moo2.py`: STREAM.LBX WAVs and nine video soundtracks → 17 OGGs |
+| MoO2 video | `extract_moo2_video.py`: nine Smacker files → PNG frames; 33 segments vetted for air |
 
-Graphics decode correctly. All the following were confirmed by rendering the
-extracted PNGs side by side with the in-game originals or by pixel-level
-diagnosis:
-
-- Delta-frame inheritance fixed. Missile/beam/explosion trails gone.
-- Palette merge: each archive's own palette block (when it has one) is
-  layered over the game-wide `WINLOSE[0]` table before per-item palettes are
-  merged. This is what made VORTEX item 0 render correctly while every other
-  item in the archive was wrong until the deny list went in.
-- Fullscreen index-0 opaque rule: 320×200+ items in
-  `OPAQUE_ZERO_ARCHIVES` get their palette index 0 written as opaque black.
-  This is what makes INTRO/LANDING/COUNCIL/SPIES/etc. self-contained pictures
-  rather than transparent overlays. **SPIES and EMBASSY items 12–17 are
-  exempt** — they are overlays, not fullscreens, and want index 0 transparent.
-- Every item that decodes wrong or is not footage has been flagged in one of
-  two deny lists (see §3).
-
-**Verify by:** extracting to `assets/cutscenes/` and inspecting the frames
-in `tools/scene_review.html` cutscenes mode.
-
-### 1.2 MoO2 — graphics integrated; narrative text and music work remain
-
-- **Graphics:** command-stream frame decoder and palette logic are implemented. The earlier real-archive check reduced SHIPS warnings from 293 to 0; empty sentinels and the 6-byte trailer after each MoO2 frame terminator are handled.
-- **Runtime:** `merge_moo2_manifests.py` merges per-archive manifests, and the runtime/asset verifier understands `source: 'moo2'`. Extracted frames and manifests are generated local outputs, not all shipped files.
-- **Text:** `extract_moo2_text.py` preserves NUL-delimited records and raw bytes; `merge_moo2_text.py` filters those records into `assets/moo2-strings.json`. The runtime allowlist remains narrow (race/star labels); classifying and admitting narrative event text is still open (§6.4).
-- **Sound effects:** `extract_sound_moo2.py` extracts native-WAV samples from `SOUND.LBX`; `build_audio.py` profiles and merges them when the local output manifest exists.
-- **Music:** `build_audio.py` only indexes OGG files already present under `assets/audio/music/moo2/`. The complete raw MoO2 music-source decoder/render path is not implemented.
-- **Video:** `extract_moo2_video.py` decodes nine Smacker sources into PNG frames. The runtime routes 33 vetted segments full-screen; additional segments remain to be reviewed for possible use.
-
-**Verification boundary:** source-level support is not the same as visually checking every extracted asset. Use `tools/palette_review.py` and the real game/reference output for unresolved palette cases.
+Counts for the local build are in `CLAUDE.md` §1; `tools/verify_assets.py`
+prints them.
 
 ---
 
-## 2. Format reference (the parts you actually need)
+## 2. MoO1
 
-### 2.1 LBX container (both games)
+### 2.1 Frame encoding — column-major, delta
 
-```
-u16 count | u32 0x0000FEAD | u16 type | (count+1) × u32 item offsets
-```
+Each frame is a keyframe (`kind = 1`) or a delta (`kind = 0`). A column entry
+is `0xFF` (unchanged) or `mode | seglen | seglen bytes of runs`; a run is
+`pixcount | skip | pixcount bytes`.
 
-Offsets are absolute file positions. MoO2 pads the header to `0x800`; MoO1
-does not.
+**A delta column describes only the pixels that changed.** A pixel the
+encoder skipped keeps its value from the previous frame; a pixel written as
+`0` was erased and becomes transparent. The original missile-trail bug was
+the decoder clearing each re-encoded column before applying its runs, which
+turned every skipped pixel transparent. Do not clear the column, and do write
+`0` through (CLAUDE.md constraint 14).
 
-### 2.2 Item headers
+### 2.2 Palettes and transparency
 
-| Game | Size | Layout |
-|------|------|--------|
-| MoO1 | `0x12` | `w, h, unused, nframes, loopstart, flags, unused, pal_offset(u32), (nframes+1) × u32 frame offsets` |
-| MoO2 | `0x0C` | `w, h, padding, nframes, delay, flags, (nframes+1) × u32 frame offsets` |
-
-Frame offsets are relative to the start of the item header.
-
-### 2.3 MoO1 frame encoding — column-major, delta
-
-Each frame is a keyframe (`kind=1`) or a delta (`kind=0`).
-
-A delta's column entry is either `0xFF` (unchanged, keep prev) or
-`mode | seglen | seglen bytes of run data`. Runs are `pixcount | skip |
-pixcount bytes`. `skip` reserves rows the encoder did not touch — the
-previous frame's pixels survive them.
-
-**The critical rule:** a delta column describes only the pixels that
-changed. Any pixel inside a re-encoded column that the encoder did not
-touch stays as it was on the previous frame. A pixel whose value is 0 has
-been *erased* by the encoder — it writes through as transparent. Both
-matter:
-
-- do not clear the column before applying runs (that is what caused the
-  trail bug in reverse — every re-encoded column became transparent where
-  the encoder had not written);
-- do write payload value 0 through as a pixel (a skip, not a write, is what
-  "leave this pixel as it was" means — writing 0 is what "erase this pixel"
-  means, and only the encoder can decide which one).
-
-### 2.4 MoO2 frame encoding — row-major, command stream
-
-Frame body starts with `01 00` (marker) and a `u16` initial Y. Then:
-
-- `length > 0` — read `x_advance`, advance X, draw `length` pixels,
-  advance X by `length`. Odd length → 1 pad byte.
-- `length = 0` — read `y_advance`. `1000` ends the frame. Otherwise
-  advance Y, reset X to 0.
-
-Raw frames (flag `0x0100`) are `w × h` palette indices, row-major, no
-command stream. Junction frames (flag `0x2000`) composite over the previous
-frame; frame 0 is blank.
-
-The 6 bytes after the `(0, 1000)` terminator are a per-frame trailer, not
-pixel data.
-
-### 2.5 MoO2 palettes
-
-Three tiers:
-
-1. Base external — `FONTS.LBX` / `IFONTS.LBX` items 1..n (item 0 is font
-   data). 1024 bytes: 256 × `[pad, R, G, B]`, RGB in `0..63` scaled ×4.
-2. Sequential palette holders — tiny 1×1 or 2×2 items with flag `0x1000`,
-   mutate the running archive palette.
-3. Sparse image-local — ordinary graphics with flag `0x1000`, patch only
-   the range they declare, do not mutate archive state.
-
-Transparency in MoO2 comes from the coverage plane, not from a palette
-value. A pixel explicitly drawn as index 0 is opaque.
+Each archive's own palette block, when it has one, is layered over the
+game-wide `WINLOSE[0]` table before per-item palettes. Index 0 is transparent
+in a sprite but black in a fullscreen: any item at `w >= 300 and h >= 180`
+writes it opaque. SPIES (`FORCE_TRANSPARENT_ARCHIVES`) and EMBASSY items
+12–17 (`FORCE_TRANSPARENT_ITEMS`) are 320×200 overlays and are exempt.
 
 ---
 
-## 3. The deny list
+## 3. MoO2 in this project
 
-Two places, both consulted on every scene query:
+### 3.1 `palette_map.json`
 
-**`extract_all.py`'s `DENY` dict** — first line of defence. Stops an item
-joining a pool at all. Format: `(archive, item) -> pools it may not join`,
-or `'*'` for all.
+| Section | Meaning |
+|---|---|
+| `"ARCHIVE": n` | Archive base palette: FONTS item `n`, or `"IFONTS:n"` |
+| `_default` | Base for archives not listed (FONTS 1) |
+| `_item_split` | `{"lo-hi": palette}`: an item range uses another base (GAME, TECHSEL, OFFICER 210–276) |
+| `_item_palettes` | `{"item": palette}`: one item uses another base. Values accept `"IFONTS:3"` / `"FONTS:3"`; a plain integer is a FONTS item |
+| `_palette_overrides` | `{"lo-hi": item}`: merge item's internal palette over the base for a range (COUNCIL, MONSTER, TECHSEL) |
+| `_item_overrides` | `{"item": item}`: the same for one item (SHIPS 42 ← 49, CMBTSFX 8 ← 68, CMBTPLNT 0–4 ← 5, DIPLOMAT, RACES, EVENTS, …) |
 
-**`js/scene-compositor.js`'s `STATIC_DENY`** — second line. Excludes an
-item the manifest still admits. Also `dynamicDeny`, populated by the review
-tool's ⊘ button and persisted to `localStorage['gnn.denyIds']`.
+`extract_moo2.py` applies them in this order (module docstring):
+`_item_split`, then `_item_palettes`, then the running palette (archive base
+plus every ≤2×2 holder read so far). Then `_palette_overrides`, then
+`_item_overrides`, then the item's own patch.
 
-Items currently denied, with the reason:
+**An explicit base replaces the running palette.** An item that gets
+`_item_split` or `_item_palettes` does not see earlier holders. If it needs
+one, add the holder as an `_item_overrides` entry too.
 
-| Archive / item range | Reason |
-|----------------------|--------|
-| `COUNCIL/item_00..23` | Decode against a palette the archive does not carry; frames invert, portraits turn to chromatic confetti. |
-| `LANDING/item_00..06` | Item 00 is an animated UI sprite with wrong colours; 01–06 are 10×17 tactical chips, not footage. |
-| `LANDING/item_20..36` | More tactical chrome and unit chips. |
-| `BACKGRND/item_16` | Animated panel with wrong palette. |
-| `STARVIEW/item_00` | UI ring, not a planet. |
-| `STARVIEW/item_42..45` | Small tactical icon sprites. |
-| `EMBASSY/item_00` | Red/black decorative panel that doesn't belong in the embassy scene. |
-| `SPIES/item_01, 06, 10, 16, 22, 28` | Delta columns baked a rectangle of the original interior around the interacting figure. |
-| `TECHNO/item_03..07` | Empty screen slot, not the schematic that goes into it. |
-| `VORTEX/item_01..34` | Authored against a palette not stored in the archive; item 00 stays (it carries its own palette). |
+`palette_review.py` shows a sibling-palette choice as `SIBLING:N`. That is
+its label for an `_item_overrides` entry; `--apply` writes it as one, and
+the map itself does not accept `SIBLING:`.
 
-To add: click ⊘ in `scene_review.html`, then export the JSON and fold the
-`dynamic` array into `STATIC_DENY` so it persists without browser storage.
+Values come from liblbx's `moo2-data.txt` where it has them; everything else
+was picked by eye. See the deep dive §6–§8 for which is which. **Do not pick
+palettes automatically**: two metrics were tried and scored 0 of 6 on known
+answers (CLAUDE.md §3).
 
----
+### 3.2 Extractor choices
 
-## 4. The interview composition
+- **Palette holders** (≤2×2 with an internal palette) update the running
+  palette and are not written out. The 24×24 holders at the head of COUNCIL,
+  EVENTS, DIPLOMAT and SCIENCE are not ≤2×2, so they are reached through
+  `_palette_overrides` / `_item_overrides`.
+- **OFFICER 277–343 are skipped**: no known palette fits them. 143–276 are
+  extracted (FONTS 1 and FONTS 2); before 2026-10-24 everything from 143 on
+  was skipped as "corrupt", which it is not.
+- **Functional-colour (`0x0800`) items** go through `render_functional_rgba()`,
+  a synthetic heat ramp on the low nibble.
+- **Frames accumulate** over the previous frame; coverage restarts every
+  `chunk` frames and every frame under `0x0400` (`lbx.py`). Until 2026-10-24
+  frames were decoded on a blank canvas unless `0x2000` was set, which was
+  right for first frames only.
+- **Pools**: every item is measured like MoO1 items (coverage, luminance,
+  colour count, chroma noise, `ui_score`), classified, and admitted to
+  `broll` / `portrait` / `sprite` / `chrome` / `glitch` by the same gates as
+  `extract_all.py`. `UI_ARCHIVES` never reach `broll`.
 
-`EMBASSY.LBX` is the one archive whose items are drawn as a specific
-composition rather than as independent footage. The recipe composes:
+### 3.3 After changing the decoder or the map
 
-- `EMBASSY/item_01` — the room, 320×130 native
-- `EMBASSY/item_02..11` — the ambassador, 175×130 native, animated
-- `EMBASSY/item_12..17` — the player representative, 320×200 native
+Re-extract the affected archives, then re-merge:
 
-The room and ambassador plates are drawn by the same artist at the same
-scale; the ambassador's plate carries a strip of the room's own background
-around her figure. They only line up when both are drawn at the same scale.
-The rep plate is frame-sized already with the figure drawn at its intended
-position; drawn full-frame at scale ~1.5 it lands in the right place.
-
-The exact numbers are in `INTERVIEW_DEFAULTS` at the top of
-`js/scene-compositor.js`. Tune them in `tools/interview_tuner.html` — the
-tuner and the recipe share `composeInterview()`, so the two never drift.
-
-Current tuned values:
-
-```
-roomScale: 1.5384615384615385
-ambScale:  1.5384615384615385
-ambDx:     31
-ambDy:     0
-repScale:  2
-repDx:     4
-repDy:     51
+```bash
+python3 tools/extract_moo2.py --only CMBTSFX,OFFICER
+python3 tools/merge_moo2_manifests.py
+python3 tools/tests/moo2_reference.py
+python3 tools/verify_assets.py
 ```
 
----
-
-## 5. The tools folder
-
-| File | What it does |
-|------|--------------|
-| `lbx.py` | Container reader + frame decoder for both games. The delta-frame and palette-merge fixes are here. |
-| `extract_all.py` | MoO1 extraction. `FORCE_TRANSPARENT_*` sets and `archive_palette()` live here. |
-| `extract_moo2.py` | MoO2 graphics extraction. Palette map, per-item overrides, IFONTS. |
-| `extract_moo2_text.py` | NUL-delimited string tables from MoO2 text archives. |
-| `extract_text.py` | MoO1 text (EVENTMSG, NAMES, HELP, ORION.EXE). |
-| `build_audio.py` | MoO1 audio: SOUNDFX.LBX → WAVs, MUSIC.LBX → OGG, manifest. |
-| `palette_map.json` | MoO2 archive → FONTS/IFONTS palette index. Includes the verified reference cases. |
-| `palette_compare.py` | Renders one MoO2 sprite across every external palette. |
-| `moo2_probe.py` | Byte-level LBX inspection. The fastest way to see what an archive actually holds. |
-| `scan_strays.py` / `scan_all.sh` | Gap scan. Reports unreferenced regions and any header-like reads inside them. |
-| `condition_plates.py` | Generated-art pipeline. Defringe, downscale on premultiplied alpha, quantise. Anchors, room plates, backdrops, cutaways, products, logos, icons. |
-| `prompt_bridge.py` | Emits generation prompts for the gaps the MOO1 catalogue can't fill. |
-| `key_robot.py` | Cuts the MOO1 robot cel out of his newscast scene. |
-| `verify_assets.py` | Confirms every runtime asset path resolves. Run before shipping. |
-| `drive.py`, `capture_docs.py`, `audio_probe.py`, `voice_audition.py` | Diagnostic harnesses for the broadcast runtime. |
-| `app_window.py` | Native GTK/WebKit window wrapper for the station. |
-| `test_human_anchor.py` | Anchor conditioning diagnostic. Tuning aid, not part of the pipeline. |
-| `show-editor.html` | Editor for `assets/generated/show-config.json`. |
-| `scene_review.html` | Recipe preview + deny-flag UI. |
-| `studio_review.html` | Desk-line tuner for the ten generated studio sets. |
-| `interview_tuner.html` | Slider tuner for the EMBASSY composition. |
+**A re-extract can change what airs.** Items gain or lose pools; contact-sheet
+the affected pools at on-air size before calling it done (CLAUDE.md §3,
+"Size is not role").
 
 ---
 
-## 6. What's left
+## 4. The deny list
 
-### 6.1 MoO2 music source decoding and rendering
+Two layers:
 
-Sound-effect extraction is implemented. `tools/extract_sound_moo2.py` writes
-the native WAV items in `SOUND.LBX`; `tools/build_audio.py` profiles the
-result and includes it in `assets/audio-manifest.json` when the local sample
-manifest exists.
+- **`extract_all.py`'s `DENY`** keeps a MoO1 item out of a pool entirely.
+- **`js/scene-compositor.js`'s `STATIC_DENY`** is enforced inside
+  `GNNAssets.find()`, so every pool query honours it. `dynamicDeny` holds
+  what the ⊘ button in `scene_review.html` adds (stored in
+  `localStorage['gnn.denyIds']`); fold its export into `STATIC_DENY` to keep it.
 
-The **music** part is incomplete: `build_audio.py` only discovers OGG files
-already present under `assets/audio/music/moo2/`. It does not decode/render
-the raw MoO2 music source formats (`.MDI`, `.DIG`, `.BNK`, or streams
-inside `STREAM.LBX`). The next step is format reconnaissance against the
-local game files, followed by a tested conversion path and listening checks.
-Do not describe the whole MoO2 audio pipeline as complete solely because a
-populated local manifest has music entries.
+What `STATIC_DENY` holds, and why:
 
-### 6.2 MoO2 runtime integration
+| Items | Reason |
+|---|---|
+| MoO1 `COUNCIL` 00–23 | Decode against a palette the archive does not carry |
+| `LANDING` 00–06, 20–36 | Animated UI sprite; tactical chips, not footage |
+| `BACKGRND` 16 | Animated panel, wrong palette |
+| `STARVIEW` 00, 42–45 | UI ring; small tactical icons |
+| `EMBASSY` 00 | Decorative panel that does not belong in the scene |
+| `SPIES` 00, 01, 06, 10, 16, 22, 27, 28 | Keyed-out figures on black, or delta-baked rectangles |
+| `TECHNO` 03–07 | Empty screen slot, not the schematic |
+| `VORTEX` 00–34 | 01–34 authored against a palette not in the archive; 00 scrambled |
+| `INTRO2` 00, 02 | Black edge to edge; the game's credits |
+| `COLONIES` 02, 03 | Scattered-pixel sky (the other 26 are clean) |
+| MoO2 `EVENTS`, `DIPLOMAT`, `COUNCIL`, `OFFICER` (all) | In-universe and GNN-branded, or in-universe faces; loaded by path where they belong (lore show, archive look) |
 
-- **Graphics:** runtime support for `source: 'moo2'` and merged graphics manifests is implemented. Re-run extraction and `merge_moo2_manifests.py` after changing decoder or palette behavior.
-- **Text:** `assets/moo2-strings.json` is loaded, but runtime admission is intentionally limited to reviewed race/star names. Narrative event text needs classification and allowlist changes (see §6.4 and [docs/ROADMAP.md](../docs/ROADMAP.md) §4.4).
-- **Video:** nine source cinematics are decoded; 33 vetted segments route through `cutscene-manager.js`. Selecting/validating additional unused segments is an optional content task, not missing decoder wiring.
+---
 
-### 6.3 MoO1 in the runtime
+## 5. Still open
 
-The decoder is verified at the frame level, but the missile-in-GNN test
-should still be observed on the target machine after re-extracting the local
-assets. Trigger a combat cutaway and watch a missile animation end to end;
-use a current video/render rather than an old review capture.
+### 5.1 Palettes
 
-### 6.4 MoO2 narrative text — classification and runtime allowlist
+- **Per-item picks need the owner's eye.** `palette_review.py` builds the
+  page; `--apply palette-picks.json`, re-extract, re-merge.
+  `docs/palette-outliers.txt` over-flags (SHIPS and BLDG variety is real).
+- **OFFICER 277–343** have no palette (deep dive §8).
+- **Uncatalogued archives** still on first-pass picks: BEAMS, FLEET,
+  FLTICONS, RACES, RACEOPT, DIPLOMAT, APP_PICS. Review one with
+  `palette_review.py --archive NAME`.
+- MoO1 palettes are out of the review tool's scope; their known faults are the
+  COLONIES pair and the MoO1 COUNCIL archive, both denied.
 
-The extraction and merge tools exist; raw NUL-delimited records are not the
-same thing as a curated narrative corpus. The current runtime only admits a
-restricted set of race/star names. Classify English narrative records, reject
-UI labels, code identifiers, templates with unsupported formatting, and
-non-English or binary-contaminated material, then widen the runtime allowlist
-only for records that have been reviewed.
+### 5.2 MoO2 text
 
-Useful local commands (requires the game archives):
+Extraction and merge exist; the runtime admits only reviewed race and star
+names (`asset-registry.js` allowlist). Classify English narrative records,
+reject UI labels, code identifiers and non-English text, then widen the
+allowlist for reviewed records only (ROADMAP §4.4):
 
 ```bash
 python3 tools/extract_moo2_text.py --all-lbx
 python3 tools/merge_moo2_text.py --dry-run
-python3 tools/merge_moo2_text.py
 ```
 
-### 6.5 Optional
+### 5.3 Media not yet used
 
-- **Reference render tests:** compare the remaining known-good `liblbx` fixtures (SHIPS 42, MONSTER 7, STARBG 9, LOGO 0–1, MAINMENU) against our extracted render. The current synthetic unit tests do not establish parity with every original-game frame.
-- **Unresolved palettes:** review remaining first-pass assignments with `tools/palette_review.py` / `tools/palette_compare.py`. `RACES` items 32–45 remain a known excluded/unpooled concern. OFFICER items 143+ are skipped by the extractor as corrupted duplicates; their old per-item overrides were removed and should not be reported as a current extraction failure.
-- **Live scene review:** re-extract local assets and inspect current renders after decoder changes; do not use an old review capture as proof of a current visual defect.
-
----
-
-## 7. The two rules that keep coming up
-
-**Verify behaviour, not claims.** Repeatedly confirmed this project:
-missiles looked fine in a thumbnail but were wrong in motion; palette 3
-looked right until compared against every other palette; a Y-coordinate
-"fix" that looked plausible collapsed every sprite to a horizontal line.
-Every time, the metric or the guess disagreed with what the image actually
-showed.
-
-**A skipped pixel and a pixel written as index 0 are different things.**
-The trail bug, the transparent-sky bug, and every subsequent delta-frame
-question come back to this. `skip` means "leave the previous value";
-`payload value 0` means "erase this pixel". Do not conflate them.
+`STREAMHD.LBX` (21 short cues) and the GENWINFN video's soundtrack are not
+rendered. Show themes are picked by position in the music list
+(`showIdx * 7 + 3`), so adding a bed re-themes every show: add beds on
+purpose, not as a side effect. More cinematic segments could be vetted
+(ROADMAP §5).
 
 ---
 
-## 8. References
+## 6. Rebuilding everything from a fresh clone
 
-- **Wolverine / community MoO2 graphics format description**, reproduced
-  by the Master of Orion II Online blog:
-  https://masteroforion2.blogspot.com/2008/04/moo2-graphics.html
-- **`liblbx` community library and format notes:**
-  https://github.com/MarcoKull/liblbx
-- **Shikadi ModdingWiki LBX container format:**
-  https://moddingwiki.shikadi.net/wiki/LBX_Format
-- **Sikander's MoO2 Format Documentation** / StrategyWiki / forum
-  repositories.
-- **The 1.50 Unofficial Patch Project** (`moo2mod.com` / CivFanatics MoO2
-  Modding threads).
-
----
-
-## 9. Revision history
-
-| Date | Change |
-|------|--------|
-| 2026-10-16 (initial) | Source-of-truth created. MoO2 decoder rewrite pending. |
-| 2026-10-16 (post-fix, synthetic) | Command-stream decoder, raw frames, junction compositing, coverage plane, 640×480 validation. |
-| 2026-10-16 (post-fix, real archives) | `SHIPS.LBX` 293 → 26 → 0 warnings. Full archive scan complete. Text extraction: 20,762 records. |
-| 2026-10-16 (MoO1 fixes) | Delta-frame inheritance fixed. Palette merge fixed. Opaque-zero rule with SPIES/EMBASSY exclusions. VORTEX palette diagnosis. Deny list built. Interview composition tuned. |
-| 2026-10-16 (cleanup) | MoO2 decoder state and tools-folder reference consolidated. |
-| 2026-10-20–22 (reconciliation) | Recorded the landed MoO2 text/SFX/video tools and runtime integration; separated the remaining narrative-text and raw-music-source work from completed extraction support. |
-
-
-## 10. Extractor entry point and usage
-
-The executable source of truth is [`extract_moo2.py`](extract_moo2.py). Do not
-maintain a second copy of its Python source in this document: the old embedded
-snapshot was substantially shorter than the current implementation and had
-drifted from it. Keep behavioral explanations here and implementation changes
-in the executable and its tests.
-
-Examples (requires the owner’s MoO2 archive files and local output directory):
+Needs the GOG releases of both games in `Master of Orion 1/` (MoO2 in
+`Master of Orion 1/mastori2/`), Python 3 with Pillow and NumPy, and ffmpeg.
 
 ```bash
-python3 tools/extract_moo2.py
-python3 tools/extract_moo2.py --only SHIPS,MONSTER
-python3 tools/extract_moo2.py --palette-item 3 --only CMBTSHP
-python3 tools/extract_moo2.py --help
+python3 tools/extract_all.py              # MoO1 graphics (~24 s)
+python3 tools/extract_text.py             # MoO1 text → assets/moo-strings.json
+python3 tools/extract_moo2.py             # MoO2 graphics
+python3 tools/merge_moo2_manifests.py     # fold MoO2 into assets/gfx-manifest.json
+python3 tools/extract_moo2_text.py        # MoO2 strings
+python3 tools/merge_moo2_text.py          # → assets/moo2-strings.json
+python3 tools/extract_moo2_video.py       # MoO2 cinematics → PNG frames
+python3 tools/extract_sound_moo2.py       # MoO2 SFX
+python3 tools/extract_music_moo2.py       # MoO2 music → OGG
+python3 tools/build_audio.py              # MoO1 audio + index everything
+python3 tools/verify_assets.py            # every runtime path resolves
 ```
 
-Generated PNGs and merged manifests are local/ignored outputs. After decoder
-or palette changes, re-extract and inspect current renders; old captures are
-not evidence of current output quality.
+---
 
-## 11. Palette assignments and their sources
+## 7. The tools folder
 
-MoO2 archives do not all use the same palette. Each archive is assigned a
-base external palette from `FONTS.LBX` (or, for a small number, `IFONTS.LBX`),
-which may then be patched by an embedded palette chain from a sibling item in
-the same archive, or by the item's own embedded palette.
+| File | What it does |
+|---|---|
+| **Decoding and extraction** | |
+| `lbx.py` | LBX container and image decoder for both games |
+| `extract_all.py` | MoO1 graphics, measurement and pools |
+| `extract_text.py` | MoO1 text (EVENTMSG, NAMES, HELP, ORION.EXE) |
+| `extract_moo2.py` | MoO2 graphics with `palette_map.json` applied; measurement and pools |
+| `palette_map.json` | MoO2 palette assignments (§3.1) |
+| `merge_moo2_manifests.py` | Per-archive MoO2 manifests → `assets/gfx-manifest.json`; identifies MoO2 lists by content |
+| `extract_moo2_text.py` / `merge_moo2_text.py` | MoO2 NUL-delimited strings; filtered into `assets/moo2-strings.json` |
+| `extract_moo2_video.py` | MoO2 Smacker cinematics → PNG frames |
+| `extract_sound_moo2.py` | `SOUND.LBX` → WAVs |
+| `extract_music_moo2.py` | `STREAM.LBX` WAVs and video soundtracks → OGG |
+| `build_audio.py` | MoO1 SFX profiling, MIDI → OGG; indexes all audio into `assets/audio-manifest.json` |
+| **MoO2 inspection** | |
+| `moo2_probe.py` | Container table and raw bytes of any item |
+| `probe_cmbtsfx.py` | CMBTSFX flags, embedded palettes and coverage, per item |
+| `palette_compare.py` | One MoO2 item under every FONTS palette |
+| `palette_survey.py` | Every MoO2 archive across FONTS and IFONTS, one HTML page |
+| `palette_review.py` | Review page for per-item palettes; `--apply` writes the picks |
+| `palette_fit.py` | Items whose palette-index range is unlike their siblings'. A review queue, not a picker |
+| `scan_moo2_quality.py` | Per-archive palette-collapse scan |
+| `scan_strays.py` / `scan_all.sh` | Unreferenced data in LBX gaps |
+| **Generated art** | |
+| `condition_plates.py` | Generated art → 256-colour plates at draw size |
+| `fix_listening.py` | Hero body under the listening plates' turned heads |
+| `compose_titlecards.py` | Show title cards |
+| `prompt_bridge.py` | Generation prompts for the gaps |
+| `test_human_anchor.py` | Anchor-conditioning tuning aid; writes to `/tmp` only |
+| **Runtime** | |
+| `verify_assets.py` | Every runtime asset path resolves |
+| `drive.py` | Drives the broadcast over CDP |
+| `audio_probe.py` | Clip count and level-relative pops |
+| `capture_gallery.py` | Re-shoots the README gallery |
+| `voice_audition.py` | Auditions every voice the engine offers |
+| `pronounce_kokoro.py` | Audits `PRONOUNCE` against Kokoro, writes `js/pronounce-kokoro.js` |
+| `app_window.py` | Native GTK/WebKit window for the station |
+| `scene_review.html`, `studio_review.html`, `interview_tuner.html`, `commercial_review.html`, `show-editor.html` | Review and tuning pages, served by the station |
+| `tests/` | Offline checks and CDP diagnostics — `tests/README.md` |
 
-`tools/palette_map.json` encodes these assignments. It has four sections:
+---
 
-- Top-level `"ARCHIVE": n` — the archive-wide base palette.
-- `_item_palettes` — a specific item uses a different base palette.
-- `_item_overrides` — a specific item draws its embedded palette from a
-  named sibling item.
-- `_item_split` — an item range uses a different base palette from the
-  archive-level default.
-- `_palette_overrides` — an item range draws its embedded palette from a
-  named sibling item.
+## 8. The EMBASSY interview composition
 
-`tools/extract_moo2.py` applies these in the priority order given in its
-module docstring.
-
-### 11.1 Where the values come from
-
-Two community sources, in order of authority:
-
-**liblbx `moo2-data.txt`** — Nick Bowler's project
-(`github.com/MarcoKull/liblbx`, `doc/txt/moo2-data.txt`). Last meaningfully
-updated 2014. Contains explicit assignments for 17 archives, item-range
-splits for 3 more, and reference-output hashes for specific test cases.
-
-**Wolverine's 2007–2008 research** — the original graphics-format write-up,
-republished on the Master of Orion II Online blog
-(masteroforion2.blogspot.com). Adds the COUNCIL internal-palette override
-rule and describes the SHIPS palette-holder mechanism.
-
-Neither source covers the whole library. The `moo2-data.txt` file ends
-with an explicit list of uncatalogued archives. Wolverine's conclusion was
-that many of them use **custom internal palettes** not reachable from any
-external palette, which is why they have no assignment.
-
-### 11.2 Community-documented assignments
-
-| Archive | Palette | Notes |
-|---------|---------|-------|
-| `bldg0`–`bldg5` | `FONTS` 2 | `bldg5` is an empty archive |
-| `buffer0` | `FONTS` 5 | Galactic map UI |
-| `colbldg` | `FONTS` 2 | Colony building menu |
-| `game` | split 5 / 6 | Images 0–19, 27, 28 → 5; images 20–26 → 6 |
-| `mainmenu` | `FONTS` 6 | |
-| `monster` | `FONTS` 4 | Override chain (below) |
-| `planets` | `FONTS` 2 | Colony backgrounds |
-| `plntsum` | `FONTS` 7 | |
-| `raceicon` | `FONTS` 2 | Colony screen people icons |
-| `racesel` | `FONTS` 10 | Override: `racesel.item_000` |
-| `ships` | `FONTS` 12 | Every 50th image is a player-colour palette holder |
-| `science` | item 0 as override | Mouse cursor palette; patches the other animations |
-| `starbg` | `FONTS` 1 (also 5, 9, 11 work) | Community judged any of the four |
-| `tanm_001`–`tanm_213` | `FONTS` 2 | 213 archives, spinning tech animations |
-| `techsel` | split 4 / 5 | Images 0–13 → 4; images 14–27 → 5 |
-
-### 11.3 Override chains
-
-The community documented four whole-archive override chains. Each says:
-items in this range should have the embedded palette of a named sibling
-item merged over their base palette.
-
-**COUNCIL** — item 0 (mouse cursor) carries the shared palette. Wolverine's
-2007 finding: the remaining graphics in the archive do not decode well
-against `FONTS` or `IFONTS`; item 0's embedded palette makes them look
-correct. Applied as `{"0-23": 0}`.
-
-**MONSTER** — a per-image chain that gives each monster its own colours:
-
-| Images | Override item |
-|--------|---------------|
-| 0–6 | 13 |
-| 7 | 14 |
-| 8 | 15 |
-| 9 | 16 |
-| 10 | 17 |
-| 11 | 18 |
-| 12 | 19 |
-| 20 | 15 |
-| 25 (Avenger) | 15, unconfirmed |
-
-**RACESEL** — item 0's embedded palette gives the race-colour variants.
-Applied as `{"0": 0}`.
-
-**TECHSEL** — the two item ranges each carry their own palette patch.
-Applied as `{"0-13": 0, "14-27": 14}`.
-
-### 11.4 Reference hashes from liblbx
-
-The `liblbx` regression tests carry hash-verified render fixtures for these
-specific cases. Matching a fixture proves the decoder pipeline is correct
-end to end.
-
-| Archive | Item | Frame | Palette | Override |
-|---------|------|-------|---------|----------|
-| `SHIPS` | 42 | 0 | `FONTS` 12 | `SHIPS` item 49 |
-| `MONSTER` | 7 | 0, 5, 19 | `FONTS` 4 | `MONSTER` item 14 |
-| `STARBG` | 9 | 0 | `FONTS` 5 | — |
-| `LOGO` | 0, 1 | 0 | embedded | — |
-| `MAINMENU` | — | 0 | `FONTS` 6 | — |
-
-No hash comparison has been run against our extraction yet. When the
-opportunity presents itself, comparing a rendered PNG byte-for-byte
-against a `liblbx` fixture for these five cases is the strongest possible
-verification.
-
-### 11.5 Archives with no community assignment
-
-The `liblbx` `moo2-data.txt` file lists these archives as **uncatalogued**.
-They have no community palette assignment and their colours have been
-determined by our own visual inspection or accepted as defaults:
+`EMBASSY.LBX` is drawn as one composition: the room (`item_01`, 320×130),
+the ambassador (`item_02..11`, 175×130, animated) and the player's
+representative (`item_12..17`, 320×200). Room and ambassador share an
+artist and a scale and only line up at the same scale; the rep plate is
+frame-sized with the figure already placed. The numbers live in
+`INTERVIEW_DEFAULTS` in `js/scene-compositor.js`, tuned in
+`interview_tuner.html` (which shares `composeInterview()` with the recipe):
 
 ```
-antarmsg, antaroom, app_pics, beams, billtext, cmbtfgtr, cmbtmisl,
-cmbtplnt, cmbtsfx, cmbtshp, colgcbt, colony, colony2, colpups,
-colpusp, colroads, colsum, colsysdi, colveggi, combat, confirm,
-council (handled via override), councmsg, credits, custmstr, design,
-diplomat, diplomse, diplomsf, diplomsg, diplomss, dipstars, engmsg,
-eventmse, eventmsf, eventmsg, eventmss, events, filedata, firepts,
-fleet, flticons, fonts, gstar, help, herodata, ifonts, inbox, info,
-install, jimtext, kentext, loadsave, mainpups, maintext, msgeng,
-multigm, ndata, newgame, nextplyr, ocpol, officer, playspec, racename,
-raceopt, racerprt, races, racestuf, refitpup, score, shipname,
-skildesc, sound, sphersfx, starname, sysdisp, techdesc, techname,
-textbox, turnsum, warning
+roomScale 1.5384615384615385   ambScale 1.5384615384615385   ambDx 31  ambDy 0
+repScale  2                    repDx 4                       repDy 51
 ```
 
-Some of these are **text archives** and not graphics at all — `racename`,
-`shipname`, `starname`, `techname`, `techdesc` — and their palette values
-have no effect on anything. Others are graphics the community never needed
-a palette for, because those screens are always rendered against their own
-backgrounds in-game and no external extraction was done.
+---
 
-For the ones that matter to the GNN runtime (CMBTSHP, CMBTSFX, INSTALL,
-APP_PICS, BEAMS, FLEET, FLTICONS, RACES, RACEOPT), palette choices are
-**candidates, not authoritative**. If a runtime cutaway shows a wrong
-palette, `tools/palette_compare.py` is the tool to settle it.
+## 9. History
 
-### 11.6 The two things that are known to be wrong
-
-**MoO2 Workshop's palette descriptions are unreliable.** A 2018 discussion
-between the fmoo2-tool developer and the community concluded that some of
-MoO2 Workshop's palette values were wrong. The reason: duplicate palettes
-can make two different palette indices look identical for one sprite, so
-"this sprite renders plausibly" is not proof of "this is the palette the
-game used". Any value carried over from MoO2 Workshop into our map is
-marked as a candidate, not a source.
-
-**SHIPS/SHIPS2 changed from palette 3 to 12 in this revision.** The
-previous value was a first-pass guess from before the community data was
-available. The community says 12. If a SHIPS sprite looks wrong after
-re-extraction, `palette_compare` output on item 0 will settle it.
-```
-
-### 11.7 Palette verification remains open
-
-The map uses community-documented assignments where available and locally
-reviewed candidates elsewhere. `SHIPS` / `SHIPS2` now use community palette
-12 according to the current map. That does not close reference-output
-verification: compare the listed `liblbx` fixture cases with actual rendered
-PNGs when the local game archives and generated output are available.
-
-## 12. Recent code audit — 2026-10-20 changes
-
-This status note summarizes code already merged on `main`; it is not a claim
-that all generated assets or live broadcast behaviour have been revalidated.
-
-### Landed code changes
-
-- `tools/scan_strays.py` uses the exported `MOO1_HEADER` (0x12 bytes) and
-  `MOO2_HEADER` (0x0C bytes) constants.
-- `js/tts.js` passes the live sequence ID when promoting a queued TTS
-  prefetch; `gnnTtsDebug=1` in localStorage opts into verbose TTS diagnostics.
-- `js/renderer.js` probes a 5×5 alpha neighborhood in `measureHole()`.
-- `server.py` expires the loaded news ledger on boot; `js/feed-manager.js`
-  lowers the token-cache clearing threshold to 5,000 entries.
-- The extractor renders `0x0800` MoO2 functional-colour items and accepts
-  multi-frame tiny palette holders. Known corrupt `OFFICER` duplicate items
-  143+ are skipped; their unreachable palette overrides were removed.
-- Weather assets exist and the `weather` classifier, generated cutaway pool,
-  and sound recipe are wired in `js/cutscene-manager.js`.
-
-### Evidence still required
-
-- Run `tools/tests/offline.sh` in the target environment; this documentation
-  update did not run it.
-- Re-extract local game assets and compare selected output against reference
-  renders; source-level unit tests and clean decode warnings do not prove every
-  palette is visually correct.
-- Inspect weather plates at their actual on-air monitor size and watch a live
-  weather story.
-- Add automated comparisons against the listed `liblbx` fixture hashes when
-  suitable fixtures are available.
-
-The authoritative current backlog is [docs/ROADMAP.md](../docs/ROADMAP.md); see §6 above for the
-separate text-curation and MoO2 music-source implementation gaps.
+| Date | Change |
+|---|---|
+| 2026-10-16 | MoO2 command-stream decoder; SHIPS warnings 293 → 0. MoO1 delta-frame and palette-merge fixes; opaque-zero rule; deny list; interview tuning |
+| 2026-10-18 | COUNCIL palette rule widened to all items; EVENTS and DIPLOMAT palettes; `IFONTS:n` in `_item_split` |
+| 2026-10-20 | Functional-colour rendering; multi-frame holders; OFFICER 143+ skipped (reversed 10-24) |
+| 2026-10-24 | Frames accumulate as in liblbx, verified against its 14 hashes; OFFICER 143–276 restored; `extract_music_moo2.py`; liblbx's real location (`git.draconx.ca`); this file rewritten, the format moved to `MOO2_GRAPHICS_DEEP_DIVE.md` |

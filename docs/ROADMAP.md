@@ -152,7 +152,7 @@ Built, wired, and seen working. Evidence for each is in `CLAUDE.md` §3.
 | **One speech queue** — nothing speaks directly; 420 ms between lines; caption raised when its own line starts | the ident, break throw and two-way no longer cut each other off |
 | **Speech watchdog extends, never shortens.** Queueing a short line behind a long read no longer clears the queue mid-read | `tools/tests/spamcheck.py`: 2 queued secret lines both play after a 24 s read |
 | **Show shape** — cold open with a three-story rundown tease, banter, two-anchor exchanges, two-ways, panels, breaks, show close | `drive.py` reaches `SHOW_CLOSE` → `COLD_OPEN` |
-| **Remote two-ways and split-screen debate** through the studio monitor | `docs/correspondent.png`; `?block=crossfire` |
+| **Remote two-ways and split-screen debate** through the studio monitor | `docs/gallery/correspondent.png`, `docs/gallery/debate.png`; `?block=crossfire` |
 | **Lore separated.** *Imperial Historical Wire* reads archive bulletins and nothing else does | live: lore show read 5 bulletins; Evening Rim read 3 real stories, 0 bulletins |
 | **Lip-sync gated on the voice**; prompter typed from the audio position | mouth open 1–2% in silence, 56% in speech |
 | **Breaking news** — klaxon, the generated breaking-news frame, chyron override; keyword cooldown that no longer blocks the first six minutes | `?block=evening_rim` + `injectBreaking()`, screenshot |

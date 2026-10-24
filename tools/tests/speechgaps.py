@@ -9,10 +9,12 @@ anchors.
     python3 tools/tests/speechgaps.py [block] [seconds] [forced breaks]
 """
 import json
+import os
 import sys
 import time
 
-sys.path.insert(0, '/home/ekco/github/GNN/tools')
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import drive                                               # noqa: E402
 
 block = sys.argv[1] if len(sys.argv) > 1 else 'night_desk'

@@ -17,10 +17,12 @@ ends, so a break that comes back twice or not at all shows up.
     python3 tools/tests/breakcheck.py [breaks] [block] [extra query, e.g. commercials=footage]
 """
 import json
+import os
 import sys
 import time
 
-sys.path.insert(0, '/home/ekco/github/GNN/tools')
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import drive                                               # noqa: E402
 
 breaks = int(sys.argv[1]) if len(sys.argv) > 1 else 3

@@ -165,6 +165,28 @@ class Moo2ToolsTests(unittest.TestCase):
         self.assertEqual(item.decode_warnings[0][0]['declared_length'], 5)
         self.assertEqual(item.decode_warnings[0][0]['remaining_bytes'], 1)
 
+    def _two_frame_item(self, chunk=0, flags=0):
+        """2x1, frame 0 draws both pixels (7, 8), frame 1 redraws only x=1 (9)."""
+        f0 = struct.pack('<HHHH', 1, 0, 2, 0) + b'\x07\x08' + struct.pack('<HH', 0, 1000)
+        f1 = struct.pack('<HHHH', 1, 0, 1, 1) + b'\x09\x00' + struct.pack('<HH', 0, 1000)
+        start = 0x0C + 3 * 4
+        header = struct.pack('<4H2BH', 2, 1, 0, 2, 0, chunk, flags)
+        offsets = struct.pack('<3I', start, start + len(f0), start + len(f0) + len(f1))
+        return GfxItem(header + offsets + f0 + f1, format='moo2')
+
+    def test_moo2_frames_build_on_the_previous_frame(self):
+        # liblbx's reference renders need this whatever the 0x2000 flag says.
+        item = self._two_frame_item()
+        pixels, _ = item.decode_frame(1)
+        self.assertEqual(bytes(pixels), b'\x07\x09')
+        self.assertEqual(item._moo2_coverage_cache[1], b'\x01\x01')
+
+    def test_moo2_coverage_restarts_on_chunk_and_fill_background(self):
+        for item in (self._two_frame_item(chunk=1), self._two_frame_item(flags=0x0400)):
+            pixels, _ = item.decode_frame(1)
+            self.assertEqual(bytes(pixels), b'\x07\x09')           # old pixel kept...
+            self.assertEqual(item._moo2_coverage_cache[1], b'\x00\x01')  # ...but hidden
+
     def test_palette_map_nested_overrides(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, 'palette_map.json')

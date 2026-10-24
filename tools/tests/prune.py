@@ -11,7 +11,7 @@ have their count corrected rather than being dropped.
 import json
 import os
 
-ROOT = '/home/ekco/github/GNN'
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
 MAN = os.path.join(ROOT, 'assets', 'gfx-manifest.json')
 CUT = os.path.join(ROOT, 'assets', 'cutscenes')
 

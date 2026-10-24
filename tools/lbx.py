@@ -37,8 +37,16 @@ MoO1 frame body — column-major
 ------------------------------------------------------------
 Item header — MoO2 (0x0C bytes)
     0x00 u16 width      0x02 u16 height    0x04 u16 padding
-    0x06 u16 nframes    0x08 u16 frame delay  0x0a u16 flags
-    0x0c (nframes+1) x u32 frame offsets
+    0x06 u16 nframes    0x08 u8 leadin     0x09 u8 chunk
+    0x0a u16 flags      0x0c (nframes+1) x u32 frame offsets
+
+    `leadin` and `chunk` are liblbx's reading of what was long taken for a
+    u16 frame delay. Frames are drawn over the previous frame's pixels;
+    the coverage (what is visible) restarts at frame 0, at every multiple
+    of `chunk` (0 = never), and on every frame when flag 0x0400 is set.
+    That reproduces all twelve of liblbx's reference-render hashes
+    (tools/tests/moo2_reference.py); decoding each frame on a blank
+    canvas, which this file did before, matches only the first frames.
 
 MoO2 frame body — sparse sequence stream
     Unless raw flag 0x0100 is set:
@@ -56,9 +64,10 @@ MoO2 frame body — sparse sequence stream
                 value 1000 ends the frame
 
     Raw frames (flag 0x0100) contain width*height palette indices in
-    row-major order, with no frame marker or command stream. Flag 0x2000
-    (junction) indicates that sparse animation frames compose over the
-    preceding frame instead of starting from a blank canvas.
+    row-major order, with no frame marker or command stream, padded to a
+    4-byte boundary. Flag 0x2000 (Wolverine's "junction", liblbx's
+    "looping") does not change how frames compose: animations without it
+    build on the previous frame too.
 
 ------------------------------------------------------------
 Format detection
@@ -164,7 +173,7 @@ class GfxItem:
     def __init__(self, data, format='auto'):
         self.data = data
         self.decode_warnings = {}
-        # MoO2 junction animations need previous-frame pixels and coverage.
+        # MoO2 frames build on the previous frame's pixels and coverage.
         # Cache decoded frames because render_rgba() may request them directly.
         self._moo2_frame_cache = {}
         self._moo2_coverage_cache = {}
@@ -177,6 +186,7 @@ class GfxItem:
         if len(data) < header_len:
             self.w = self.h = self.nframes = 0
             self.loopstart = self.flags = self.pal_offset = 0
+            self.leadin = self.chunk = 0
             self.frame_offsets = ()
             return
 
@@ -186,6 +196,13 @@ class GfxItem:
             self.pal_offset = struct.unpack_from('<I', data, 0x0e)[0]
         else:
             self.pal_offset = 0
+        # MoO2 reads the loopstart word as two bytes (liblbx): lead-in
+        # frames before the loop, and how many frames share one coverage
+        # plane before it restarts. Flag 0x0400 restarts it every frame.
+        self.leadin = self.loopstart & 0xFF
+        self.chunk = self.loopstart >> 8
+        if self.flags & MOO2_FLAG_FILL_BACKGROUND:
+            self.chunk = 1
         try:
             self.frame_offsets = struct.unpack_from(
                 '<%dI' % (self.nframes + 1), data, header_len)
@@ -356,8 +373,8 @@ class GfxItem:
 
         The coverage plane is separate from pixel values: omitted pixels are
         transparent, while a pixel explicitly encoded as palette index 0 is
-        still a drawn pixel. This is also necessary to composite junction
-        animations without erasing pixels the current frame did not touch.
+        still a drawn pixel. This is also necessary to composite animation
+        frames without erasing pixels the current frame did not touch.
         """
         if not 0 <= idx < self.nframes:
             raise IndexError('frame index out of range: %s' % idx)
@@ -375,7 +392,7 @@ class GfxItem:
         body = self.data[start:end]
         self._moo2_trailer_cache[idx] = b''
         pixel_count = self.w * self.h
-        composite = bool(self.flags & MOO2_FLAG_JUNCTION) and base_pixels is not None
+        composite = base_pixels is not None
         if composite:
             out = bytearray(base_pixels)
             coverage = bytearray(base_coverage or bytes(pixel_count))
@@ -543,8 +560,19 @@ class GfxItem:
         self._moo2_coverage_cache[idx] = bytes(coverage)
         return out, clean
 
+    def _restarts_coverage(self, idx):
+        """True where liblbx starts a fresh coverage plane (see header notes)."""
+        return idx == 0 or (self.chunk and idx % self.chunk == 0)
+
     def _decode_moo2(self, idx, prev=None):
-        """Decode a MoO2 frame, applying junction-frame compositing as needed."""
+        """Decode a MoO2 frame over the frames before it.
+
+        Every frame is drawn onto the previous frame's pixels. What is
+        visible is the coverage plane, which carries over too, except at a
+        restart (`_restarts_coverage`): there the old pixels stay in the
+        buffer but are hidden until a frame writes over them. `prev`, if
+        given, replaces the previous frame's pixels.
+        """
         if not 0 <= idx < self.nframes:
             raise IndexError('frame index out of range: %s' % idx)
 
@@ -552,32 +580,21 @@ class GfxItem:
             buf, clean = self._moo2_frame_cache[idx]
             return bytearray(buf), clean
 
-        if self.flags & MOO2_FLAG_JUNCTION:
-            if prev is None and idx > 0:
-                # Decode/cache all predecessors in order. Later frames contain
-                # only the changed pixels and must preserve earlier coverage.
+        if idx == 0:
+            base_pixels = base_coverage = None
+        else:
+            if prev is None:
+                # Decode/cache the predecessors in order: each one builds
+                # on the one before it.
                 for frame_no in range(idx):
                     if frame_no not in self._moo2_frame_cache:
-                        if frame_no == 0:
-                            previous_pixels = previous_coverage = None
-                        else:
-                            previous_pixels = self._moo2_frame_cache[frame_no - 1][0]
-                            previous_coverage = self._moo2_coverage_cache.get(
-                                frame_no - 1, bytes(self.w * self.h))
-                        decoded, decoded_clean = self._decode_moo2_one(
-                            frame_no, previous_pixels, previous_coverage)
-                        self._moo2_frame_cache[frame_no] = (bytes(decoded), decoded_clean)
-                base_pixels = self._moo2_frame_cache[idx - 1][0]
-                base_coverage = self._moo2_coverage_cache.get(
-                    idx - 1, bytes(self.w * self.h))
-            elif prev is not None:
-                base_pixels = prev
-                base_coverage = self._moo2_coverage_cache.get(
-                    idx - 1, bytes(self.w * self.h))
-            else:
-                base_pixels = base_coverage = None
-        else:
-            base_pixels = base_coverage = None
+                        self._decode_moo2(frame_no)
+                prev = self._moo2_frame_cache[idx - 1][0]
+            base_pixels = prev
+            base_coverage = (bytes(self.w * self.h)
+                             if self._restarts_coverage(idx)
+                             else self._moo2_coverage_cache.get(
+                                 idx - 1, bytes(self.w * self.h)))
 
         decoded, clean = self._decode_moo2_one(idx, base_pixels, base_coverage)
         self._moo2_frame_cache[idx] = (bytes(decoded), clean)
@@ -629,7 +646,7 @@ class GfxItem:
                     i, prev if kind == 0 else None)
                 prev = buf
             else:
-                buf, clean = self._decode_moo2(i, prev if (self.flags & MOO2_FLAG_JUNCTION) else None)
+                buf, clean = self._decode_moo2(i)
                 prev = buf
             yield buf, clean
 

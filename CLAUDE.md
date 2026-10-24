@@ -700,9 +700,10 @@ the game paints the sky, the starfield, the space behind the window, and a
 decoded-as-transparent frame only reads correctly when composited over black.
 
 Fixed by adding an `opaque_zero` flag on the render path, set for any item
-in `OPAQUE_ZERO_ARCHIVES` with `w >= 300 and h >= 180`. SPIES and EMBASSY
-items 12–17 are the exceptions: they are 320×200 overlays, not fullscreens,
-and want index 0 transparent so the studio shows through.
+with `w >= 300 and h >= 180`. SPIES and EMBASSY items 12–17 are the
+exceptions (`FORCE_TRANSPARENT_ARCHIVES` / `FORCE_TRANSPARENT_ITEMS` in
+`extract_all.py`): they are 320×200 overlays, not fullscreens, and want
+index 0 transparent so the studio shows through.
 
 → **Size is not role.** Two archives can produce the same size of item at
 the same colour depth with opposite transparency requirements.

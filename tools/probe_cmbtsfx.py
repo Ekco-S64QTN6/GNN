@@ -2,8 +2,8 @@
 """Inspect CMBTSFX item flags, actual embedded palettes, and frame coverage.
 
 Run from the repository root:
-    python3 probe_cmbtsfx.py
-    python3 probe_cmbtsfx.py --lbx 'Master of Orion 1/mastori2/CMBTSFX.LBX'
+    python3 tools/probe_cmbtsfx.py
+    python3 tools/probe_cmbtsfx.py --lbx 'Master of Orion 1/mastori2/CMBTSFX.LBX'
 
 This is diagnostic only: it does not change decoder or palette behaviour.
 """

@@ -1,6 +1,8 @@
 """Hammer every bus at once and confirm the output cannot pass full scale."""
 import sys, time
-sys.path.insert(0,'/home/ekco/github/GNN/tools')
+import os
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+sys.path.insert(0,os.path.join(ROOT, 'tools'))
 import drive, audio_probe
 cdp=None; drive.launch()
 try:

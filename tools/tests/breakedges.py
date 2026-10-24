@@ -10,10 +10,12 @@
     python3 tools/tests/breakedges.py
 """
 import json
+import os
 import sys
 import time
 
-sys.path.insert(0, '/home/ekco/github/GNN/tools')
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import drive                                               # noqa: E402
 
 HOOK = r"""

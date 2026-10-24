@@ -46,3 +46,6 @@ jobs:
 
       - name: MoO2 tool tests
         run: python tools/tests/test_moo2_tools.py
+
+      - name: Markdown links
+        run: python tools/tests/links.py

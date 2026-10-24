@@ -784,7 +784,7 @@
       "25": 15
     },
     "RACESEL": {
-      "0": 0
+      "_comment": "liblbx says 'override racesel.lbx.000', but item 0 has no internal palette, so a chain from it does nothing (the old '0': 0 entry was a no-op). The portraits take item 18's patch through _item_overrides."
     },
     "TECHSEL": {
       "0-13": 0,
