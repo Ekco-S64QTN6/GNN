@@ -153,6 +153,18 @@ session to find.
 Kept because each one explains a constraint above, and because the wrong
 diagnosis is as useful to record as the right one.
 
+### The harness leaked a 150 MB browser profile per run (2026-10-30)
+Fix in `tools/drive.py`.
+`launch()` passed no `--user-data-dir`, so headless Chrome made its own
+`scoped_dir*` profile under `~/.config/chromium-headless/` and deletes it only
+on a clean exit. `shutdown()` ends it with SIGTERM/SIGKILL, so every run left
+one behind: 234 of them, 14 GB, between 10 and 24 Oct. `launch()` now makes a
+`/tmp/gnn-chrome-*` profile (`tempfile.mkdtemp`; the flatpak branch already
+mounts `/tmp`) and `shutdown()` removes it after the browser is reaped.
+Checked: one launch/shutdown leaves no `gnn-chrome-*` and no `scoped_dir*`.
+Do not drop the `--user-data-dir` flag or the `rmtree`; the default profile
+is what leaked. (The window's own profile, `~/.cache/gnn-window`, is separate.)
+
 ### A placed story could wait forever, and feeds had three silent faults
 Found while making the trailer's chosen headlines air on cue:
 - **Placed stories** (importance 9000+: injects, review tools) went behind
