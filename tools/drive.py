@@ -18,6 +18,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 
@@ -41,11 +42,19 @@ MATCH = 'remote-debugging-port=%d' % PORT
 MUTE = os.environ.get('GNN_HARNESS_AUDIO', '') not in ('1', 'true', 'yes')
 
 _children = []
+_profiles = []
 
 
 def launch():
     """Start a headless browser and make sure it dies with us."""
+    # Own the profile dir. Left to itself, headless Chrome makes a ~150MB
+    # scoped_dir* profile under ~/.config/chromium-headless and only deletes it
+    # on a clean exit -- shutdown() kills it, so 234 of them (14GB) piled up.
+    # /tmp is already exposed to the flatpak branch below.
+    profile = tempfile.mkdtemp(prefix='gnn-chrome-', dir='/tmp')
+    _profiles.append(profile)
     flags = ['--headless=new', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
+             '--user-data-dir=%s' % profile,
              '--window-size=1200,900', '--autoplay-policy=no-user-gesture-required',
              '--user-agent=Mozilla/5.0 (X11; Linux x86_64) %s/1' % TAG,
              MARKER, '--remote-allow-origins=*']
@@ -123,6 +132,10 @@ def shutdown(cdp=None):
         if not _harness_pids():
             break
         time.sleep(0.5)
+
+    for profile in _profiles:
+        shutil.rmtree(profile, ignore_errors=True)
+    _profiles.clear()
 
 
 def _harness_pids():
